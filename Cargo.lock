@@ -10,9 +10,9 @@ checksum = "512761e0bb2578dd7380c6baaa0f4ce03e84f95e960231d1dec8bf4d7d6e2627"
 
 [[package]]
 name = "anyhow"
-version = "1.0.94"
+version = "1.0.95"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1fd03a028ef38ba2276dce7e33fcd6369c158a1bca17946c4b1b701891c1ff7"
+checksum = "34ac096ce696dc2fcabef30516bb13c0a68a11d30131d3df6f04711467681b04"
 
 [[package]]
 name = "autocfg"
@@ -123,6 +123,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "dumper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "bytemuck",
+ "derive-where",
+ "patternsleuth",
+ "pretty-hex",
+ "read-process-memory",
+ "serde",
+ "serde_json",
+ "ue_reflection",
 ]
 
 [[package]]
@@ -449,9 +465,9 @@ dependencies = [
 
 [[package]]
 name = "quote"
-version = "1.0.37"
+version = "1.0.38"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
+checksum = "0e4dccaaaf89514f546c693ddc140f729f958c247918a13380cccc6078391acc"
 dependencies = [
  "proc-macro2",
 ]
@@ -654,18 +670,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "ue-containers"
+name = "ue_reflection"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bitflags",
- "bytemuck",
- "derive-where",
- "patternsleuth",
- "pretty-hex",
- "read-process-memory",
  "serde",
- "serde_json",
 ]
 
 [[package]]

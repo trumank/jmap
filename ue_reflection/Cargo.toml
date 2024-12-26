@@ -1,0 +1,14 @@
+[package]
+name = "ue_reflection"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+license.workspace = true
+
+[dependencies]
+bitflags.workspace = true
+serde = { workspace = true, features = ["derive"] }

@@ -1,0 +1,22 @@
+[package]
+name = "dumper"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+bitflags = { workspace = true, features = ["serde"] }
+bytemuck.workspace = true
+derive-where.workspace = true
+patternsleuth = { workspace = true, features = ["image-pe", "process-external"] }
+pretty-hex.workspace = true
+read-process-memory.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
