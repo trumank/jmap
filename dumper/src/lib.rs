@@ -287,7 +287,15 @@ pub fn dump(pid: i32) -> Result<()> {
                 }
                 field = next.Next;
             }
-            Ok(Struct { properties })
+            let super_struct = obj
+                .SuperStruct
+                .read_opt(mem)?
+                .map(|s| read_path(mem, &s.ufield.uobject))
+                .transpose()?;
+            Ok(Struct {
+                super_struct,
+                properties,
+            })
         }
 
         //if (path.starts_with("/Script/")) != !obj.ObjectFlags.contains(EObjectFlags::RF_WasLoaded) {
@@ -343,7 +351,7 @@ pub fn dump(pid: i32) -> Result<()> {
             println!("{path:?} {:?}", f);
         }
     }
-    std::fs::write("fsd.json", serde_json::to_vec(&objects)?)?;
+    std::fs::write("../coral.json", serde_json::to_vec(&objects)?)?;
 
     Ok(())
 }
@@ -354,6 +362,6 @@ mod test {
 
     #[test]
     fn test_drg() -> Result<()> {
-        dump(1490227)
+        dump(618836)
     }
 }

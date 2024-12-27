@@ -277,28 +277,31 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+pub type ReflectionData = std::collections::BTreeMap<String, ObjectType>;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
+    pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Class {
     #[serde(flatten)]
     pub r#struct: Struct,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Function {
     #[serde(flatten)]
     pub r#struct: Struct,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
     pub cpp_type: String,
     pub names: Vec<(String, i64)>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectType {
     Struct(Struct),
     Class(Class),
@@ -306,7 +309,7 @@ pub enum ObjectType {
     Enum(Enum),
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
     pub name: String,
     pub offset: usize,
@@ -314,7 +317,7 @@ pub struct Property {
     pub r#type: PropertyType,
     pub flags: EPropertyFlags,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PropertyType {
     Struct {
         r#struct: String,

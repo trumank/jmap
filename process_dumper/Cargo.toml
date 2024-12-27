@@ -1,5 +1,5 @@
 [package]
-name = "ue_reflection"
+name = "process_dumper"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -10,5 +10,6 @@ keywords.workspace = true
 license.workspace = true
 
 [dependencies]
-bitflags = { workspace = true, features = ["serde"] }
-serde = { workspace = true, features = ["derive"] }
+anyhow.workspace = true
+minidump-writer = "0.10.1"
+proc-maps = "0.4.0"

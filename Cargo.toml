@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["dumper", "ue_reflection"]
+members = ["dumper", "ue_reflection", "process_dumper"]
 
 [workspace.package]
 version = "0.1.0"
