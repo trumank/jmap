@@ -24,7 +24,11 @@ pub struct TArray<T, A: TAlloc = TSizedHeapAllocator<32>> {
 }
 impl<T: Clone> TArray<T> {
     pub fn read(&self, mem: &impl Mem) -> Result<Vec<T>> {
-        self.data.data().read_vec(mem, self.num as usize)
+        Ok(if let Some(data) = self.data.data() {
+            data.read_vec(mem, self.num as usize)?
+        } else {
+            vec![]
+        })
     }
 }
 
@@ -89,7 +93,7 @@ pub struct TSparseArray_TBaseIterator<const N: usize, T, A: TSparseAlloc> {
 }
 
 mod alloc {
-    use std::marker::PhantomData;
+    use std::{marker::PhantomData, ptr::NonNull};
 
     use crate::mem::{ExternalPtr, FlaggedPtr};
 
@@ -102,7 +106,7 @@ mod alloc {
         type ForElementType<T>: TAllocImpl<T>;
     }
     pub trait TAllocImpl<T> {
-        fn data(&self) -> FlaggedPtr<T>;
+        fn data(&self) -> Option<FlaggedPtr<T>>;
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -117,12 +121,14 @@ mod alloc {
         secondary_data: A::ForElementType<T>,
     }
     impl<const N: usize, T, A: TAlloc> TAllocImpl<T> for TInlineAlloc_ForElementType<N, T, A> {
-        fn data(&self) -> FlaggedPtr<T> {
+        fn data(&self) -> Option<FlaggedPtr<T>> {
             let second = self.secondary_data.data();
-            if second.is_null() {
-                FlaggedPtr::Local(self.inline_data.as_ptr())
+            if let Some(second) = second {
+                Some(second)
             } else {
-                second
+                Some(FlaggedPtr::Local(unsafe {
+                    NonNull::new_unchecked(self.inline_data.as_ptr().cast_mut())
+                }))
             }
         }
     }
@@ -135,11 +141,11 @@ mod alloc {
     #[derive(Debug, Clone, Copy)]
     #[repr(C)]
     pub struct THeapAlloc_ForElementType<const N: usize, T> {
-        data: ExternalPtr<T>,
+        data: Option<ExternalPtr<T>>,
     }
     impl<const N: usize, T> TAllocImpl<T> for THeapAlloc_ForElementType<N, T> {
-        fn data(&self) -> FlaggedPtr<T> {
-            FlaggedPtr::Remote(self.data)
+        fn data(&self) -> Option<FlaggedPtr<T>> {
+            self.data.map(|d| FlaggedPtr::Remote(d))
         }
     }
 

@@ -5,12 +5,15 @@ use std::{
     collections::HashMap,
     marker::PhantomData,
     mem::MaybeUninit,
+    num::NonZero,
+    ptr::NonNull,
     sync::{Arc, Mutex},
 };
+use ue_reflection::{EClassCastFlags, EClassFlags, EFunctionFlags, EPropertyFlags, EStructFlags};
 
 #[repr(C)]
 pub struct ExternalPtr<T> {
-    address: usize,
+    address: NonZero<usize>,
     _type: PhantomData<T>,
 }
 impl<T> Copy for ExternalPtr<T> {}
@@ -27,33 +30,30 @@ impl<T> std::fmt::Debug for ExternalPtr<T> {
 impl<T> ExternalPtr<T> {
     pub fn new(address: usize) -> Self {
         Self {
+            address: address.try_into().unwrap(),
+            _type: Default::default(),
+        }
+    }
+    pub fn new_non_zero(address: NonZero<usize>) -> Self {
+        Self {
             address,
             _type: Default::default(),
         }
     }
-    pub fn is_null(self) -> bool {
-        self.address == 0
-    }
     pub fn cast<O>(self) -> ExternalPtr<O> {
-        ExternalPtr::new(self.address)
+        ExternalPtr::new_non_zero(self.address)
     }
     pub fn byte_offset(&self, n: usize) -> Self {
-        Self::new(self.address + n)
+        Self::new_non_zero(self.address.checked_add(n).unwrap())
     }
     pub fn offset(&self, n: usize) -> Self {
         self.byte_offset(n * std::mem::size_of::<T>())
     }
     pub fn read(&self, mem: &impl Mem) -> Result<T> {
-        mem.read(self.address)
-    }
-    pub fn read_opt(&self, mem: &impl Mem) -> Result<Option<T>> {
-        Ok(match self.address {
-            0 => None,
-            a => Some(mem.read::<T>(a)?),
-        })
+        mem.read(self.address.into())
     }
     pub fn read_vec(&self, mem: &impl Mem, count: usize) -> Result<Vec<T>> {
-        mem.read_vec(self.address, count)
+        mem.read_vec(self.address.into(), count)
     }
     pub fn ctx<C>(self, ctx: C) -> CtxPtr<T, C> {
         CtxPtr {
@@ -67,7 +67,7 @@ impl<T> ExternalPtr<T> {
 #[derive(Clone)]
 #[repr(C)]
 pub struct CtxPtr<T, C> {
-    address: usize,
+    address: NonZero<usize>,
     ctx: C,
     _type: PhantomData<T>,
 }
@@ -79,60 +79,94 @@ impl<T, C> std::fmt::Debug for CtxPtr<T, C> {
 impl<T, C> CtxPtr<T, C> {
     pub fn new(address: usize, ctx: C) -> Self {
         Self {
+            address: address.try_into().unwrap(),
+            ctx,
+            _type: Default::default(),
+        }
+    }
+    pub fn new_non_zero(address: NonZero<usize>, ctx: C) -> Self {
+        Self {
             address,
             ctx,
             _type: Default::default(),
         }
     }
-    pub fn is_null(&self) -> bool {
-        self.address == 0
-    }
+    //pub fn is_null(&self) -> bool {
+    //    self.address == 0
+    //}
     pub fn ctx(&self) -> &C {
         &self.ctx
     }
 }
 impl<T, C: Clone> CtxPtr<T, C> {
     pub fn cast<O>(&self) -> CtxPtr<O, C> {
-        CtxPtr::new(self.address, self.ctx.clone())
+        CtxPtr::new_non_zero(self.address, self.ctx.clone())
     }
     pub fn byte_offset(&self, n: usize) -> Self {
-        Self::new(self.address + n, self.ctx.clone())
+        Self::new_non_zero(self.address.checked_add(n).unwrap(), self.ctx.clone())
     }
     pub fn offset(&self, n: usize) -> Self {
         self.byte_offset(n * std::mem::size_of::<T>())
     }
 }
-impl<T, C: Mem> CtxPtr<T, C> {
+impl<T: POD, C: Mem> CtxPtr<T, C> {
     pub fn read(&self) -> Result<T> {
-        self.ctx.read(self.address)
+        self.ctx.read(self.address.into())
     }
-    pub fn read_opt(&self) -> Result<Option<T>> {
-        Ok(match self.address {
-            0 => None,
-            a => Some(self.ctx.read::<T>(a)?),
-        })
-    }
-    pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
-        self.ctx.read_vec(self.address, count)
-    }
+    //pub fn read_opt(&self) -> Result<Option<T>> {
+    //    Ok(match self.address {
+    //        0 => None,
+    //        a => Some(self.ctx.read::<T>(a)?),
+    //    })
+    //}
+    //pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
+    //    self.ctx.read_vec(self.address, count)
+    //}
 }
 impl<T, C: Mem + Clone> CtxPtr<ExternalPtr<T>, C> {
-    /// special case of `read` to transfer Ctx
-    pub fn read_ptr(&self) -> Result<CtxPtr<T, C>> {
-        Ok(self
-            .ctx
-            .read::<ExternalPtr<T>>(self.address)?
-            .ctx(self.ctx.clone()))
-    }
-    pub fn read_ptr_opt(&self) -> Result<Option<CtxPtr<T, C>>> {
-        let ptr = self.read_ptr()?;
-        Ok(if ptr.is_null() { None } else { Some(ptr) })
+    pub fn read(&self) -> Result<CtxPtr<T, C>> {
+        //Ok(self
+        //    .ctx
+        //    .read::<ExternalPtr<T>>(self.address.into())?
+        //    .ctx(self.ctx.clone()))
+
+        // checked
+        Ok(ExternalPtr::new(self.ctx.read::<usize>(self.address.into())?).ctx(self.ctx.clone()))
     }
 }
+impl<T, C: Mem + Clone> CtxPtr<Option<ExternalPtr<T>>, C> {
+    pub fn read(&self) -> Result<Option<CtxPtr<T, C>>> {
+        Ok(self
+            .ctx
+            .read::<Option<ExternalPtr<T>>>(self.address.into())?
+            .map(|p| p.ctx(self.ctx.clone())))
+    }
+}
+//impl<T, C: Mem + Clone> CtxPtr<Option<ExternalPtr<T>>, C> {
+//    pub fn read_ptr_opt(&self) -> Result<Option<CtxPtr<T, C>>> {
+//        let ptr = self.read()?;
+//        Ok(if ptr.is_null() { None } else { Some(ptr) })
+//    }
+//}
+pub trait POD {}
+impl POD for i8 {}
+impl POD for u8 {}
+impl POD for i16 {}
+impl POD for u16 {}
+impl POD for i32 {}
+impl POD for u32 {}
+impl POD for i64 {}
+impl POD for u64 {}
+impl POD for EClassCastFlags {}
+impl POD for EClassFlags {}
+impl POD for EFunctionFlags {}
+impl POD for EStructFlags {}
+impl POD for EPropertyFlags {}
+impl POD for FName {} // TODO should also be dynamic ideally
 
 #[derive(Debug)]
 pub enum FlaggedPtr<T> {
-    Local(*const T),
+    Local(NonNull<T>),
     Remote(ExternalPtr<T>),
 }
 impl<T> Copy for FlaggedPtr<T> {}
@@ -142,12 +176,12 @@ impl<T> Clone for FlaggedPtr<T> {
     }
 }
 impl<T> FlaggedPtr<T> {
-    pub fn is_null(self) -> bool {
-        match self {
-            FlaggedPtr::Local(ptr) => ptr.is_null(),
-            FlaggedPtr::Remote(ptr) => ptr.is_null(),
-        }
-    }
+    //pub fn is_null(self) -> bool {
+    //    match self {
+    //        FlaggedPtr::Local(ptr) => ptr.is_null(),
+    //        FlaggedPtr::Remote(ptr) => ptr.is_null(),
+    //    }
+    //}
 }
 impl<T: Clone> FlaggedPtr<T> {
     pub fn read(self, mem: &impl Mem) -> Result<T> {
@@ -157,15 +191,11 @@ impl<T: Clone> FlaggedPtr<T> {
         })
     }
     pub fn read_vec(self, mem: &impl Mem, count: usize) -> Result<Vec<T>> {
-        Ok(if self.is_null() {
-            vec![]
-        } else {
-            match self {
-                FlaggedPtr::Local(ptr) => unsafe {
-                    std::slice::from_raw_parts(ptr, count).to_vec()
-                },
-                FlaggedPtr::Remote(ptr) => ptr.read_vec(mem, count)?,
-            }
+        Ok(match self {
+            FlaggedPtr::Local(ptr) => unsafe {
+                std::slice::from_raw_parts(ptr.as_ptr(), count).to_vec()
+            },
+            FlaggedPtr::Remote(ptr) => ptr.read_vec(mem, count)?,
         })
     }
 }
