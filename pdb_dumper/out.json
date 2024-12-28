@@ -37,67 +37,28 @@
         },
         {
           "name": "ObjAvailableList",
-          "type_name": "TLockFreePointerListUnordered<int,64>",
+          "type_name": "TArray<int,TSizedDefaultAllocator<32> >",
           "offset": 88
         },
         {
           "name": "UObjectCreateListeners",
           "type_name": "TArray<FUObjectArray::FUObjectCreateListener *,TSizedDefaultAllocator<32> >",
-          "offset": 224
+          "offset": 104
         },
         {
           "name": "UObjectDeleteListeners",
           "type_name": "TArray<FUObjectArray::FUObjectDeleteListener *,TSizedDefaultAllocator<32> >",
-          "offset": 240
+          "offset": 120
         },
         {
           "name": "UObjectDeleteListenersCritical",
           "type_name": "FWindowsCriticalSection",
-          "offset": 256
+          "offset": 136
         },
         {
           "name": "MasterSerialNumber",
           "type_name": "FThreadSafeCounter",
-          "offset": 296
-        }
-      ],
-      "vtable": [],
-      "size": 0
-    },
-    {
-      "name": "FChunkedFixedUObjectArray",
-      "kind": "class",
-      "base_classes": [],
-      "members": [
-        {
-          "name": "Objects",
-          "type_name": "FUObjectItem**",
-          "offset": 0
-        },
-        {
-          "name": "PreAllocatedObjects",
-          "type_name": "FUObjectItem*",
-          "offset": 8
-        },
-        {
-          "name": "MaxElements",
-          "type_name": "int32_t",
-          "offset": 16
-        },
-        {
-          "name": "NumElements",
-          "type_name": "int32_t",
-          "offset": 20
-        },
-        {
-          "name": "MaxChunks",
-          "type_name": "int32_t",
-          "offset": 24
-        },
-        {
-          "name": "NumChunks",
-          "type_name": "int32_t",
-          "offset": 28
+          "offset": 176
         }
       ],
       "vtable": [],
@@ -116,27 +77,27 @@
       "members": [
         {
           "name": "ClassConstructor",
-          "type_name": "Type0x2b5a /* TODO: figure out how to name it */*",
+          "type_name": "Type0xb9ee /* TODO: figure out how to name it */*",
           "offset": 176
         },
         {
           "name": "ClassVTableHelperCtorCaller",
-          "type_name": "Type0x2b6d /* TODO: figure out how to name it */*",
+          "type_name": "Type0xb9f8 /* TODO: figure out how to name it */*",
           "offset": 184
         },
         {
           "name": "ClassAddReferencedObjects",
-          "type_name": "Type0x2cba /* TODO: figure out how to name it */*",
+          "type_name": "Type0xb9fe /* TODO: figure out how to name it */*",
           "offset": 192
         },
         {
           "name": "ClassUnique",
-          "type_name": "Type0x1c12f /* TODO: figure out how to name it */",
+          "type_name": "Type0xba40 /* TODO: figure out how to name it */",
           "offset": 200
         },
         {
           "name": "bCooked",
-          "type_name": "Type0x1c132 /* TODO: figure out how to name it */",
+          "type_name": "Type0xb640 /* TODO: figure out how to name it */",
           "offset": 200
         },
         {
@@ -365,6 +326,45 @@
           "arguments": []
         }
       ],
+      "size": 0
+    },
+    {
+      "name": "FChunkedFixedUObjectArray",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "Objects",
+          "type_name": "FUObjectItem**",
+          "offset": 0
+        },
+        {
+          "name": "PreAllocatedObjects",
+          "type_name": "FUObjectItem*",
+          "offset": 8
+        },
+        {
+          "name": "MaxElements",
+          "type_name": "int32_t",
+          "offset": 16
+        },
+        {
+          "name": "NumElements",
+          "type_name": "int32_t",
+          "offset": 20
+        },
+        {
+          "name": "MaxChunks",
+          "type_name": "int32_t",
+          "offset": 24
+        },
+        {
+          "name": "NumChunks",
+          "type_name": "int32_t",
+          "offset": 28
+        }
+      ],
+      "vtable": [],
       "size": 0
     },
     {

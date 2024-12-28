@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use dynamic_structs::{BaseClass, ClassInfo, ClassMember, OutputData, VTableEntry};
 use pdb::{FallibleIterator, TypeIndex};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -99,42 +100,6 @@ fn type_name(
     Ok(name)
 }
 
-#[derive(Debug, Serialize)]
-struct VTableEntry {
-    index: usize,
-    name: String,
-    return_type: String,
-    arguments: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct ClassMember {
-    name: String,
-    type_name: String,
-    offset: u64,
-}
-
-#[derive(Debug, Serialize)]
-struct BaseClass {
-    name: String,
-    offset: u32,
-    virtual_base: bool,
-}
-
-#[derive(Debug, Serialize)]
-struct ClassInfo {
-    name: String,
-    kind: String, // "class", "struct", or "interface"
-    base_classes: Vec<BaseClass>,
-    members: Vec<ClassMember>,
-    vtable: Vec<VTableEntry>,
-    size: u32, // Class size if available
-}
-
-#[derive(Serialize)]
-struct OutputData {
-    classes: Vec<ClassInfo>,
-}
 
 struct ClassBuilder<'p> {
     class_info: ClassInfo,
