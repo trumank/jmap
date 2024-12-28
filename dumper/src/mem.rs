@@ -1,4 +1,4 @@
-use crate::containers::PtrFNamePool;
+use crate::containers::{FName, PtrFNamePool};
 use anyhow::{Context as _, Result};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
@@ -87,6 +87,9 @@ impl<T, C> CtxPtr<T, C> {
     pub fn is_null(&self) -> bool {
         self.address == 0
     }
+    pub fn ctx(&self) -> &C {
+        &self.ctx
+    }
 }
 impl<T, C: Clone> CtxPtr<T, C> {
     pub fn cast<O>(&self) -> CtxPtr<O, C> {
@@ -111,6 +114,19 @@ impl<T, C: Mem> CtxPtr<T, C> {
     }
     pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
         self.ctx.read_vec(self.address, count)
+    }
+}
+impl<T, C: Mem + Clone> CtxPtr<ExternalPtr<T>, C> {
+    /// special case of `read` to transfer Ctx
+    pub fn read_ptr(&self) -> Result<CtxPtr<T, C>> {
+        Ok(self
+            .ctx
+            .read::<ExternalPtr<T>>(self.address)?
+            .ctx(self.ctx.clone()))
+    }
+    pub fn read_ptr_opt(&self) -> Result<Option<CtxPtr<T, C>>> {
+        let ptr = self.read_ptr()?;
+        Ok(if ptr.is_null() { None } else { Some(ptr) })
     }
 }
 
@@ -244,4 +260,13 @@ impl<M: Mem> Mem for Ctx<M> {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
         self.mem.read_buf(address, buf)
     }
+}
+impl<M: Mem> NameTrait for Ctx<M> {
+    fn read_name(&self, name: FName) -> Result<String> {
+        self.fnamepool.read(self, name)
+    }
+}
+
+pub trait NameTrait {
+    fn read_name(&self, name: FName) -> Result<String>;
 }

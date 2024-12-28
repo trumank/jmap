@@ -17,12 +17,28 @@ pub struct UObject {
     pub NamePrivate: FName,
     pub OuterPrivate: ExternalPtr<UObject>,
 }
+impl<C: Clone> CtxPtr<UObject, C> {
+    pub fn class_private(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(16).cast()
+    }
+    pub fn name_private(&self) -> CtxPtr<FName, C> {
+        self.byte_offset(24).cast()
+    }
+    pub fn outer_private(&self) -> CtxPtr<ExternalPtr<UObject>, C> {
+        self.byte_offset(32).cast()
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct UField {
     pub uobject: UObject,
     pub next: ExternalPtr<UField>,
+}
+impl<C: Clone> CtxPtr<UField, C> {
+    pub fn uobject(&self) -> CtxPtr<UObject, C> {
+        self.cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -50,6 +66,17 @@ pub struct UStruct {
     pub ScriptAndPropertyObjectReferences: TArray<ExternalPtr<UObject>>,
     pub UnresolvedScriptProperties: ExternalPtr<()>, // *const TArray<TTuple<TFieldPath<FField>,int>,TSizedDefaultAllocator<32> >,
     pub UnversionedSchema: ExternalPtr<()>,          // *const FUnversionedStructSchema
+}
+impl<C: Clone> CtxPtr<UStruct, C> {
+    pub fn ufield(&self) -> CtxPtr<UField, C> {
+        self.cast()
+    }
+    pub fn super_struct(&self) -> CtxPtr<ExternalPtr<UStruct>, C> {
+        self.byte_offset(64).cast()
+    }
+    pub fn child_properties(&self) -> CtxPtr<ExternalPtr<FField>, C> {
+        self.byte_offset(80).cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +106,17 @@ pub struct UClass {
     pub ReferenceTokenStreamCritical: [u64; 5], // FWindowsCriticalSection,
     pub NativeFunctionLookupTable: TArray<()>, //TArray<FNativeFunctionLookup,TSizedDefaultAllocator<32> >,
 }
+impl<C: Clone> CtxPtr<UClass, C> {
+    pub fn ustruct(&self) -> CtxPtr<UStruct, C> {
+        self.cast()
+    }
+    pub fn class_flags(&self) -> CtxPtr<EClassFlags, C> {
+        self.byte_offset(204).cast()
+    }
+    pub fn class_cast_flags(&self) -> CtxPtr<EClassCastFlags, C> {
+        self.byte_offset(208).cast()
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -87,6 +125,14 @@ pub struct UScriptStruct {
     pub StructFlags: EStructFlags,
     pub bPrepareCppStructOpsCompleted: bool,
     pub CppStructOps: ExternalPtr<()>, // UScriptStruct::ICppStructOps
+}
+impl<C: Clone> CtxPtr<UScriptStruct, C> {
+    pub fn ustruct(&self) -> CtxPtr<UStruct, C> {
+        self.cast()
+    }
+    pub fn struct_flags(&self) -> CtxPtr<EStructFlags, C> {
+        self.byte_offset(176).cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -104,6 +150,14 @@ pub struct UFunction {
     pub EventGraphCallOffset: i32,
     pub Func: ExternalPtr<()>, //extern "system" fn(*const UObject, *const FFrame, *const void),
 }
+impl<C: Clone> CtxPtr<UFunction, C> {
+    pub fn ustruct(&self) -> CtxPtr<UStruct, C> {
+        self.cast()
+    }
+    pub fn function_flags(&self) -> CtxPtr<EFunctionFlags, C> {
+        self.byte_offset(176).cast()
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -114,6 +168,14 @@ pub struct UEnum {
     //CppForm: UEnum::ECppForm,
     //EnumFlags: EEnumFlags,
     //EnumDisplayNameFn: extern "system" fn(i32) -> FText,
+}
+impl<C: Clone> CtxPtr<UEnum, C> {
+    pub fn ufield(&self) -> CtxPtr<UField, C> {
+        self.cast()
+    }
+    pub fn names(&self) -> CtxPtr<TArray<TTuple<FName, i64>>, C> {
+        self.byte_offset(64).cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -214,11 +276,21 @@ pub struct FObjectProperty {
     pub fproperty: FProperty,
     pub property_class: ExternalPtr<UClass>,
 }
+impl<C: Clone> CtxPtr<FObjectProperty, C> {
+    pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(120).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FSoftObjectProperty {
     pub fproperty: FProperty,
     pub property_class: ExternalPtr<UClass>,
+}
+impl<C: Clone> CtxPtr<FSoftObjectProperty, C> {
+    pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(120).cast()
+    }
 }
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -226,17 +298,32 @@ pub struct FWeakObjectProperty {
     pub fproperty: FProperty,
     pub property_class: ExternalPtr<UClass>,
 }
+impl<C: Clone> CtxPtr<FWeakObjectProperty, C> {
+    pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(120).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FLazyObjectProperty {
     pub fproperty: FProperty,
     pub property_class: ExternalPtr<UClass>,
 }
+impl<C: Clone> CtxPtr<FLazyObjectProperty, C> {
+    pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(120).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FInterfaceProperty {
     pub fproperty: FProperty,
     pub interface_class: ExternalPtr<UClass>,
+}
+impl<C: Clone> CtxPtr<FInterfaceProperty, C> {
+    pub fn interface_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        self.byte_offset(120).cast()
+    }
 }
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -245,11 +332,21 @@ pub struct FArrayProperty {
     pub inner: ExternalPtr<FProperty>,
     pub array_flags: u32, //EArrayPropertyFlags,
 }
+impl<C: Clone> CtxPtr<FArrayProperty, C> {
+    pub fn inner(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        self.byte_offset(120).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FStructProperty {
     pub fproperty: FProperty,
     pub struct_: ExternalPtr<UScriptStruct>,
+}
+impl<C: Clone> CtxPtr<FStructProperty, C> {
+    pub fn struct_(&self) -> CtxPtr<ExternalPtr<UScriptStruct>, C> {
+        self.byte_offset(120).cast()
+    }
 }
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -260,12 +357,25 @@ pub struct FMapProperty {
     //pub map_layout: FScriptMapLayout,
     //pub map_flags: EMapPropertyFlags,
 }
+impl<C: Clone> CtxPtr<FMapProperty, C> {
+    pub fn key_prop(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        self.byte_offset(120).cast()
+    }
+    pub fn value_prop(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        self.byte_offset(128).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FSetProperty {
     pub fproperty: FProperty,
     pub element_prop: ExternalPtr<FProperty>,
     //pub set_layout: FScriptSetLayout,
+}
+impl<C: Clone> CtxPtr<FSetProperty, C> {
+    pub fn element_prop(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        self.byte_offset(120).cast()
+    }
 }
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -275,11 +385,24 @@ pub struct FEnumProperty {
     pub enum_: ExternalPtr<UEnum>,               // FNumericProperty
                                                  //pub set_layout: FScriptSetLayout,
 }
+impl<C: Clone> CtxPtr<FEnumProperty, C> {
+    pub fn underlying_prop(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        self.byte_offset(120).cast()
+    }
+    pub fn enum_(&self) -> CtxPtr<ExternalPtr<UEnum>, C> {
+        self.byte_offset(128).cast()
+    }
+}
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FByteProperty {
     pub fproperty: FProperty,
     pub enum_: ExternalPtr<UEnum>,
+}
+impl<C: Clone> CtxPtr<FByteProperty, C> {
+    pub fn enum_(&self) -> CtxPtr<ExternalPtr<UEnum>, C> {
+        self.byte_offset(120).cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -289,6 +412,11 @@ pub struct FUObjectItem {
     pub Flags: i32,
     pub ClusterRootIndex: i32,
     pub SerialNumber: i32,
+}
+impl<C: Clone> CtxPtr<FUObjectItem, C> {
+    pub fn object(&self) -> CtxPtr<ExternalPtr<UObject>, C> {
+        self.byte_offset(0).cast()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -313,6 +441,27 @@ impl FChunkedFixedUObjectArray {
             .read(mem)
     }
 }
+impl<C: Clone> CtxPtr<FChunkedFixedUObjectArray, C> {
+    pub fn objects(&self) -> CtxPtr<ExternalPtr<ExternalPtr<FUObjectItem>>, C> {
+        self.byte_offset(0).cast()
+    }
+    pub fn num_elements(&self) -> CtxPtr<i32, C> {
+        self.byte_offset(20).cast()
+    }
+}
+impl<C: Mem + Clone> CtxPtr<FChunkedFixedUObjectArray, C> {
+    pub fn read_item_ptr(&self, item: usize) -> Result<CtxPtr<FUObjectItem, C>> {
+        let max_per_chunk = 64 * 1024;
+        let chunk_index = item / max_per_chunk;
+
+        Ok(self
+            .objects()
+            .read_ptr()?
+            .offset(chunk_index)
+            .read_ptr()?
+            .offset(item % max_per_chunk))
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -328,4 +477,9 @@ pub struct FUObjectArray {
     // TArray<FUObjectArray::FUObjectDeleteListener *,TSizedDefaultAllocator<32> > UObjectDeleteListeners;
     // FWindowsCriticalSection UObjectDeleteListenersCritical;
     // FThreadSafeCounter MasterSerialNumber;
+}
+impl<C: Clone> CtxPtr<FUObjectArray, C> {
+    pub fn obj_object(&self) -> CtxPtr<FChunkedFixedUObjectArray, C> {
+        self.byte_offset(16).cast()
+    }
 }

@@ -3,7 +3,7 @@ use derive_where::derive_where;
 
 use alloc::*;
 
-use crate::mem::{ExternalPtr, Mem};
+use crate::mem::{CtxPtr, ExternalPtr, Mem, NameTrait};
 
 #[derive(Debug, Clone, Copy)]
 pub struct FString(pub TArray<u16>);
@@ -234,6 +234,11 @@ pub struct FName {
     pub ComparisonIndex: FNameEntryId,
     pub Number: u32,
 }
+impl<C: Mem + NameTrait> CtxPtr<FName, C> {
+    pub fn read_name(&self) -> Result<String> {
+        self.ctx().read_name(self.read()?)
+    }
+}
 
 #[derive(Debug, Clone)]
 #[repr(C)]
@@ -244,10 +249,10 @@ struct FNameBlock {
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FNameEntryAllocator {
-    /* offset 0x0000 */ pub Lock: *const (), //FWindowsRWLock Lock;
-    /* offset 0x0008 */ pub CurrentBlock: u32,
-    /* offset 0x000c */ pub CurrentByteCursor: u32,
-    /* offset 0x0010 */ pub Blocks: [ExternalPtr<[u8; 0x2_0000]>; 0x1_0000],
+    pub Lock: *const (), //FWindowsRWLock Lock;
+    pub CurrentBlock: u32,
+    pub CurrentByteCursor: u32,
+    pub Blocks: [ExternalPtr<[u8; 0x2_0000]>; 0x1_0000],
 }
 
 #[derive(Debug, Clone)]
