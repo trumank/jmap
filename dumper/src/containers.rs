@@ -240,9 +240,38 @@ pub struct FName {
     pub ComparisonIndex: FNameEntryId,
     pub Number: u32,
 }
-impl<C: Mem + NameTrait> CtxPtr<FName, C> {
-    pub fn read_name(&self) -> Result<String> {
-        self.ctx().read_name(self.read()?)
+impl<C: Mem + Clone + NameTrait> CtxPtr<FName, C> {
+    pub fn read(&self) -> Result<String> {
+        // TODO dynamic struct member
+        let value = self.cast::<u32>().read()?;
+        let mem = self.ctx();
+
+        let blocks = ExternalPtr::<ExternalPtr<u8>>::new(mem.fnamepool().0 + 0x10);
+
+        let block_index = (value >> 16) as usize;
+        let offset = (value & 0xffff) as usize * 2;
+
+        let block = blocks.offset(block_index).read(mem)?;
+
+        let header_bytes: [u8; 2] = block.offset(offset).read_vec(mem, 2)?.try_into().unwrap();
+        let header: u16 = unsafe { std::mem::transmute_copy(&header_bytes) };
+
+        // TODO depends on case preserving
+        let len = (header >> 6) as usize;
+        let is_wide = header & 1 != 0;
+
+        Ok(if is_wide {
+            String::from_utf16(
+                &block
+                    .offset(offset + 2)
+                    .read_vec(mem, len * 2)?
+                    .chunks(2)
+                    .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            String::from_utf8(block.offset(offset + 2).read_vec(mem, len)?)?
+        })
     }
 }
 
@@ -274,33 +303,3 @@ pub struct FNamePool {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PtrFNamePool(pub usize);
-impl PtrFNamePool {
-    pub fn read(self, mem: &impl Mem, name: FName) -> Result<String> {
-        let blocks = ExternalPtr::<ExternalPtr<u8>>::new(self.0 + 0x10);
-
-        let block_index = (name.ComparisonIndex.Value >> 16) as usize;
-        let offset = (name.ComparisonIndex.Value & 0xffff) as usize * 2;
-
-        let block = blocks.offset(block_index).read(mem)?;
-
-        let header_bytes: [u8; 2] = block.offset(offset).read_vec(mem, 2)?.try_into().unwrap();
-        let header: u16 = unsafe { std::mem::transmute_copy(&header_bytes) };
-
-        // TODO depends on case preserving
-        let len = (header >> 6) as usize;
-        let is_wide = header & 1 != 0;
-
-        Ok(if is_wide {
-            String::from_utf16(
-                &block
-                    .offset(offset + 2)
-                    .read_vec(mem, len * 2)?
-                    .chunks(2)
-                    .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
-                    .collect::<Vec<_>>(),
-            )?
-        } else {
-            String::from_utf8(block.offset(offset + 2).read_vec(mem, len)?)?
-        })
-    }
-}

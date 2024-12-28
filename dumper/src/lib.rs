@@ -42,12 +42,12 @@ impl<T: Mem + Clone + NameTrait> MemComplete for T {}
 
 fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
     let mut components = vec![];
-    let name = obj.name_private().read_name()?;
+    let name = obj.name_private().read()?;
 
     let mut outer = obj.outer_private();
     components.push(name);
     while let Some(o) = outer.read()? {
-        let name = o.name_private().read_name()?;
+        let name = o.name_private().read()?;
         components.push(name);
         outer = o.outer_private();
     }
@@ -56,7 +56,7 @@ fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
 }
 
 fn map_prop<M: MemComplete>(ptr: &CtxPtr<FField, M>) -> Result<Option<Property>> {
-    let name = ptr.name_private().read_name()?;
+    let name = ptr.name_private().read()?;
     let field_class = ptr.class_private().read()?;
     let f = field_class.cast_flags().read()?;
 

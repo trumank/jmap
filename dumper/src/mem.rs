@@ -162,7 +162,6 @@ impl POD for EClassFlags {}
 impl POD for EFunctionFlags {}
 impl POD for EStructFlags {}
 impl POD for EPropertyFlags {}
-impl POD for FName {} // TODO should also be dynamic ideally
 
 #[derive(Debug)]
 pub enum FlaggedPtr<T> {
@@ -292,11 +291,11 @@ impl<M: Mem> Mem for Ctx<M> {
     }
 }
 impl<M: Mem> NameTrait for Ctx<M> {
-    fn read_name(&self, name: FName) -> Result<String> {
-        self.fnamepool.read(self, name)
+    fn fnamepool(&self) -> PtrFNamePool {
+        self.fnamepool
     }
 }
 
 pub trait NameTrait {
-    fn read_name(&self, name: FName) -> Result<String>;
+    fn fnamepool(&self) -> PtrFNamePool;
 }
