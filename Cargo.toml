@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["dumper", "ue_reflection", "process_dumper"]
+members = ["dumper", "ue_reflection", "process_dumper", "pdb_dumper"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,9 @@ homepage = "https://github.com/trumank/ue-containers"
 description = "Unreal Engine core reflection/container stuff"
 keywords = ["unreal-engine"]
 license = "MIT"
+
+[profile.release]
+debug = true
 
 [workspace.dependencies]
 bitflags = "2.6.0"

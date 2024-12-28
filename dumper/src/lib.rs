@@ -2,7 +2,7 @@ mod containers;
 
 use std::collections::BTreeMap;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 use bitflags::Flags;
 use patternsleuth::resolvers::impl_try_collector;
 use read_process_memory::{CopyAddress as _, Pid, ProcessHandle};
@@ -28,7 +28,8 @@ impl_try_collector! {
 }
 impl Mem for ProcessHandle {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
-        self.copy_address(address, buf)?;
+        self.copy_address(address, buf)
+            .with_context(|| format!("reading {} bytes at 0x{:x}", buf.len(), address))?;
         Ok(())
     }
 }
@@ -70,9 +71,8 @@ fn read_path<M: Mem>(mem: &Ctx<M>, obj: &UObject) -> Result<String> {
 }
 
 fn map_prop<M: Mem>(mem: &Ctx<M>, ptr: ExternalPtr<FField>) -> Result<Option<Property>> {
-    let field = ptr.read(mem)?;
-    let name = mem.fnamepool.read(mem, field.NamePrivate)?;
-    let field_class = field.ClassPrivate.read(mem)?;
+    let name = mem.fnamepool.read(mem, ptr.name_private().read(mem)?)?;
+    let field_class = ptr.class_private().read(mem)?.read(mem)?;
     let f = field_class.CastFlags;
 
     if !f.contains(EClassCastFlags::CASTCLASS_FProperty) {
@@ -281,11 +281,11 @@ pub fn dump(pid: i32) -> Result<()> {
         fn read_struct(mem: &Ctx<impl Mem>, obj: &UStruct) -> Result<Struct> {
             let mut properties = vec![];
             let mut field = obj.ChildProperties;
-            while let Some(next) = field.read_opt(mem)? {
+            while !field.is_null() {
                 if let Some(prop) = map_prop(mem, field)? {
                     properties.push(prop);
                 }
-                field = next.Next;
+                field = field.next().read(mem)?;
             }
             let super_struct = obj
                 .SuperStruct
@@ -351,7 +351,7 @@ pub fn dump(pid: i32) -> Result<()> {
             println!("{path:?} {:?}", f);
         }
     }
-    std::fs::write("../coral.json", serde_json::to_vec(&objects)?)?;
+    std::fs::write("../fsd.json", serde_json::to_vec(&objects)?)?;
 
     Ok(())
 }
@@ -362,6 +362,6 @@ mod test {
 
     #[test]
     fn test_drg() -> Result<()> {
-        dump(618836)
+        dump(1275510)
     }
 }

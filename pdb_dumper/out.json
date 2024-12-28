@@ -1,0 +1,767 @@
+{
+  "classes": [
+    {
+      "name": "FUObjectArray",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "ObjFirstGCIndex",
+          "type_name": "int32_t",
+          "offset": 0
+        },
+        {
+          "name": "ObjLastNonGCIndex",
+          "type_name": "int32_t",
+          "offset": 4
+        },
+        {
+          "name": "MaxObjectsNotConsideredByGC",
+          "type_name": "int32_t",
+          "offset": 8
+        },
+        {
+          "name": "OpenForDisregardForGC",
+          "type_name": "bool",
+          "offset": 12
+        },
+        {
+          "name": "ObjObjects",
+          "type_name": "FChunkedFixedUObjectArray",
+          "offset": 16
+        },
+        {
+          "name": "ObjObjectsCritical",
+          "type_name": "FWindowsCriticalSection",
+          "offset": 48
+        },
+        {
+          "name": "ObjAvailableList",
+          "type_name": "TLockFreePointerListUnordered<int,64>",
+          "offset": 88
+        },
+        {
+          "name": "UObjectCreateListeners",
+          "type_name": "TArray<FUObjectArray::FUObjectCreateListener *,TSizedDefaultAllocator<32> >",
+          "offset": 224
+        },
+        {
+          "name": "UObjectDeleteListeners",
+          "type_name": "TArray<FUObjectArray::FUObjectDeleteListener *,TSizedDefaultAllocator<32> >",
+          "offset": 240
+        },
+        {
+          "name": "UObjectDeleteListenersCritical",
+          "type_name": "FWindowsCriticalSection",
+          "offset": 256
+        },
+        {
+          "name": "MasterSerialNumber",
+          "type_name": "FThreadSafeCounter",
+          "offset": 296
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    },
+    {
+      "name": "FChunkedFixedUObjectArray",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "Objects",
+          "type_name": "FUObjectItem**",
+          "offset": 0
+        },
+        {
+          "name": "PreAllocatedObjects",
+          "type_name": "FUObjectItem*",
+          "offset": 8
+        },
+        {
+          "name": "MaxElements",
+          "type_name": "int32_t",
+          "offset": 16
+        },
+        {
+          "name": "NumElements",
+          "type_name": "int32_t",
+          "offset": 20
+        },
+        {
+          "name": "MaxChunks",
+          "type_name": "int32_t",
+          "offset": 24
+        },
+        {
+          "name": "NumChunks",
+          "type_name": "int32_t",
+          "offset": 28
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    },
+    {
+      "name": "UClass",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UStruct",
+          "offset": 0,
+          "virtual_base": false
+        }
+      ],
+      "members": [
+        {
+          "name": "ClassConstructor",
+          "type_name": "Type0x2b5a /* TODO: figure out how to name it */*",
+          "offset": 176
+        },
+        {
+          "name": "ClassVTableHelperCtorCaller",
+          "type_name": "Type0x2b6d /* TODO: figure out how to name it */*",
+          "offset": 184
+        },
+        {
+          "name": "ClassAddReferencedObjects",
+          "type_name": "Type0x2cba /* TODO: figure out how to name it */*",
+          "offset": 192
+        },
+        {
+          "name": "ClassUnique",
+          "type_name": "Type0x1c12f /* TODO: figure out how to name it */",
+          "offset": 200
+        },
+        {
+          "name": "bCooked",
+          "type_name": "Type0x1c132 /* TODO: figure out how to name it */",
+          "offset": 200
+        },
+        {
+          "name": "ClassFlags",
+          "type_name": "EClassFlags",
+          "offset": 204
+        },
+        {
+          "name": "ClassCastFlags",
+          "type_name": "EClassCastFlags",
+          "offset": 208
+        },
+        {
+          "name": "ClassWithin",
+          "type_name": "UClass*",
+          "offset": 216
+        },
+        {
+          "name": "ClassGeneratedBy",
+          "type_name": "UObject*",
+          "offset": 224
+        },
+        {
+          "name": "ClassConfigName",
+          "type_name": "FName",
+          "offset": 232
+        },
+        {
+          "name": "ClassReps",
+          "type_name": "TArray<FRepRecord,TSizedDefaultAllocator<32> >",
+          "offset": 240
+        },
+        {
+          "name": "NetFields",
+          "type_name": "TArray<UField *,TSizedDefaultAllocator<32> >",
+          "offset": 256
+        },
+        {
+          "name": "FirstOwnedClassRep",
+          "type_name": "int32_t",
+          "offset": 272
+        },
+        {
+          "name": "ClassDefaultObject",
+          "type_name": "UObject*",
+          "offset": 280
+        },
+        {
+          "name": "SparseClassData",
+          "type_name": "void *",
+          "offset": 288
+        },
+        {
+          "name": "SparseClassDataStruct",
+          "type_name": "UScriptStruct*",
+          "offset": 296
+        },
+        {
+          "name": "FuncMap",
+          "type_name": "TMap<FName,UFunction *,FDefaultSetAllocator,TDefaultMapHashableKeyFuncs<FName,UFunction *,0> >",
+          "offset": 304
+        },
+        {
+          "name": "SuperFuncMap",
+          "type_name": "TMap<FName,UFunction *,FDefaultSetAllocator,TDefaultMapHashableKeyFuncs<FName,UFunction *,0> >",
+          "offset": 384
+        },
+        {
+          "name": "SuperFuncMapLock",
+          "type_name": "FWindowsRWLock",
+          "offset": 464
+        },
+        {
+          "name": "Interfaces",
+          "type_name": "TArray<FImplementedInterface,TSizedDefaultAllocator<32> >",
+          "offset": 472
+        },
+        {
+          "name": "ReferenceTokenStream",
+          "type_name": "FGCReferenceTokenStream",
+          "offset": 488
+        },
+        {
+          "name": "ReferenceTokenStreamCritical",
+          "type_name": "FWindowsCriticalSection",
+          "offset": 504
+        },
+        {
+          "name": "NativeFunctionLookupTable",
+          "type_name": "TArray<FNativeFunctionLookup,TSizedDefaultAllocator<32> >",
+          "offset": 544
+        }
+      ],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "GetSparseClassDataStruct",
+          "return_type": "UScriptStruct*",
+          "arguments": []
+        },
+        {
+          "index": 1,
+          "name": "Serialize",
+          "return_type": "void",
+          "arguments": [
+            "FArchive*"
+          ]
+        },
+        {
+          "index": 2,
+          "name": "PostLoad",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 3,
+          "name": "FinishDestroy",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 4,
+          "name": "DeferredRegister",
+          "return_type": "void",
+          "arguments": [
+            "UClass*",
+            "const unhandled_primitive.kind /* WChar */*",
+            "const unhandled_primitive.kind /* WChar */*"
+          ]
+        },
+        {
+          "index": 5,
+          "name": "Rename",
+          "return_type": "bool",
+          "arguments": [
+            "const unhandled_primitive.kind /* WChar */*",
+            "UObject*",
+            "uint32_t"
+          ]
+        },
+        {
+          "index": 6,
+          "name": "TagSubobjects",
+          "return_type": "void",
+          "arguments": [
+            "EObjectFlags"
+          ]
+        },
+        {
+          "index": 7,
+          "name": "PostInitProperties",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 8,
+          "name": "GetRestoreForUObjectOverwrite",
+          "return_type": "FRestoreForUObjectOverwrite*",
+          "arguments": []
+        },
+        {
+          "index": 9,
+          "name": "GetDesc",
+          "return_type": "FString",
+          "arguments": []
+        },
+        {
+          "index": 10,
+          "name": "GetAssetRegistryTags",
+          "return_type": "void",
+          "arguments": [
+            "TArray<UObject::FAssetRegistryTag,TSizedDefaultAllocator<32> >*"
+          ]
+        },
+        {
+          "index": 11,
+          "name": "IsAsset",
+          "return_type": "bool",
+          "arguments": []
+        },
+        {
+          "index": 12,
+          "name": "IsNameStableForNetworking",
+          "return_type": "bool",
+          "arguments": []
+        },
+        {
+          "index": 13,
+          "name": "Bind",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 14,
+          "name": "GetPrefixCPP",
+          "return_type": "const unhandled_primitive.kind /* WChar */*",
+          "arguments": []
+        },
+        {
+          "index": 15,
+          "name": "Link",
+          "return_type": "void",
+          "arguments": [
+            "FArchive*",
+            "bool"
+          ]
+        },
+        {
+          "index": 16,
+          "name": "SetSuperStruct",
+          "return_type": "void",
+          "arguments": [
+            "UStruct*"
+          ]
+        },
+        {
+          "index": 17,
+          "name": "IsStructTrashed",
+          "return_type": "bool",
+          "arguments": []
+        },
+        {
+          "index": 18,
+          "name": "~UClass",
+          "return_type": "void",
+          "arguments": []
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "FUObjectItem",
+      "kind": "struct",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "Object",
+          "type_name": "UObjectBase*",
+          "offset": 0
+        },
+        {
+          "name": "Flags",
+          "type_name": "int32_t",
+          "offset": 8
+        },
+        {
+          "name": "ClusterRootIndex",
+          "type_name": "int32_t",
+          "offset": 12
+        },
+        {
+          "name": "SerialNumber",
+          "type_name": "int32_t",
+          "offset": 16
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    },
+    {
+      "name": "UProperty",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UField",
+          "offset": 0,
+          "virtual_base": false
+        }
+      ],
+      "members": [
+        {
+          "name": "ArrayDim",
+          "type_name": "int32_t",
+          "offset": 48
+        },
+        {
+          "name": "ElementSize",
+          "type_name": "int32_t",
+          "offset": 52
+        },
+        {
+          "name": "PropertyFlags",
+          "type_name": "EPropertyFlags",
+          "offset": 56
+        },
+        {
+          "name": "RepIndex",
+          "type_name": "unhandled_primitive.kind /* UShort */",
+          "offset": 64
+        },
+        {
+          "name": "BlueprintReplicationCondition",
+          "type_name": "TEnumAsByte<enum ELifetimeCondition>",
+          "offset": 66
+        },
+        {
+          "name": "Offset_Internal",
+          "type_name": "int32_t",
+          "offset": 68
+        },
+        {
+          "name": "RepNotifyFunc",
+          "type_name": "FName",
+          "offset": 72
+        },
+        {
+          "name": "PropertyLinkNext",
+          "type_name": "UProperty*",
+          "offset": 80
+        },
+        {
+          "name": "NextRef",
+          "type_name": "UProperty*",
+          "offset": 88
+        },
+        {
+          "name": "DestructorLinkNext",
+          "type_name": "UProperty*",
+          "offset": 96
+        },
+        {
+          "name": "PostConstructLinkNext",
+          "type_name": "UProperty*",
+          "offset": 104
+        }
+      ],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "Serialize",
+          "return_type": "void",
+          "arguments": [
+            "FArchive*"
+          ]
+        },
+        {
+          "index": 1,
+          "name": "~UProperty",
+          "return_type": "void",
+          "arguments": []
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "UStruct",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UField",
+          "offset": 0,
+          "virtual_base": false
+        },
+        {
+          "name": "FStructBaseChain",
+          "offset": 48,
+          "virtual_base": false
+        }
+      ],
+      "members": [
+        {
+          "name": "SuperStruct",
+          "type_name": "UStruct*",
+          "offset": 64
+        },
+        {
+          "name": "Children",
+          "type_name": "UField*",
+          "offset": 72
+        },
+        {
+          "name": "ChildProperties",
+          "type_name": "FField*",
+          "offset": 80
+        },
+        {
+          "name": "PropertiesSize",
+          "type_name": "int32_t",
+          "offset": 88
+        },
+        {
+          "name": "MinAlignment",
+          "type_name": "int32_t",
+          "offset": 92
+        },
+        {
+          "name": "Script",
+          "type_name": "TArray<unsigned char,TSizedDefaultAllocator<32> >",
+          "offset": 96
+        },
+        {
+          "name": "PropertyLink",
+          "type_name": "FProperty*",
+          "offset": 112
+        },
+        {
+          "name": "RefLink",
+          "type_name": "FProperty*",
+          "offset": 120
+        },
+        {
+          "name": "DestructorLink",
+          "type_name": "FProperty*",
+          "offset": 128
+        },
+        {
+          "name": "PostConstructLink",
+          "type_name": "FProperty*",
+          "offset": 136
+        },
+        {
+          "name": "ScriptAndPropertyObjectReferences",
+          "type_name": "TArray<UObject *,TSizedDefaultAllocator<32> >",
+          "offset": 144
+        },
+        {
+          "name": "UnresolvedScriptProperties",
+          "type_name": "TArray<TTuple<TFieldPath<FField>,int>,TSizedDefaultAllocator<32> >*",
+          "offset": 160
+        },
+        {
+          "name": "UnversionedSchema",
+          "type_name": "const FUnversionedStructSchema*",
+          "offset": 168
+        }
+      ],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "~UStruct",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 1,
+          "name": "PostLoad",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 2,
+          "name": "FinishDestroy",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 3,
+          "name": "RegisterDependencies",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 4,
+          "name": "GetPreloadDependencies",
+          "return_type": "void",
+          "arguments": [
+            "TArray<UObject *,TSizedDefaultAllocator<32> >*"
+          ]
+        },
+        {
+          "index": 5,
+          "name": "TagSubobjects",
+          "return_type": "void",
+          "arguments": [
+            "EObjectFlags"
+          ]
+        },
+        {
+          "index": 6,
+          "name": "AddCppProperty",
+          "return_type": "void",
+          "arguments": [
+            "FProperty*"
+          ]
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "UField",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UObject",
+          "offset": 0,
+          "virtual_base": false
+        }
+      ],
+      "members": [
+        {
+          "name": "Next",
+          "type_name": "UField*",
+          "offset": 40
+        }
+      ],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "Serialize",
+          "return_type": "void",
+          "arguments": [
+            "FArchive*"
+          ]
+        },
+        {
+          "index": 1,
+          "name": "PostLoad",
+          "return_type": "void",
+          "arguments": []
+        },
+        {
+          "index": 2,
+          "name": "NeedsLoadForClient",
+          "return_type": "bool",
+          "arguments": []
+        },
+        {
+          "index": 3,
+          "name": "NeedsLoadForServer",
+          "return_type": "bool",
+          "arguments": []
+        },
+        {
+          "index": 4,
+          "name": "~UField",
+          "return_type": "void",
+          "arguments": []
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "FStructBaseChain",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "StructBaseChainArray",
+          "type_name": "FStructBaseChain**",
+          "offset": 0
+        },
+        {
+          "name": "NumStructBasesInChainMinusOne",
+          "type_name": "int32_t",
+          "offset": 8
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    },
+    {
+      "name": "UObject",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UObjectBaseUtility",
+          "offset": 0,
+          "virtual_base": false
+        }
+      ],
+      "members": [],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "~UObject",
+          "return_type": "void",
+          "arguments": []
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "UObjectBaseUtility",
+      "kind": "class",
+      "base_classes": [
+        {
+          "name": "UObjectBase",
+          "offset": 0,
+          "virtual_base": false
+        }
+      ],
+      "members": [],
+      "vtable": [
+        {
+          "index": 0,
+          "name": "~UObjectBaseUtility",
+          "return_type": "void",
+          "arguments": []
+        }
+      ],
+      "size": 0
+    },
+    {
+      "name": "UObjectBase",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "ObjectFlags",
+          "type_name": "EObjectFlags",
+          "offset": 8
+        },
+        {
+          "name": "InternalIndex",
+          "type_name": "int32_t",
+          "offset": 12
+        },
+        {
+          "name": "ClassPrivate",
+          "type_name": "UClass*",
+          "offset": 16
+        },
+        {
+          "name": "NamePrivate",
+          "type_name": "FName",
+          "offset": 24
+        },
+        {
+          "name": "OuterPrivate",
+          "type_name": "UObject*",
+          "offset": 32
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    }
+  ]
+}

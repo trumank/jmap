@@ -1,0 +1,38 @@
+{
+  "classes": [
+    {
+      "name": "FField",
+      "kind": "class",
+      "base_classes": [],
+      "members": [
+        {
+          "name": "ClassPrivate",
+          "type_name": "FFieldClass*",
+          "offset": 8
+        },
+        {
+          "name": "Owner",
+          "type_name": "FFieldVariant",
+          "offset": 16
+        },
+        {
+          "name": "Next",
+          "type_name": "FField*",
+          "offset": 32
+        },
+        {
+          "name": "NamePrivate",
+          "type_name": "FName",
+          "offset": 40
+        },
+        {
+          "name": "FlagsPrivate",
+          "type_name": "EObjectFlags",
+          "offset": 48
+        }
+      ],
+      "vtable": [],
+      "size": 0
+    }
+  ]
+}

@@ -461,6 +461,18 @@ pub struct FField {
     pub FlagsPrivate: EObjectFlags,
 }
 
+impl ExternalPtr<FField> {
+    pub fn class_private(self) -> ExternalPtr<ExternalPtr<FFieldClass>> {
+        ExternalPtr::new(self.address + 8)
+    }
+    pub fn next(self) -> ExternalPtr<ExternalPtr<FField>> {
+        ExternalPtr::new(self.address + 32)
+    }
+    pub fn name_private(self) -> ExternalPtr<FName> {
+        ExternalPtr::new(self.address + 40)
+    }
+}
+
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FFieldClass {
