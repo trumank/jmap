@@ -6,12 +6,18 @@ use alloc::*;
 use crate::mem::{CtxPtr, ExternalPtr, Mem, NameTrait};
 
 #[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
 pub struct FString(pub TArray<u16>);
-impl FString {
-    pub fn read(&self, mem: &impl Mem) -> Result<String> {
-        let chars = self.0.read(mem)?;
-        let len = chars.iter().position(|c| *c == 0).unwrap_or(chars.len());
-        Ok(String::from_utf16(&chars[..len])?)
+impl<C: Mem + Clone> CtxPtr<FString, C> {
+    pub fn read(&self) -> Result<String> {
+        let array = self.cast::<TArray<u16>>();
+        Ok(if let Some(chars) = array.data()? {
+            let chars = chars.read_vec(array.len()?)?;
+            let len = chars.iter().position(|c| *c == 0).unwrap_or(chars.len());
+            String::from_utf16(&chars[..len])?
+        } else {
+            "".to_string()
+        })
     }
 }
 
@@ -22,19 +28,46 @@ pub struct TArray<T, A: TAlloc = TSizedHeapAllocator<32>> {
     pub num: u32,
     pub max: u32,
 }
-impl<T: Clone> TArray<T> {
-    pub fn read(&self, mem: &impl Mem) -> Result<Vec<T>> {
-        Ok(if let Some(data) = self.data.data() {
-            data.read_vec(mem, self.num as usize)?
-        } else {
-            vec![]
-        })
+impl<C: Mem + Clone, T: Clone, A: TAlloc> CtxPtr<TArray<T, A>, C> {
+    pub fn iter(&self) -> Result<impl Iterator<Item = CtxPtr<T, C>> + '_> {
+        let data = self.data()?;
+        Ok((0..self.len()?)
+            .into_iter()
+            .map(move |i| data.as_ref().unwrap().offset(i)))
+    }
+    //pub fn read(&self, mem: &impl Mem) -> Result<Vec<T>> {
+    //    let data = self
+    //        .byte_offset(std::mem::offset_of!(TArray<T, A>, data))
+    //        .cast::<A::ForElementType<T>>()
+    //        .read()?;
+    //    Ok(if let Some(data) = <A as TAlloc>::ForElementType::<T>::data(&self.data)? {
+    //        data.read_vec(mem, self.num as usize)?
+    //    } else {
+    //        vec![]
+    //    })
+    //}
+}
+impl<C: Mem + Clone, T, A: TAlloc> CtxPtr<TArray<T, A>, C> {
+    pub fn data(&self) -> Result<Option<CtxPtr<T, C>>> {
+        let alloc = self
+            .byte_offset(std::mem::offset_of!(TArray<T, A>, data))
+            .cast::<A::ForElementType<T>>();
+
+        <A as TAlloc>::ForElementType::<T>::data(&alloc)
+    }
+}
+impl<C: Mem + Clone, T, A: TAlloc> CtxPtr<TArray<T, A>, C> {
+    pub fn len(&self) -> Result<usize> {
+        Ok(self
+            .byte_offset(std::mem::offset_of!(TArray<T, A>, num))
+            .cast::<u32>()
+            .read()? as usize)
     }
 }
 
 #[derive_where(Debug, Clone, Copy; A::ForElementType<u32>)]
 #[repr(C)]
-struct TBitArray<A: TAlloc> {
+pub struct TBitArray<A: TAlloc> {
     pub allocator_instance: A::ForElementType<u32>,
     pub num_bits: i32,
     pub max_bits: i32,
@@ -93,9 +126,9 @@ pub struct TSparseArray_TBaseIterator<const N: usize, T, A: TSparseAlloc> {
 }
 
 mod alloc {
+    use super::*;
+    use crate::mem::{CtxPtr, ExternalPtr, FlaggedPtr, Mem};
     use std::{marker::PhantomData, ptr::NonNull};
-
-    use crate::mem::{ExternalPtr, FlaggedPtr};
 
     pub type FDefaultAllocator = TSizedDefaultAllocator<32>;
     pub type TSizedDefaultAllocator<const P: usize> = TSizedHeapAllocator<P>;
@@ -106,7 +139,9 @@ mod alloc {
         type ForElementType<T>: TAllocImpl<T>;
     }
     pub trait TAllocImpl<T> {
-        fn data(&self) -> Option<FlaggedPtr<T>>;
+        fn data<C: Mem + Clone>(this: &CtxPtr<Self, C>) -> Result<Option<CtxPtr<T, C>>>
+        where
+            Self: Sized;
     }
 
     #[derive(Debug, Clone, Copy)]
@@ -121,15 +156,22 @@ mod alloc {
         secondary_data: A::ForElementType<T>,
     }
     impl<const N: usize, T, A: TAlloc> TAllocImpl<T> for TInlineAlloc_ForElementType<N, T, A> {
-        fn data(&self) -> Option<FlaggedPtr<T>> {
-            let second = self.secondary_data.data();
-            if let Some(second) = second {
-                Some(second)
+        fn data<C: Mem + Clone>(this: &CtxPtr<Self, C>) -> Result<Option<CtxPtr<T, C>>>
+        where
+            Self: Sized,
+        {
+            let second = this
+                .byte_offset(std::mem::offset_of!(Self, secondary_data))
+                .cast::<A::ForElementType<T>>();
+            let a = <A as TAlloc>::ForElementType::<T>::data(&second)?;
+            Ok(if let Some(a) = a {
+                Some(a)
             } else {
-                Some(FlaggedPtr::Local(unsafe {
-                    NonNull::new_unchecked(self.inline_data.as_ptr().cast_mut())
-                }))
-            }
+                Some(
+                    this.byte_offset(std::mem::offset_of!(Self, inline_data))
+                        .cast::<T>(),
+                )
+            })
         }
     }
 
@@ -144,8 +186,11 @@ mod alloc {
         data: Option<ExternalPtr<T>>,
     }
     impl<const N: usize, T> TAllocImpl<T> for THeapAlloc_ForElementType<N, T> {
-        fn data(&self) -> Option<FlaggedPtr<T>> {
-            self.data.map(|d| FlaggedPtr::Remote(d))
+        fn data<C: Mem + Clone>(this: &CtxPtr<Self, C>) -> Result<Option<CtxPtr<T, C>>>
+        where
+            Self: Sized,
+        {
+            this.cast::<Option<ExternalPtr<T>>>().read()
         }
     }
 
@@ -210,8 +255,18 @@ pub struct TSetElement<T> {
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
 pub struct TTuple<K, V> {
-    pub key: K,
-    pub value: V,
+    pub a: K,
+    pub b: V,
+}
+impl<C: Clone, K, V> CtxPtr<TTuple<K, V>, C> {
+    pub fn a(&self) -> CtxPtr<K, C> {
+        self.byte_offset(std::mem::offset_of!(TTuple<K, V>, a))
+            .cast::<K>()
+    }
+    pub fn b(&self) -> CtxPtr<V, C> {
+        self.byte_offset(std::mem::offset_of!(TTuple<K, V>, b))
+            .cast::<V>()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]

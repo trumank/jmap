@@ -113,15 +113,9 @@ impl<T: POD, C: Mem> CtxPtr<T, C> {
     pub fn read(&self) -> Result<T> {
         self.ctx.read(self.address.into())
     }
-    //pub fn read_opt(&self) -> Result<Option<T>> {
-    //    Ok(match self.address {
-    //        0 => None,
-    //        a => Some(self.ctx.read::<T>(a)?),
-    //    })
-    //}
-    //pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
-    //    self.ctx.read_vec(self.address, count)
-    //}
+    pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
+        self.ctx.read_vec(self.address.into(), count)
+    }
 }
 impl<T, C: Mem + Clone> CtxPtr<ExternalPtr<T>, C> {
     pub fn read(&self) -> Result<CtxPtr<T, C>> {

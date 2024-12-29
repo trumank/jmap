@@ -43,13 +43,13 @@ impl<T: Mem + Clone + NameTrait> MemComplete for T {}
 fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
     let mut components = vec![];
     let name = obj.name_private().read()?;
-
-    let mut outer = obj.outer_private();
     components.push(name);
-    while let Some(o) = outer.read()? {
-        let name = o.name_private().read()?;
+
+    let mut obj = obj.clone();
+    while let Some(outer) = obj.outer_private().read()? {
+        let name = outer.name_private().read()?;
         components.push(name);
-        outer = o.outer_private();
+        obj = outer;
     }
     components.reverse();
     Ok(components.join("."))
@@ -266,22 +266,23 @@ pub fn dump(pid: i32) -> Result<()> {
                 objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
             }
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
-            // TODO sort out array access with CtxPtr
-            //let full_obj = obj.cast::<UEnum>();
-            //// TODO better way to determine native
-            //if path.starts_with("/Script/") {
-            //    let mut names = vec![];
-            //    for TTuple { key, value } in full_obj.names().read()? {
-            //        names.push((mem.read_name(key)?, value));
-            //    }
-            //    objects.insert(
-            //        path,
-            //        ObjectType::Enum(Enum {
-            //            cpp_type: full_obj.CppType.read(&mem)?,
-            //            names,
-            //        }),
-            //    );
-            //}
+            let full_obj = obj.cast::<UEnum>();
+            // TODO better way to determine native
+            if path.starts_with("/Script/") {
+                let mut names = vec![];
+                for item in full_obj.names().iter()? {
+                    let key = item.a().read()?;
+                    let value = item.b().read()?;
+                    names.push((key, value));
+                }
+                objects.insert(
+                    path,
+                    ObjectType::Enum(Enum {
+                        cpp_type: full_obj.cpp_type().read()?,
+                        names,
+                    }),
+                );
+            }
         } else if path.starts_with("/Script/") {
             println!("{path:?} {:?}", f);
         }

@@ -173,6 +173,9 @@ impl<C: Clone> CtxPtr<UEnum, C> {
     pub fn ufield(&self) -> CtxPtr<UField, C> {
         self.cast()
     }
+    pub fn cpp_type(&self) -> CtxPtr<FString, C> {
+        self.byte_offset(48).cast()
+    }
     pub fn names(&self) -> CtxPtr<TArray<TTuple<FName, i64>>, C> {
         self.byte_offset(64).cast()
     }
@@ -272,7 +275,7 @@ impl<C: Clone> CtxPtr<FProperty, C> {
         self.byte_offset(64).cast()
     }
     pub fn offset_internal(&self) -> CtxPtr<i32, C> {
-        self.byte_offset(80).cast()
+        self.byte_offset(76).cast()
     }
 }
 
