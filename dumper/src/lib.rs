@@ -55,18 +55,14 @@ fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
     Ok(components.join("."))
 }
 
-fn map_prop<M: MemComplete>(ptr: &CtxPtr<FField, M>) -> Result<Option<Property>> {
-    let name = ptr.name_private().read()?;
-    let field_class = ptr.class_private().read()?;
+fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
+    let name = ptr.ffield().name_private().read()?;
+    let field_class = ptr.ffield().class_private().read()?;
     let f = field_class.cast_flags().read()?;
-
-    if !f.contains(EClassCastFlags::CASTCLASS_FProperty) {
-        return Ok(None);
-    }
 
     let t = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
         let prop = ptr.cast::<FStructProperty>();
-        let s = read_path(&prop.struct_().read()?.unwrap().ustruct().ufield().uobject())?;
+        let s = read_path(&prop.struct_().read()?.ustruct().ufield().uobject())?;
         PropertyType::Struct { r#struct: s }
     } else if f.contains(EClassCastFlags::CASTCLASS_FStrProperty) {
         PropertyType::Str
@@ -94,16 +90,12 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FField, M>) -> Result<Option<Property>>
     } else if f.contains(EClassCastFlags::CASTCLASS_FArrayProperty) {
         let prop = ptr.cast::<FArrayProperty>();
         PropertyType::Array {
-            inner: map_prop(&prop.inner().read()?.cast())?
-                .unwrap()
-                .r#type
-                .into(),
+            inner: map_prop(&prop.inner().read()?.cast())?.r#type.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
         let prop = ptr.cast::<FEnumProperty>();
         PropertyType::Enum {
             container: map_prop(&prop.underlying_prop().read()?.cast())?
-                .unwrap()
                 .r#type
                 .into(),
             r#enum: read_path(&prop.enum_().read()?.ufield().uobject())?,
@@ -111,22 +103,13 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FField, M>) -> Result<Option<Property>>
     } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
         let prop = ptr.cast::<FMapProperty>();
         PropertyType::Map {
-            key_prop: map_prop(&prop.key_prop().read()?.cast())?
-                .unwrap()
-                .r#type
-                .into(),
-            value_prop: map_prop(&prop.value_prop().read()?.cast())?
-                .unwrap()
-                .r#type
-                .into(),
+            key_prop: map_prop(&prop.key_prop().read()?.cast())?.r#type.into(),
+            value_prop: map_prop(&prop.value_prop().read()?.cast())?.r#type.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
         let prop = ptr.cast::<FSetProperty>();
         PropertyType::Set {
-            key_prop: map_prop(&prop.element_prop().read()?.cast())?
-                .unwrap()
-                .r#type
-                .into(),
+            key_prop: map_prop(&prop.element_prop().read()?.cast())?.r#type.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
         PropertyType::Float
@@ -183,13 +166,13 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FField, M>) -> Result<Option<Property>>
     };
 
     let prop = ptr.cast::<FProperty>();
-    Ok(Some(Property {
+    Ok(Property {
         name,
         offset: prop.offset_internal().read()? as usize,
         size: prop.element_size().read()? as usize,
         flags: prop.property_flags().read()?,
         r#type: t,
-    }))
+    })
 }
 
 pub fn dump(pid: i32) -> Result<()> {
@@ -223,9 +206,11 @@ pub fn dump(pid: i32) -> Result<()> {
             let mut properties = vec![];
             let mut field = obj.child_properties();
             while let Some(next) = field.read()? {
-                if let Some(prop) = map_prop(&next)? {
-                    properties.push(prop);
+                let f = next.class_private().read()?.cast_flags().read()?;
+                if f.contains(EClassCastFlags::CASTCLASS_FProperty) {
+                    properties.push(map_prop(&next.cast::<FProperty>())?);
                 }
+
                 field = next.next();
             }
             let super_struct = obj

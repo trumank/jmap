@@ -116,6 +116,9 @@ impl<C: Clone> CtxPtr<FFieldClass, C> {
 #[derive(Clone, Copy)]
 pub struct FProperty;
 impl<C: Clone> CtxPtr<FProperty, C> {
+    pub fn ffield(&self) -> CtxPtr<FField, C> {
+        self.cast()
+    }
     pub fn element_size(&self) -> CtxPtr<i32, C> {
         self.byte_offset(60).cast()
     }
@@ -188,7 +191,7 @@ impl<C: Clone> CtxPtr<FArrayProperty, C> {
 #[derive(Clone, Copy)]
 pub struct FStructProperty;
 impl<C: Clone> CtxPtr<FStructProperty, C> {
-    pub fn struct_(&self) -> CtxPtr<Option<ExternalPtr<UScriptStruct>>, C> {
+    pub fn struct_(&self) -> CtxPtr<ExternalPtr<UScriptStruct>, C> {
         self.byte_offset(120).cast()
     }
 }
