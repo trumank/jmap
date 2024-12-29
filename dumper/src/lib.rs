@@ -13,7 +13,7 @@ use ue_reflection::{
     Property, PropertyType, Struct,
 };
 
-use crate::containers::{PtrFNamePool, TTuple};
+use crate::containers::PtrFNamePool;
 use crate::objects::{
     FArrayProperty, FBoolProperty, FByteProperty, FEnumProperty, FField, FInterfaceProperty,
     FLazyObjectProperty, FMapProperty, FObjectProperty, FProperty, FSetProperty,

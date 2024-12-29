@@ -127,8 +127,8 @@ pub struct TSparseArray_TBaseIterator<const N: usize, T, A: TSparseAlloc> {
 
 mod alloc {
     use super::*;
-    use crate::mem::{CtxPtr, ExternalPtr, FlaggedPtr, Mem};
-    use std::{marker::PhantomData, ptr::NonNull};
+    use crate::mem::{CtxPtr, ExternalPtr, Mem};
+    use std::marker::PhantomData;
 
     pub type FDefaultAllocator = TSizedDefaultAllocator<32>;
     pub type TSizedDefaultAllocator<const P: usize> = TSizedHeapAllocator<P>;

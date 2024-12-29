@@ -1,4 +1,4 @@
-use crate::containers::{FName, PtrFNamePool};
+use crate::containers::PtrFNamePool;
 use anyhow::{Context as _, Result};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
