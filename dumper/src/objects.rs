@@ -53,6 +53,9 @@ impl<C: Clone> CtxPtr<UClass, C> {
     pub fn class_cast_flags(&self) -> CtxPtr<EClassCastFlags, C> {
         self.byte_offset(208).cast()
     }
+    pub fn class_default_object(&self) -> CtxPtr<Option<ExternalPtr<UObject>>, C> {
+        self.byte_offset(0x118).cast()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -149,7 +152,7 @@ impl<C: Clone> CtxPtr<FBoolProperty, C> {
 #[derive(Clone, Copy)]
 pub struct FObjectProperty;
 impl<C: Clone> CtxPtr<FObjectProperty, C> {
-    pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+    pub fn property_class(&self) -> CtxPtr<Option<ExternalPtr<UClass>>, C> {
         self.byte_offset(120).cast()
     }
 }
@@ -218,7 +221,7 @@ impl<C: Clone> CtxPtr<FEnumProperty, C> {
     pub fn underlying_prop(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
         self.byte_offset(120).cast()
     }
-    pub fn enum_(&self) -> CtxPtr<ExternalPtr<UEnum>, C> {
+    pub fn enum_(&self) -> CtxPtr<Option<ExternalPtr<UEnum>>, C> {
         self.byte_offset(128).cast()
     }
 }

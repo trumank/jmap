@@ -9,8 +9,8 @@ use mem::{Ctx, CtxPtr, ExternalPtr, Mem, MemCache, NameTrait};
 use patternsleuth::resolvers::impl_try_collector;
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
-    Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, ObjectType,
-    Property, PropertyType, Struct,
+    Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
+    ObjectType, Property, PropertyType, Struct,
 };
 
 use crate::containers::PtrFNamePool;
@@ -98,7 +98,11 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
             container: map_prop(&prop.underlying_prop().read()?.cast())?
                 .r#type
                 .into(),
-            r#enum: read_path(&prop.enum_().read()?.ufield().uobject())?,
+            r#enum: prop
+                .enum_()
+                .read()?
+                .map(|e| read_path(&e.ufield().uobject()))
+                .transpose()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
         let prop = ptr.cast::<FMapProperty>();
@@ -140,8 +144,16 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Int64
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
         let prop = ptr.cast::<FObjectProperty>();
-        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::Object { class: c }
+        //dbg!(&prop.property_class());
+        //dbg!(&prop.property_class().read()?);
+            let class = prop.
+                property_class()
+                .read()?
+                .map(|c| read_path(&c.ustruct().ufield().uobject()))
+                .transpose()?;
+
+        //let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::Object { class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
         let prop = ptr.cast::<FWeakObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
@@ -202,6 +214,20 @@ pub fn dump(pid: i32) -> Result<()> {
 
         let path = read_path(&obj)?;
 
+        fn read_object<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<Object> {
+            let outer = obj
+                .outer_private()
+                .read()?
+                .map(|s| read_path(&s))
+                .transpose()?;
+            let class = obj
+                .outer_private()
+                .read()?
+                .map(|s| read_path(&s))
+                .transpose()?;
+            Ok(Object { outer, class })
+        }
+
         fn read_struct<M: MemComplete>(obj: &CtxPtr<UStruct, M>) -> Result<Struct> {
             let mut properties = vec![];
             let mut field = obj.child_properties();
@@ -219,6 +245,7 @@ pub fn dump(pid: i32) -> Result<()> {
                 .map(|s| read_path(&s.ufield().uobject()))
                 .transpose()?;
             Ok(Struct {
+                object: read_object(&obj.cast())?,
                 super_struct,
                 properties,
             })
@@ -226,50 +253,61 @@ pub fn dump(pid: i32) -> Result<()> {
 
         let f = class.class_cast_flags().read()?;
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
-            let flags = obj.cast::<UClass>().class_flags();
-            if flags.read()?.contains(EClassFlags::CLASS_Native) {
-                objects.insert(
-                    path,
-                    ObjectType::Class(Class {
-                        r#struct: read_struct(&obj.cast())?,
-                    }),
-                );
-            }
+            dbg!(&path);
+            let obj = obj.cast::<UClass>();
+            let flags = obj.class_flags();
+            //if flags.read()?.contains(EClassFlags::CLASS_Native) {
+            let class_default_object = obj
+                .class_default_object()
+                .read()?
+                .map(|s| read_path(&s))
+                .transpose()?;
+            objects.insert(
+                path,
+                ObjectType::Class(Class {
+                    r#struct: read_struct(&obj.cast())?,
+                    class_default_object,
+                }),
+            );
+            //}
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
             let flags = obj.cast::<UFunction>().function_flags();
-            if flags.read()?.contains(EFunctionFlags::FUNC_Native) {
-                objects.insert(
-                    path,
-                    ObjectType::Function(Function {
-                        r#struct: read_struct(&obj.cast())?,
-                    }),
-                );
-            }
+            //if flags.read()?.contains(EFunctionFlags::FUNC_Native) {
+            objects.insert(
+                path,
+                ObjectType::Function(Function {
+                    r#struct: read_struct(&obj.cast())?,
+                }),
+            );
+            //}
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
             let flags = obj.cast::<UScriptStruct>().struct_flags();
-            if flags.read()?.contains(EStructFlags::STRUCT_Native) {
-                objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
-            }
+            //if flags.read()?.contains(EStructFlags::STRUCT_Native) {
+            objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
+            //}
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
             let full_obj = obj.cast::<UEnum>();
             // TODO better way to determine native
-            if path.starts_with("/Script/") {
-                let mut names = vec![];
-                for item in full_obj.names().iter()? {
-                    let key = item.a().read()?;
-                    let value = item.b().read()?;
-                    names.push((key, value));
-                }
-                objects.insert(
-                    path,
-                    ObjectType::Enum(Enum {
-                        cpp_type: full_obj.cpp_type().read()?,
-                        names,
-                    }),
-                );
+            //if path.starts_with("/Script/") {
+            let mut names = vec![];
+            for item in full_obj.names().iter()? {
+                let key = item.a().read()?;
+                let value = item.b().read()?;
+                names.push((key, value));
             }
+            objects.insert(
+                path,
+                ObjectType::Enum(Enum {
+                    object: read_object(&obj.cast())?,
+                    cpp_type: full_obj.cpp_type().read()?,
+                    names,
+                }),
+            );
+            //}
         } else if path.starts_with("/Script/") {
-            println!("{path:?} {:?}", f);
+            let obj = obj.cast::<UObject>();
+            objects.insert(path, ObjectType::Object(read_object(&obj)?));
+            //println!("{path:?} {:?}", f);
         }
     }
     std::fs::write("../fsd.json", serde_json::to_vec(&objects)?)?;
@@ -283,6 +321,6 @@ mod test {
 
     #[test]
     fn test_drg() -> Result<()> {
-        dump(3185473)
+        dump(1014886)
     }
 }

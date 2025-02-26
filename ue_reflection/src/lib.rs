@@ -280,7 +280,15 @@ bitflags::bitflags! {
 pub type ReflectionData = std::collections::BTreeMap<String, ObjectType>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Object {
+    pub outer: Option<String>,
+    pub class: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Struct {
+    #[serde(flatten)]
+    pub object: Object,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }
@@ -289,6 +297,7 @@ pub struct Struct {
 pub struct Class {
     #[serde(flatten)]
     pub r#struct: Struct,
+    pub class_default_object: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Function {
@@ -297,6 +306,8 @@ pub struct Function {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {
+    #[serde(flatten)]
+    pub object: Object,
     pub cpp_type: String,
     pub names: Vec<(String, i64)>,
 }
@@ -307,6 +318,7 @@ pub enum ObjectType {
     Class(Class),
     Function(Function),
     Enum(Enum),
+    Object(Object),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -339,7 +351,7 @@ pub enum PropertyType {
     },
     Enum {
         container: Box<PropertyType>,
-        r#enum: String,
+        r#enum: Option<String>,
     },
     Map {
         key_prop: Box<PropertyType>,
@@ -361,7 +373,7 @@ pub enum PropertyType {
     Int,
     Int64,
     Object {
-        class: String,
+        class: Option<String>,
     },
     WeakObject {
         class: String,
