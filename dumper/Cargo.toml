@@ -15,6 +15,7 @@ bitflags = { workspace = true, features = ["serde"] }
 bytemuck.workspace = true
 clap.workspace = true
 derive-where.workspace = true
+memmap2 = "0.9.5"
 patternsleuth_image = { workspace = true, features = ["image-pe", "process-external"] }
 patternsleuth_resolvers = { workspace = true, features = [] }
 pretty-hex.workspace = true

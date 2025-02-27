@@ -239,8 +239,10 @@ pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<BTreeMap<Strin
             dump_inner(mem, &image, struct_info)
         }
         Input::Dump(path) => {
-            let data = std::fs::read(path)?;
-            let image = patternsleuth_image::image::Image::read::<&str>(None, &data, None, false)?;
+            let file = std::fs::File::open(path)?;
+            let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
+
+            let image = patternsleuth_image::image::Image::read::<&str>(None, &mmap, None, false)?;
             let mem = ImgMem(&image);
             dump_inner(mem, &image, struct_info)
         }

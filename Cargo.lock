@@ -314,6 +314,7 @@ dependencies = [
  "bytemuck",
  "clap",
  "derive-where",
+ "memmap2",
  "patternsleuth_image",
  "patternsleuth_resolvers",
  "pretty-hex",
@@ -828,7 +829,7 @@ dependencies = [
 [[package]]
 name = "patternsleuth_image"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#05eb6bc80e9f5aced4a624645526eee542d5d959"
+source = "git+https://github.com/trumank/patternsleuth?branch=refactor#91c6a8ec832bc1ddf933919ad567b0ab5e7fded7"
 dependencies = [
  "anyhow",
  "itertools",
@@ -842,7 +843,7 @@ dependencies = [
 [[package]]
 name = "patternsleuth_resolvers"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#05eb6bc80e9f5aced4a624645526eee542d5d959"
+source = "git+https://github.com/trumank/patternsleuth?branch=refactor#91c6a8ec832bc1ddf933919ad567b0ab5e7fded7"
 dependencies = [
  "futures",
  "futures-scopes",
@@ -857,7 +858,7 @@ dependencies = [
 [[package]]
 name = "patternsleuth_scanner"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#05eb6bc80e9f5aced4a624645526eee542d5d959"
+source = "git+https://github.com/trumank/patternsleuth?branch=refactor#91c6a8ec832bc1ddf933919ad567b0ab5e7fded7"
 dependencies = [
  "anyhow",
  "memchr",
