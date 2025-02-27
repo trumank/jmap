@@ -1,4 +1,4 @@
-use crate::containers::PtrFNamePool;
+use crate::{containers::PtrFNamePool, StructInfo};
 use anyhow::{Context as _, Result};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
@@ -291,11 +291,19 @@ impl<M: Mem> NameTrait for Ctx<M> {
     }
 }
 impl<M: Mem> StructsTrait for Ctx<M> {
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
+    fn get_struct(&self, struct_name: &str) -> &StructInfo {
         let Some(s) = self.structs.get(struct_name) else {
             panic!("struct {struct_name} not found");
         };
-        let Some(member) = s.members.iter().find(|m| m.name == member_name) else {
+        s
+    }
+    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
+        let Some(member) = self
+            .get_struct(struct_name)
+            .members
+            .iter()
+            .find(|m| m.name == member_name)
+        else {
             panic!("struct member {struct_name}::{member_name} not found");
         };
         member.offset as usize
@@ -306,5 +314,6 @@ pub trait NameTrait {
     fn fnamepool(&self) -> PtrFNamePool;
 }
 pub trait StructsTrait {
+    fn get_struct(&self, struct_name: &str) -> &StructInfo;
     fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
 }

@@ -61,7 +61,8 @@ fn main() -> Result<()> {
         "FSetProperty",
         "FEnumProperty",
         "FByteProperty",
-        "FObjectPropertyBase", // for FObjectProperty
+        "FOptionalPropertyLayout", // for FOptionalProperty
+        "FObjectPropertyBase",     // for FObjectProperty
     ]);
 
     let file = File::open(cli.input)?;

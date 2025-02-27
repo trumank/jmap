@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use mem::{Ctx, CtxPtr, ExternalPtr, Mem, MemCache, NameTrait, StructsTrait};
+use objects::FOptionalProperty;
 use patternsleuth_image::image::Image;
 use patternsleuth_resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
@@ -178,8 +179,12 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         // TODO
         PropertyType::FieldPath
     } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
-        // TODO
-        PropertyType::Optional
+        let prop = ptr.cast::<FOptionalProperty>();
+        PropertyType::Optional {
+            inner: map_prop(&prop.value_property().read()?.cast())?
+                .r#type
+                .into(),
+        }
     } else {
         unimplemented!("{f:?}");
     };

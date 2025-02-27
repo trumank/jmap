@@ -282,6 +282,18 @@ impl<C: Clone + StructsTrait> CtxPtr<FByteProperty, C> {
         self.byte_offset(offset).cast()
     }
 }
+#[derive(Clone, Copy)]
+pub struct FOptionalProperty;
+impl<C: Clone + StructsTrait> CtxPtr<FOptionalProperty, C> {
+    pub fn value_property(&self) -> CtxPtr<ExternalPtr<FProperty>, C> {
+        // TODO implement struct inheritence. for now calculate offset manually
+        let parent = self.ctx().get_struct("FProperty").size as usize;
+        let offset = self
+            .ctx()
+            .struct_member("FOptionalPropertyLayout", "ValueProperty");
+        self.byte_offset(parent + offset).cast()
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct FUObjectItem;

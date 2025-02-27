@@ -389,5 +389,7 @@ pub enum PropertyType {
         class: String,
     },
     FieldPath,
-    Optional,
+    Optional {
+        inner: Box<PropertyType>,
+    },
 }
