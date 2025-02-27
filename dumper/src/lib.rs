@@ -318,54 +318,54 @@ fn dump_inner<M: Mem + Clone>(
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
             let obj = obj.cast::<UClass>();
             let flags = obj.class_flags();
-            //if flags.read()?.contains(EClassFlags::CLASS_Native) {
-            let class_default_object = obj
-                .class_default_object()
-                .read()?
-                .map(|s| read_path(&s))
-                .transpose()?;
-            objects.insert(
-                path,
-                ObjectType::Class(Class {
-                    r#struct: read_struct(&obj.cast())?,
-                    class_default_object,
-                }),
-            );
-            //}
+            if flags.read()?.contains(EClassFlags::CLASS_Native) {
+                let class_default_object = obj
+                    .class_default_object()
+                    .read()?
+                    .map(|s| read_path(&s))
+                    .transpose()?;
+                objects.insert(
+                    path,
+                    ObjectType::Class(Class {
+                        r#struct: read_struct(&obj.cast())?,
+                        class_default_object,
+                    }),
+                );
+            }
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
             let flags = obj.cast::<UFunction>().function_flags();
-            //if flags.read()?.contains(EFunctionFlags::FUNC_Native) {
-            objects.insert(
-                path,
-                ObjectType::Function(Function {
-                    r#struct: read_struct(&obj.cast())?,
-                }),
-            );
-            //}
+            if flags.read()?.contains(EFunctionFlags::FUNC_Native) {
+                objects.insert(
+                    path,
+                    ObjectType::Function(Function {
+                        r#struct: read_struct(&obj.cast())?,
+                    }),
+                );
+            }
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
             let flags = obj.cast::<UScriptStruct>().struct_flags();
-            //if flags.read()?.contains(EStructFlags::STRUCT_Native) {
-            objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
-            //}
+            if flags.read()?.contains(EStructFlags::STRUCT_Native) {
+                objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
+            }
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
             let full_obj = obj.cast::<UEnum>();
             // TODO better way to determine native
-            //if path.starts_with("/Script/") {
-            let mut names = vec![];
-            for item in full_obj.names().iter()? {
-                let key = item.a().read()?;
-                let value = item.b().read()?;
-                names.push((key, value));
+            if path.starts_with("/Script/") {
+                let mut names = vec![];
+                for item in full_obj.names().iter()? {
+                    let key = item.a().read()?;
+                    let value = item.b().read()?;
+                    names.push((key, value));
+                }
+                objects.insert(
+                    path,
+                    ObjectType::Enum(Enum {
+                        object: read_object(&obj.cast())?,
+                        cpp_type: full_obj.cpp_type().read()?,
+                        names,
+                    }),
+                );
             }
-            objects.insert(
-                path,
-                ObjectType::Enum(Enum {
-                    object: read_object(&obj.cast())?,
-                    cpp_type: full_obj.cpp_type().read()?,
-                    names,
-                }),
-            );
-            //}
         } else if path.starts_with("/Script/") {
             let obj = obj.cast::<UObject>();
             objects.insert(path, ObjectType::Object(read_object(&obj)?));
