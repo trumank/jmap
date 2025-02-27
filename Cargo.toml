@@ -19,7 +19,8 @@ debug = true
 bitflags = "2.6.0"
 bytemuck = "1.21.0"
 derive-where = "1.2.7"
-patternsleuth = { git = "https://github.com/trumank/patternsleuth" }
+patternsleuth_image = { git = "https://github.com/trumank/patternsleuth", branch = "refactor" }
+patternsleuth_resolvers = { git = "https://github.com/trumank/patternsleuth", branch = "refactor" }
 pretty-hex = "0.4.1"
 read-process-memory = "0.1.6"
 serde = "1.0.216"

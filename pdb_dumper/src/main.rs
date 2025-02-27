@@ -28,9 +28,28 @@ fn main() -> Result<()> {
         "FName",
         "UObject",
         "UObjectBase",
-        "FProperty",
         "UProperty",
+        "UClass",
+        "UStruct",
+        "UScriptStruct",
+        "UFunction",
+        "UEnum",
+        "FFieldClass",
         "FField",
+        "FProperty",
+        "FBoolProperty",
+        "FObjectProperty",
+        "FSoftObjectProperty",
+        "FWeakObjectProperty",
+        "FLazyObjectProperty",
+        "FInterfaceProperty",
+        "FArrayProperty",
+        "FStructProperty",
+        "FMapProperty",
+        "FSetProperty",
+        "FEnumProperty",
+        "FByteProperty",
+        "FObjectPropertyBase", // for FObjectProperty
     ]);
 
     let pdb_path = std::env::args().nth(1).unwrap();
@@ -138,7 +157,7 @@ fn get_type_size(type_finder: &mut TypeFinder, type_index: TypeIndex) -> Result<
         TypeData::Primitive(primitive_type) => {
             match primitive_type.kind {
                 //pdb::PrimitiveKind::NoType => todo!(),
-                //pdb::PrimitiveKind::Void => todo!(),
+                pdb::PrimitiveKind::Void => 0,
                 pdb::PrimitiveKind::Char => 1,
                 pdb::PrimitiveKind::UChar => 1,
                 //pdb::PrimitiveKind::RChar => todo!(),
@@ -218,7 +237,9 @@ fn get_type_size(type_finder: &mut TypeFinder, type_index: TypeIndex) -> Result<
         //TypeData::Enumerate(enumerate_type) => todo!(),
         //TypeData::Array(array_type) => todo!(),
         //TypeData::Union(union_type) => todo!(),
-        //TypeData::Bitfield(bitfield_type) => todo!(),
+        TypeData::Bitfield(bitfield_type) => {
+            get_type_size(type_finder, bitfield_type.underlying_type)?
+        }
         //TypeData::FieldList(field_list) => todo!(),
         //TypeData::ArgumentList(argument_list) => todo!(),
         //TypeData::MethodList(method_list) => todo!(),

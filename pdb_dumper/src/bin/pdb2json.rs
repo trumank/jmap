@@ -100,7 +100,6 @@ fn type_name(
     Ok(name)
 }
 
-
 struct ClassBuilder<'p> {
     class_info: ClassInfo,
     vtable_index: usize,

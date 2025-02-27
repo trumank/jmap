@@ -3,11 +3,15 @@ mod mem;
 mod objects;
 
 use std::collections::BTreeMap;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
-use mem::{Ctx, CtxPtr, ExternalPtr, Mem, MemCache, NameTrait};
-use patternsleuth::resolvers::impl_try_collector;
+use mem::{Ctx, CtxPtr, ExternalPtr, Mem, MemCache, NameTrait, StructsTrait};
+use patternsleuth_image::image::Image;
+use patternsleuth_resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
+use serde::{Deserialize, Serialize};
 use ue_reflection::{
     Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
     ObjectType, Property, PropertyType, Struct,
@@ -24,8 +28,8 @@ use crate::objects::{
 impl_try_collector! {
     #[derive(Debug, PartialEq, Clone)]
     struct DrgResolution {
-        guobject_array: patternsleuth::resolvers::unreal::guobject_array::GUObjectArray,
-        fname_pool: patternsleuth::resolvers::unreal::fname::FNamePool,
+        guobject_array: patternsleuth_resolvers::unreal::guobject_array::GUObjectArray,
+        fname_pool: patternsleuth_resolvers::unreal::fname::FNamePool,
     }
 }
 
@@ -37,8 +41,8 @@ impl_try_collector! {
 // [ ] dynamic structs
 // [ ] ue version info
 
-trait MemComplete: Mem + Clone + NameTrait {}
-impl<T: Mem + Clone + NameTrait> MemComplete for T {}
+trait MemComplete: Mem + Clone + NameTrait + StructsTrait {}
+impl<T: Mem + Clone + NameTrait + StructsTrait> MemComplete for T {}
 
 fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
     let mut components = vec![];
@@ -60,6 +64,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     let field_class = ptr.ffield().class_private().read()?;
     let f = field_class.cast_flags().read()?;
 
+    dbg!(f);
     let t = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
         let prop = ptr.cast::<FStructProperty>();
         let s = read_path(&prop.struct_().read()?.ustruct().ufield().uobject())?;
@@ -146,11 +151,11 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         let prop = ptr.cast::<FObjectProperty>();
         //dbg!(&prop.property_class());
         //dbg!(&prop.property_class().read()?);
-            let class = prop.
-                property_class()
-                .read()?
-                .map(|c| read_path(&c.ustruct().ufield().uobject()))
-                .transpose()?;
+        let class = prop
+            .property_class()
+            .read()?
+            .map(|c| read_path(&c.ustruct().ufield().uobject()))
+            .transpose()?;
 
         //let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
         PropertyType::Object { class }
@@ -173,6 +178,9 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
         // TODO
         PropertyType::FieldPath
+    } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
+        // TODO
+        PropertyType::Optional
     } else {
         unimplemented!("{f:?}");
     };
@@ -187,19 +195,69 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     })
 }
 
-pub fn dump(pid: i32) -> Result<()> {
-    let mem: ProcessHandle = (pid as Pid).try_into()?;
-    let mem = MemCache::wrap(mem);
+#[derive(Clone)]
+struct ImgMem<'img, 'data>(&'img Image<'data>);
 
-    let results = patternsleuth::process::external::read_image_from_pid(pid)?
-        .resolve(DrgResolution::resolver())?;
+impl Mem for ImgMem<'_, '_> {
+    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
+        self.0.memory.read(address, buf)?;
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+struct StructMember {
+    name: String,
+    offset: u64,
+    size: u64,
+    //type_name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct StructInfo {
+    name: String,
+    size: u64,
+    members: Vec<StructMember>,
+}
+
+enum Input {
+    Process(i32),
+    Dump(PathBuf),
+}
+
+pub fn dump(input: Input) -> Result<()> {
+    match input {
+        Input::Process(pid) => {
+            let handle: ProcessHandle = (pid as Pid).try_into()?;
+            let mem = MemCache::wrap(handle);
+            let image = patternsleuth_image::process::external::read_image_from_pid(pid)?;
+            dump_inner(mem, &image)?;
+        }
+        Input::Dump(path) => {
+            let data = std::fs::read(path)?;
+            let image = patternsleuth_image::image::Image::read::<&str>(None, &data, None, false)?;
+            let mem = ImgMem(&image);
+            dump_inner(mem, &image)?;
+        }
+    };
+    Ok(())
+}
+
+fn dump_inner<M: Mem + Clone>(mem: M, image: &Image<'_>) -> Result<()> {
+    let results = resolve(&image, DrgResolution::resolver())?;
 
     let guobjectarray = ExternalPtr::<FUObjectArray>::new(results.guobject_array.0);
     let fnamepool = PtrFNamePool(results.fname_pool.0);
 
     println!("GUObjectArray = {guobjectarray:x?} FNamePool = {fnamepool:x?}");
 
-    let mem = Ctx { mem, fnamepool };
+    let structs: Vec<StructInfo> = serde_json::from_slice(&std::fs::read("../struct_info.json")?)?;
+
+    let mem = Ctx {
+        mem,
+        fnamepool,
+        structs: Arc::new(structs.into_iter().map(|s| (s.name.clone(), s)).collect()),
+    };
 
     let uobject_array = guobjectarray.ctx(mem);
 
@@ -321,6 +379,6 @@ mod test {
 
     #[test]
     fn test_drg() -> Result<()> {
-        dump(1014886)
+        dump(Input::Process(1762932))
     }
 }

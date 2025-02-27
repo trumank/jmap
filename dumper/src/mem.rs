@@ -278,6 +278,7 @@ impl Mem for ProcessHandle {
 pub struct Ctx<M: Mem> {
     pub mem: M,
     pub fnamepool: PtrFNamePool,
+    pub structs: Arc<HashMap<String, crate::StructInfo>>,
 }
 impl<M: Mem> Mem for Ctx<M> {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
@@ -289,7 +290,21 @@ impl<M: Mem> NameTrait for Ctx<M> {
         self.fnamepool
     }
 }
+impl<M: Mem> StructsTrait for Ctx<M> {
+    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
+        let Some(s) = self.structs.get(struct_name) else {
+            panic!("struct {struct_name} not found");
+        };
+        let Some(member) = s.members.iter().find(|m| m.name == member_name) else {
+            panic!("struct member {struct_name}::{member_name} not found");
+        };
+        member.offset as usize
+    }
+}
 
 pub trait NameTrait {
     fn fnamepool(&self) -> PtrFNamePool;
+}
+pub trait StructsTrait {
+    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
 }

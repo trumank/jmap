@@ -388,4 +388,5 @@ pub enum PropertyType {
         class: String,
     },
     FieldPath,
+    Optional,
 }

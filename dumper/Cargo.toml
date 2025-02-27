@@ -14,7 +14,8 @@ anyhow.workspace = true
 bitflags = { workspace = true, features = ["serde"] }
 bytemuck.workspace = true
 derive-where.workspace = true
-patternsleuth = { workspace = true, features = ["image-pe", "process-external"] }
+patternsleuth_image = { workspace = true, features = ["image-pe", "process-external"] }
+patternsleuth_resolvers = { workspace = true, features = [] }
 pretty-hex.workspace = true
 read-process-memory.workspace = true
 serde = { workspace = true, features = ["derive"] }
