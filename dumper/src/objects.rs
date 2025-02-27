@@ -138,6 +138,10 @@ impl<C: Clone + StructsTrait> CtxPtr<FProperty, C> {
     pub fn ffield(&self) -> CtxPtr<FField, C> {
         self.cast()
     }
+    pub fn array_dim(&self) -> CtxPtr<i32, C> {
+        let offset = self.ctx().struct_member("FProperty", "ArrayDim");
+        self.byte_offset(offset).cast()
+    }
     pub fn element_size(&self) -> CtxPtr<i32, C> {
         let offset = self.ctx().struct_member("FProperty", "ElementSize");
         self.byte_offset(offset).cast()

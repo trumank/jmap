@@ -188,6 +188,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     Ok(Property {
         name,
         offset: prop.offset_internal().read()? as usize,
+        array_dim: prop.array_dim().read()? as usize,
         size: prop.element_size().read()? as usize,
         flags: prop.property_flags().read()?,
         r#type: t,

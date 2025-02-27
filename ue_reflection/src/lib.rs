@@ -325,6 +325,7 @@ pub enum ObjectType {
 pub struct Property {
     pub name: String,
     pub offset: usize,
+    pub array_dim: usize,
     pub size: usize,
     pub r#type: PropertyType,
     pub flags: EPropertyFlags,
