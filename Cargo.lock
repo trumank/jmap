@@ -880,6 +880,7 @@ name = "pdb_dumper"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "clap",
  "dynamic_structs",
  "getopts",
  "pdb",

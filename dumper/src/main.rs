@@ -14,7 +14,7 @@ struct Cli {
     #[arg(long, short, group = "input")]
     dump: Option<PathBuf>,
 
-    /// Struct layout info .json (from pdb2json)
+    /// Struct layout info .json (from pdb_dumper)
     #[arg(index = 1)]
     struct_info: PathBuf,
 

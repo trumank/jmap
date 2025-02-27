@@ -1,4 +1,5 @@
 use anyhow::Result;
+use clap::Parser;
 use pdb::{
     FallibleIterator as _, SymbolData, TypeData, TypeFinder, TypeIndex, TypeInformation, PDB,
 };
@@ -6,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::File;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 #[derive(Serialize, Deserialize)]
 struct StructMember {
@@ -23,7 +24,21 @@ struct StructInfo {
     members: Vec<StructMember>,
 }
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Cli {
+    /// Input Unreal Engine .pdb
+    #[arg(index = 1)]
+    input: PathBuf,
+
+    /// Output struct info .json
+    #[arg(index = 2)]
+    output: PathBuf,
+}
+
 fn main() -> Result<()> {
+    let cli = Cli::parse();
+
     let whitelist = HashSet::from([
         "FName",
         "UObject",
@@ -52,10 +67,7 @@ fn main() -> Result<()> {
         "FObjectPropertyBase", // for FObjectProperty
     ]);
 
-    let pdb_path = std::env::args().nth(1).unwrap();
-    let output_path = "struct_info.json";
-
-    let file = File::open(pdb_path)?;
+    let file = File::open(cli.input)?;
     let mut pdb = PDB::open(file)?;
 
     let type_information = pdb.type_information()?;
@@ -144,10 +156,10 @@ fn main() -> Result<()> {
     }
 
     // Write to JSON file
-    let output_file = File::create(output_path)?;
+    let output_file = File::create(&cli.output)?;
     serde_json::to_writer(output_file, &structs)?;
 
-    println!("Successfully wrote struct information to {}", output_path);
+    println!("Successfully wrote struct information to {:?}", cli.output);
     Ok(())
 }
 
