@@ -13,6 +13,7 @@ license.workspace = true
 anyhow.workspace = true
 bitflags = { workspace = true, features = ["serde"] }
 bytemuck.workspace = true
+clap = { version = "4.5.31", features = ["derive"] }
 derive-where.workspace = true
 patternsleuth_image = { workspace = true, features = ["image-pe", "process-external"] }
 patternsleuth_resolvers = { workspace = true, features = [] }

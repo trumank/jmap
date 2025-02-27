@@ -64,7 +64,6 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     let field_class = ptr.ffield().class_private().read()?;
     let f = field_class.cast_flags().read()?;
 
-    dbg!(f);
     let t = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
         let prop = ptr.cast::<FStructProperty>();
         let s = read_path(&prop.struct_().read()?.ustruct().ufield().uobject())?;
@@ -214,36 +213,39 @@ struct StructMember {
 }
 
 #[derive(Serialize, Deserialize)]
-struct StructInfo {
+pub struct StructInfo {
     name: String,
     size: u64,
     members: Vec<StructMember>,
 }
 
-enum Input {
+pub enum Input {
     Process(i32),
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input) -> Result<()> {
+pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<BTreeMap<String, ObjectType>> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth_image::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image)?;
+            dump_inner(mem, &image, struct_info)
         }
         Input::Dump(path) => {
             let data = std::fs::read(path)?;
             let image = patternsleuth_image::image::Image::read::<&str>(None, &data, None, false)?;
             let mem = ImgMem(&image);
-            dump_inner(mem, &image)?;
+            dump_inner(mem, &image, struct_info)
         }
-    };
-    Ok(())
+    }
 }
 
-fn dump_inner<M: Mem + Clone>(mem: M, image: &Image<'_>) -> Result<()> {
+fn dump_inner<M: Mem + Clone>(
+    mem: M,
+    image: &Image<'_>,
+    struct_info: Vec<StructInfo>,
+) -> Result<BTreeMap<String, ObjectType>> {
     let results = resolve(&image, DrgResolution::resolver())?;
 
     let guobjectarray = ExternalPtr::<FUObjectArray>::new(results.guobject_array.0);
@@ -251,12 +253,15 @@ fn dump_inner<M: Mem + Clone>(mem: M, image: &Image<'_>) -> Result<()> {
 
     println!("GUObjectArray = {guobjectarray:x?} FNamePool = {fnamepool:x?}");
 
-    let structs: Vec<StructInfo> = serde_json::from_slice(&std::fs::read("../struct_info.json")?)?;
-
     let mem = Ctx {
         mem,
         fnamepool,
-        structs: Arc::new(structs.into_iter().map(|s| (s.name.clone(), s)).collect()),
+        structs: Arc::new(
+            struct_info
+                .into_iter()
+                .map(|s| (s.name.clone(), s))
+                .collect(),
+        ),
     };
 
     let uobject_array = guobjectarray.ctx(mem);
@@ -311,7 +316,6 @@ fn dump_inner<M: Mem + Clone>(mem: M, image: &Image<'_>) -> Result<()> {
 
         let f = class.class_cast_flags().read()?;
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
-            dbg!(&path);
             let obj = obj.cast::<UClass>();
             let flags = obj.class_flags();
             //if flags.read()?.contains(EClassFlags::CLASS_Native) {
@@ -368,17 +372,6 @@ fn dump_inner<M: Mem + Clone>(mem: M, image: &Image<'_>) -> Result<()> {
             //println!("{path:?} {:?}", f);
         }
     }
-    std::fs::write("../fsd.json", serde_json::to_vec(&objects)?)?;
 
-    Ok(())
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_drg() -> Result<()> {
-        dump(Input::Process(1762932))
-    }
+    Ok(objects)
 }
