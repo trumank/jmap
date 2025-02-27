@@ -246,7 +246,7 @@ bitflags::bitflags! {
         const AllFlags = 0x7f800000;
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     #[repr(C)]
     pub struct EStructFlags: i32 {
         const STRUCT_NoFlags = 0x0000;
@@ -289,6 +289,7 @@ pub struct Object {
 pub struct Struct {
     #[serde(flatten)]
     pub object: Object,
+    pub struct_flags: EStructFlags,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }

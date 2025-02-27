@@ -297,9 +297,10 @@ fn dump_inner<M: Mem + Clone>(
             Ok(Object { outer, class })
         }
 
-        fn read_struct<M: MemComplete>(obj: &CtxPtr<UStruct, M>) -> Result<Struct> {
+        fn read_struct<M: MemComplete>(obj: &CtxPtr<UScriptStruct, M>) -> Result<Struct> {
+            let struct_flags = obj.struct_flags().read()?;
             let mut properties = vec![];
-            let mut field = obj.child_properties();
+            let mut field = obj.ustruct().child_properties();
             while let Some(next) = field.read()? {
                 let f = next.class_private().read()?.cast_flags().read()?;
                 if f.contains(EClassCastFlags::CASTCLASS_FProperty) {
@@ -309,70 +310,63 @@ fn dump_inner<M: Mem + Clone>(
                 field = next.next();
             }
             let super_struct = obj
+                .ustruct()
                 .super_struct()
                 .read()?
                 .map(|s| read_path(&s.ufield().uobject()))
                 .transpose()?;
             Ok(Struct {
                 object: read_object(&obj.cast())?,
+                struct_flags,
                 super_struct,
                 properties,
             })
         }
 
+        if !path.starts_with("/Script/") {
+            continue;
+        }
         let f = class.class_cast_flags().read()?;
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
             let obj = obj.cast::<UClass>();
-            let flags = obj.class_flags();
-            if flags.read()?.contains(EClassFlags::CLASS_Native) {
-                let class_default_object = obj
-                    .class_default_object()
-                    .read()?
-                    .map(|s| read_path(&s))
-                    .transpose()?;
-                objects.insert(
-                    path,
-                    ObjectType::Class(Class {
-                        r#struct: read_struct(&obj.cast())?,
-                        class_default_object,
-                    }),
-                );
-            }
+            let class_default_object = obj
+                .class_default_object()
+                .read()?
+                .map(|s| read_path(&s))
+                .transpose()?;
+            objects.insert(
+                path,
+                ObjectType::Class(Class {
+                    r#struct: read_struct(&obj.cast())?,
+                    class_default_object,
+                }),
+            );
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
-            let flags = obj.cast::<UFunction>().function_flags();
-            if flags.read()?.contains(EFunctionFlags::FUNC_Native) {
-                objects.insert(
-                    path,
-                    ObjectType::Function(Function {
-                        r#struct: read_struct(&obj.cast())?,
-                    }),
-                );
-            }
+            objects.insert(
+                path,
+                ObjectType::Function(Function {
+                    r#struct: read_struct(&obj.cast())?,
+                }),
+            );
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
-            let flags = obj.cast::<UScriptStruct>().struct_flags();
-            if flags.read()?.contains(EStructFlags::STRUCT_Native) {
-                objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
-            }
+            objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
             let full_obj = obj.cast::<UEnum>();
-            // TODO better way to determine native
-            if path.starts_with("/Script/") {
-                let mut names = vec![];
-                for item in full_obj.names().iter()? {
-                    let key = item.a().read()?;
-                    let value = item.b().read()?;
-                    names.push((key, value));
-                }
-                objects.insert(
-                    path,
-                    ObjectType::Enum(Enum {
-                        object: read_object(&obj.cast())?,
-                        cpp_type: full_obj.cpp_type().read()?,
-                        names,
-                    }),
-                );
+            let mut names = vec![];
+            for item in full_obj.names().iter()? {
+                let key = item.a().read()?;
+                let value = item.b().read()?;
+                names.push((key, value));
             }
-        } else if path.starts_with("/Script/") {
+            objects.insert(
+                path,
+                ObjectType::Enum(Enum {
+                    object: read_object(&obj.cast())?,
+                    cpp_type: full_obj.cpp_type().read()?,
+                    names,
+                }),
+            );
+        } else {
             let obj = obj.cast::<UObject>();
             objects.insert(path, ObjectType::Object(read_object(&obj)?));
             //println!("{path:?} {:?}", f);
