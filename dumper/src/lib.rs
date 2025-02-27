@@ -27,7 +27,7 @@ use crate::objects::{
 
 impl_try_collector! {
     #[derive(Debug, PartialEq, Clone)]
-    struct DrgResolution {
+    struct Resolution {
         guobject_array: patternsleuth_resolvers::unreal::guobject_array::GUObjectArray,
         fname_pool: patternsleuth_resolvers::unreal::fname::FNamePool,
     }
@@ -246,7 +246,7 @@ fn dump_inner<M: Mem + Clone>(
     image: &Image<'_>,
     struct_info: Vec<StructInfo>,
 ) -> Result<BTreeMap<String, ObjectType>> {
-    let results = resolve(&image, DrgResolution::resolver())?;
+    let results = resolve(image, Resolution::resolver())?;
 
     let guobjectarray = ExternalPtr::<FUObjectArray>::new(results.guobject_array.0);
     let fnamepool = PtrFNamePool(results.fname_pool.0);

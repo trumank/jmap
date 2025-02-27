@@ -31,9 +31,7 @@ pub struct TArray<T, A: TAlloc = TSizedHeapAllocator<32>> {
 impl<C: Mem + Clone, T: Clone, A: TAlloc> CtxPtr<TArray<T, A>, C> {
     pub fn iter(&self) -> Result<impl Iterator<Item = CtxPtr<T, C>> + '_> {
         let data = self.data()?;
-        Ok((0..self.len()?)
-            .into_iter()
-            .map(move |i| data.as_ref().unwrap().offset(i)))
+        Ok((0..self.len()?).map(move |i| data.as_ref().unwrap().offset(i)))
     }
     //pub fn read(&self, mem: &impl Mem) -> Result<Vec<T>> {
     //    let data = self
@@ -279,7 +277,7 @@ pub struct TSetElementBase<T, const N: usize> {
 
 #[derive(Debug, Clone, Copy)]
 #[repr(C)]
-struct FSetElementId {
+pub struct FSetElementId {
     pub index: i32,
 }
 

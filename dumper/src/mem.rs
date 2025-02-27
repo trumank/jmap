@@ -197,13 +197,13 @@ pub trait Mem {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()>;
     fn read<T>(&self, address: usize) -> Result<T> {
         let mut buf = MaybeUninit::<T>::uninit();
-        let mut bytes = unsafe {
+        let bytes = unsafe {
             std::slice::from_raw_parts_mut(
                 buf.as_mut_ptr().cast::<u8>() as _,
                 std::mem::size_of::<T>(),
             )
         };
-        self.read_buf(address, &mut bytes)?;
+        self.read_buf(address, bytes)?;
         Ok(unsafe { std::mem::transmute_copy(&buf) })
     }
 

@@ -1,13 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
-use pdb::{
-    FallibleIterator as _, SymbolData, TypeData, TypeFinder, TypeIndex, TypeInformation, PDB,
-};
+use pdb::{FallibleIterator as _, TypeData, TypeFinder, TypeIndex, PDB};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::error::Error;
+use std::collections::HashSet;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Serialize, Deserialize)]
 struct StructMember {
@@ -75,7 +72,7 @@ fn main() -> Result<()> {
 
     let mut structs = Vec::new();
     let mut iter = type_information.iter();
-    while let Some(_) = iter.next()? {
+    while iter.next()?.is_some() {
         type_finder.update(&iter);
     }
 
@@ -92,15 +89,15 @@ fn main() -> Result<()> {
 
             dbg!(&class);
 
-            for field in class.fields {
+            if let Some(field) = class.fields {
                 let field = type_finder.find(field)?.parse()?;
-                let member_type_name = match field.name() {
-                    Some(name) => name.to_string().to_string(),
-                    None => format!("Unknown_{:?}", field),
-                };
+                //let member_type_name = match field.name() {
+                //    Some(name) => name.to_string().to_string(),
+                //    None => format!("Unknown_{:?}", field),
+                //};
 
                 match &field {
-                    TypeData::Member(member_type) => {
+                    TypeData::Member(_member_type) => {
                         todo!()
                         //members.push(StructMember {
                         //    name: field.name().unwrap().to_string().into(),
@@ -109,13 +106,13 @@ fn main() -> Result<()> {
                         //    type_name: member_type.name.to_string().into(),
                         //});
                     }
-                    TypeData::StaticMember(static_member_type) => todo!(),
+                    TypeData::StaticMember(_static_member_type) => todo!(),
                     TypeData::FieldList(data) => {
                         for field in &data.fields {
                             match &field {
                                 TypeData::Member(member_type) => {
-                                    let field_type =
-                                        type_finder.find(member_type.field_type)?.parse()?;
+                                    //let field_type =
+                                    //    type_finder.find(member_type.field_type)?.parse()?;
                                     //dbg!(field_type);
                                     members.push(StructMember {
                                         name: field.name().unwrap().to_string().into(),

@@ -4,7 +4,7 @@ fn main() -> anyhow::Result<()> {
     let mut minidump_file = std::fs::File::create("example_dump.mdmp")?;
 
     let pid = 164833;
-    let maps = proc_maps::get_process_maps(pid.into())?;
+    let maps = proc_maps::get_process_maps(pid)?;
 
     let mut app_memory = vec![];
     for m in maps {
@@ -21,7 +21,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    minidump_writer::minidump_writer::MinidumpWriter::new(pid.into(), pid.into())
+    minidump_writer::minidump_writer::MinidumpWriter::new(pid, pid)
         .set_app_memory(app_memory)
         .dump(&mut minidump_file)?;
 
