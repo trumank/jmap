@@ -31,6 +31,7 @@ impl_try_collector! {
     struct Resolution {
         guobject_array: patternsleuth_resolvers::unreal::guobject_array::GUObjectArray,
         fname_pool: patternsleuth_resolvers::unreal::fname::FNamePool,
+        engine_version: patternsleuth_resolvers::unreal::engine_version::EngineVersion,
     }
 }
 
@@ -251,11 +252,10 @@ fn dump_inner<M: Mem + Clone>(
     struct_info: Vec<StructInfo>,
 ) -> Result<BTreeMap<String, ObjectType>> {
     let results = resolve(image, Resolution::resolver())?;
+    println!("{results:X?}");
 
     let guobjectarray = ExternalPtr::<FUObjectArray>::new(results.guobject_array.0);
     let fnamepool = PtrFNamePool(results.fname_pool.0);
-
-    println!("GUObjectArray = {guobjectarray:x?} FNamePool = {fnamepool:x?}");
 
     let mem = Ctx {
         mem,
