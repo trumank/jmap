@@ -282,7 +282,13 @@ pub type ReflectionData = std::collections::BTreeMap<String, ObjectType>;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
     pub outer: Option<String>,
-    pub class: Option<String>,
+    pub class: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Package {
+    #[serde(flatten)]
+    pub object: Object,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -320,12 +326,14 @@ pub struct Enum {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum ObjectType {
     ScriptStruct(ScriptStruct),
     Class(Class),
     Function(Function),
     Enum(Enum),
     Object(Object),
+    Package(Package),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -334,10 +342,12 @@ pub struct Property {
     pub offset: usize,
     pub array_dim: usize,
     pub size: usize,
+    #[serde(flatten)]
     pub r#type: PropertyType,
     pub flags: EPropertyFlags,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum PropertyType {
     Struct {
         r#struct: String,
@@ -355,18 +365,18 @@ pub enum PropertyType {
         field_mask: u8,
     },
     Array {
-        inner: Box<PropertyType>,
+        inner: Box<Property>,
     },
     Enum {
-        container: Box<PropertyType>,
+        container: Box<Property>,
         r#enum: Option<String>,
     },
     Map {
-        key_prop: Box<PropertyType>,
-        value_prop: Box<PropertyType>,
+        key_prop: Box<Property>,
+        value_prop: Box<Property>,
     },
     Set {
-        key_prop: Box<PropertyType>,
+        key_prop: Box<Property>,
     },
     Float,
     Double,
@@ -397,6 +407,6 @@ pub enum PropertyType {
     },
     FieldPath,
     Optional {
-        inner: Box<PropertyType>,
+        inner: Box<Property>,
     },
 }

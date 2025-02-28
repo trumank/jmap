@@ -15,7 +15,7 @@ use read_process_memory::{Pid, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use ue_reflection::{
     Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
-    ObjectType, Property, PropertyType, ScriptStruct, Struct,
+    ObjectType, Package, Property, PropertyType, ScriptStruct, Struct,
 };
 
 use crate::containers::PtrFNamePool;
@@ -95,14 +95,12 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FArrayProperty) {
         let prop = ptr.cast::<FArrayProperty>();
         PropertyType::Array {
-            inner: map_prop(&prop.inner().read()?.cast())?.r#type.into(),
+            inner: map_prop(&prop.inner().read()?.cast())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
         let prop = ptr.cast::<FEnumProperty>();
         PropertyType::Enum {
-            container: map_prop(&prop.underlying_prop().read()?.cast())?
-                .r#type
-                .into(),
+            container: map_prop(&prop.underlying_prop().read()?.cast())?.into(),
             r#enum: prop
                 .enum_()
                 .read()?
@@ -112,13 +110,13 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
         let prop = ptr.cast::<FMapProperty>();
         PropertyType::Map {
-            key_prop: map_prop(&prop.key_prop().read()?.cast())?.r#type.into(),
-            value_prop: map_prop(&prop.value_prop().read()?.cast())?.r#type.into(),
+            key_prop: map_prop(&prop.key_prop().read()?.cast())?.into(),
+            value_prop: map_prop(&prop.value_prop().read()?.cast())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
         let prop = ptr.cast::<FSetProperty>();
         PropertyType::Set {
-            key_prop: map_prop(&prop.element_prop().read()?.cast())?.r#type.into(),
+            key_prop: map_prop(&prop.element_prop().read()?.cast())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
         PropertyType::Float
@@ -181,9 +179,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
         let prop = ptr.cast::<FOptionalProperty>();
         PropertyType::Optional {
-            inner: map_prop(&prop.value_property().read()?.cast())?
-                .r#type
-                .into(),
+            inner: map_prop(&prop.value_property().read()?.cast())?.into(),
         }
     } else {
         unimplemented!("{f:?}");
@@ -291,11 +287,7 @@ fn dump_inner<M: Mem + Clone>(
                 .read()?
                 .map(|s| read_path(&s))
                 .transpose()?;
-            let class = obj
-                .outer_private()
-                .read()?
-                .map(|s| read_path(&s))
-                .transpose()?;
+            let class = read_path(&obj.class_private().read()?.ustruct().ufield().uobject())?;
             Ok(Object { outer, class })
         }
 
@@ -375,6 +367,14 @@ fn dump_inner<M: Mem + Clone>(
                     object: read_object(&obj.cast())?,
                     cpp_type: full_obj.cpp_type().read()?,
                     names,
+                }),
+            );
+        } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
+            let obj = obj.cast::<UObject>();
+            objects.insert(
+                path,
+                ObjectType::Package(Package {
+                    object: read_object(&obj)?,
                 }),
             );
         } else {
