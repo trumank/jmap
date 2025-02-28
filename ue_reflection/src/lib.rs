@@ -289,9 +289,15 @@ pub struct Object {
 pub struct Struct {
     #[serde(flatten)]
     pub object: Object,
-    pub struct_flags: EStructFlags,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScriptStruct {
+    #[serde(flatten)]
+    pub r#struct: Struct,
+    pub struct_flags: EStructFlags,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -315,7 +321,7 @@ pub struct Enum {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ObjectType {
-    Struct(Struct),
+    ScriptStruct(ScriptStruct),
     Class(Class),
     Function(Function),
     Enum(Enum),

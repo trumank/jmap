@@ -15,7 +15,7 @@ use read_process_memory::{Pid, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use ue_reflection::{
     Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
-    ObjectType, Property, PropertyType, Struct,
+    ObjectType, Property, PropertyType, ScriptStruct, Struct,
 };
 
 use crate::containers::PtrFNamePool;
@@ -299,10 +299,9 @@ fn dump_inner<M: Mem + Clone>(
             Ok(Object { outer, class })
         }
 
-        fn read_struct<M: MemComplete>(obj: &CtxPtr<UScriptStruct, M>) -> Result<Struct> {
-            let struct_flags = obj.struct_flags().read()?;
+        fn read_struct<M: MemComplete>(obj: &CtxPtr<UStruct, M>) -> Result<Struct> {
             let mut properties = vec![];
-            let mut field = obj.ustruct().child_properties();
+            let mut field = obj.child_properties();
             while let Some(next) = field.read()? {
                 let f = next.class_private().read()?.cast_flags().read()?;
                 if f.contains(EClassCastFlags::CASTCLASS_FProperty) {
@@ -312,16 +311,23 @@ fn dump_inner<M: Mem + Clone>(
                 field = next.next();
             }
             let super_struct = obj
-                .ustruct()
                 .super_struct()
                 .read()?
                 .map(|s| read_path(&s.ufield().uobject()))
                 .transpose()?;
             Ok(Struct {
                 object: read_object(&obj.cast())?,
-                struct_flags,
                 super_struct,
                 properties,
+            })
+        }
+
+        fn read_script_struct<M: MemComplete>(
+            obj: &CtxPtr<UScriptStruct, M>,
+        ) -> Result<ScriptStruct> {
+            Ok(ScriptStruct {
+                r#struct: read_struct(&obj.ustruct())?,
+                struct_flags: obj.struct_flags().read()?,
             })
         }
 
@@ -351,7 +357,10 @@ fn dump_inner<M: Mem + Clone>(
                 }),
             );
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
-            objects.insert(path, ObjectType::Struct(read_struct(&obj.cast())?));
+            objects.insert(
+                path,
+                ObjectType::ScriptStruct(read_script_struct(&obj.cast())?),
+            );
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
             let full_obj = obj.cast::<UEnum>();
             let mut names = vec![];
