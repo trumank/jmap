@@ -18,6 +18,7 @@ trait Ser {
 struct SerCtx<S> {
     inner: S,
     header: Header,
+    names: Vec<String>,
 }
 impl<S> Read for SerCtx<S>
 where
@@ -44,6 +45,16 @@ where
 {
     fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
         self.inner.seek(pos)
+    }
+}
+impl<S: Read> SerCtx<S> {
+    fn read_name(&mut self) -> Result<String> {
+        let i = self.inner.read_u32::<LE>()? as usize;
+        Ok(self.names[i].to_string())
+    }
+    fn read_opt_name(&mut self) -> Result<Option<String>> {
+        let i = self.inner.read_u32::<LE>()?;
+        Ok((i != u32::MAX).then(|| self.names[i as usize].to_string()))
     }
 }
 
@@ -270,11 +281,15 @@ impl Usmap {
         };
 
         let s = &mut ser_hex::TraceStream::new("trace_inner.json", std::io::Cursor::new(buffer));
-        let s = &mut SerCtx { inner: s, header };
+        let s = &mut SerCtx {
+            inner: s,
+            header,
+            names: vec![],
+        };
 
-        let names = read_names(s)?;
-        let enums = read_enums(s, &names)?;
-        let structs = read_structs(s, &names)?;
+        read_names(s)?;
+        let enums = read_enums(s)?;
+        let structs = read_structs(s)?;
 
         let mut cext = None;
         let mut ppth = None;
@@ -291,9 +306,9 @@ impl Usmap {
             }?;
             match &ext {
                 b"CEXT" => cext = Some(read_cext(s)?),
-                b"PPTH" => ppth = Some(read_ppth(s, &names)?),
+                b"PPTH" => ppth = Some(read_ppth(s)?),
                 b"EATR" => eatr = Some(read_eatr(s)?),
-                b"ENVP" => envp = Some(read_envp(s, &names)?),
+                b"ENVP" => envp = Some(read_envp(s)?),
                 _ => bail!("ext {ext:X?}"),
             }
         }
@@ -351,23 +366,21 @@ impl Header {
 }
 
 #[instrument(skip_all)]
-fn read_names<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<String>> {
-    let size = s.read_u32::<LE>()?;
-    let mut names = vec![];
-
-    for _ in 0..size {
-        names.push(read_string_u8(s)?);
+fn read_names<S: Read>(s: &mut SerCtx<S>) -> Result<()> {
+    for _ in 0..s.read_u32::<LE>()? {
+        let name = read_string_u8(s)?;
+        s.names.push(name);
     }
-    Ok(names)
+    Ok(())
 }
 
 #[instrument(skip_all)]
-fn read_enums<S: Read>(s: &mut SerCtx<S>, names: &[String]) -> Result<Vec<Enum>> {
+fn read_enums<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Enum>> {
     let size = s.read_u32::<LE>()?;
     let mut enums = vec![];
 
     for _ in 0..size {
-        let name = names[s.read_u32::<LE>()? as usize].clone();
+        let name = s.read_name()?;
         let mut entries = vec![];
         let num_entries = if s.header.version >= UsmapVersion::LargeEnums {
             s.read_u16::<LE>()? as usize
@@ -375,7 +388,7 @@ fn read_enums<S: Read>(s: &mut SerCtx<S>, names: &[String]) -> Result<Vec<Enum>>
             s.read_u8()? as usize
         };
         for _ in 0..num_entries {
-            entries.push(names[s.read_u32::<LE>()? as usize].clone());
+            entries.push(s.read_name()?);
         }
         enums.push(Enum { name, entries });
     }
@@ -383,32 +396,27 @@ fn read_enums<S: Read>(s: &mut SerCtx<S>, names: &[String]) -> Result<Vec<Enum>>
 }
 
 #[instrument(skip_all)]
-fn read_structs<R: Read>(reader: &mut R, names: &[String]) -> Result<Vec<Struct>> {
-    let size = reader.read_u32::<LE>()?;
+fn read_structs<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Struct>> {
+    let size = s.read_u32::<LE>()?;
     let mut structs = vec![];
 
     for _ in 0..size {
-        let name = names[reader.read_u32::<LE>()? as usize].clone();
-        let super_struct = reader.read_i32::<LE>()?;
-        let super_struct = if super_struct == -1 {
-            None
-        } else {
-            Some(names[super_struct as usize].clone())
-        };
+        let name = s.read_name()?;
+        let super_struct = s.read_opt_name()?;
 
-        let _prop_count = reader.read_u16::<LE>()?;
-        let serializable_prop_count = reader.read_u16::<LE>()?;
+        let _prop_count = s.read_u16::<LE>()?;
+        let serializable_prop_count = s.read_u16::<LE>()?;
 
         let mut properties = vec![];
         for _ in 0..serializable_prop_count {
-            let offset = reader.read_u16::<LE>()?;
-            let array_dim = reader.read_u8()?;
-            let name = names[reader.read_u32::<LE>()? as usize].clone();
+            let offset = s.read_u16::<LE>()?;
+            let array_dim = s.read_u8()?;
+            let name = s.read_name()?;
             properties.push(Property {
                 array_dim,
                 offset,
                 name,
-                inner: read_property_inner(reader, names)?,
+                inner: read_property_inner(s)?,
             });
         }
         structs.push(Struct {
@@ -421,8 +429,8 @@ fn read_structs<R: Read>(reader: &mut R, names: &[String]) -> Result<Vec<Struct>
 }
 
 #[instrument(skip_all)]
-fn read_property_inner<'n, R: Read>(reader: &mut R, names: &'n [String]) -> Result<PropertyInner> {
-    let type_ = EPropertyType::from_repr(reader.read_u8()?).context("unknown EPropertyType")?;
+fn read_property_inner<'n, S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> {
+    let type_ = EPropertyType::from_repr(s.read_u8()?).context("unknown EPropertyType")?;
     let inner = match type_ {
         EPropertyType::ByteProperty => PropertyInner::Byte,
         EPropertyType::BoolProperty => PropertyInner::Bool,
@@ -433,10 +441,10 @@ fn read_property_inner<'n, R: Read>(reader: &mut R, names: &'n [String]) -> Resu
         EPropertyType::DelegateProperty => PropertyInner::Delegate,
         EPropertyType::DoubleProperty => PropertyInner::Double,
         EPropertyType::ArrayProperty => PropertyInner::Array {
-            inner: Box::new(read_property_inner(reader, names)?),
+            inner: read_property_inner(s)?.into(),
         },
         EPropertyType::StructProperty => PropertyInner::Struct {
-            name: names[reader.read_u32::<LE>()? as usize].clone(),
+            name: s.read_name()?,
         },
         EPropertyType::StrProperty => PropertyInner::Str,
         EPropertyType::TextProperty => PropertyInner::Text,
@@ -453,20 +461,20 @@ fn read_property_inner<'n, R: Read>(reader: &mut R, names: &'n [String]) -> Resu
         EPropertyType::Int16Property => PropertyInner::Int16,
         EPropertyType::Int8Property => PropertyInner::Int8,
         EPropertyType::MapProperty => PropertyInner::Map {
-            key: Box::new(read_property_inner(reader, names)?),
-            value: Box::new(read_property_inner(reader, names)?),
+            key: read_property_inner(s)?.into(),
+            value: read_property_inner(s)?.into(),
         },
         EPropertyType::SetProperty => PropertyInner::Set {
-            key: Box::new(read_property_inner(reader, names)?),
+            key: read_property_inner(s)?.into(),
         },
         EPropertyType::EnumProperty => PropertyInner::Enum {
-            inner: Box::new(read_property_inner(reader, names)?),
-            name: names[reader.read_u32::<LE>()? as usize].clone(),
+            inner: read_property_inner(s)?.into(),
+            name: s.read_name()?,
             // TODO handle EnumAsByteProperty?
         },
         EPropertyType::FieldPathProperty => PropertyInner::FieldPath,
         EPropertyType::OptionalProperty => PropertyInner::Optional {
-            inner: Box::new(read_property_inner(reader, names)?),
+            inner: read_property_inner(s)?.into(),
         },
         EPropertyType::Unknown => todo!("Unknown"),
     };
@@ -481,16 +489,16 @@ fn read_cext<R: Read>(reader: &mut R) -> Result<ExtCext> {
 }
 
 #[instrument(skip_all)]
-fn read_ppth<R: Read>(reader: &mut R, names: &[String]) -> Result<ExtPpth> {
-    let _size = reader.read_u32::<LE>()?;
-    let version = reader.read_u8()?;
+fn read_ppth<S: Read>(s: &mut SerCtx<S>) -> Result<ExtPpth> {
+    let _size = s.read_u32::<LE>()?;
+    let version = s.read_u8()?;
     let mut enums = vec![];
-    for _ in 0..reader.read_u32::<LE>()? {
-        enums.push(names[reader.read_u32::<LE>()? as usize].clone());
+    for _ in 0..s.read_u32::<LE>()? {
+        enums.push(s.read_name()?);
     }
     let mut structs = vec![];
-    for _ in 0..reader.read_u32::<LE>()? {
-        structs.push(names[reader.read_u32::<LE>()? as usize].clone());
+    for _ in 0..s.read_u32::<LE>()? {
+        structs.push(s.read_name()?);
     }
     Ok(ExtPpth {
         version,
@@ -529,17 +537,14 @@ fn read_eatr<R: Read>(reader: &mut R) -> Result<ExtEatr> {
 }
 
 #[instrument(skip_all)]
-fn read_envp<R: Read>(reader: &mut R, names: &[String]) -> Result<ExtEnvp> {
-    let _size = reader.read_u32::<LE>()?;
-    let version = reader.read_u8()?;
+fn read_envp<S: Read>(s: &mut SerCtx<S>) -> Result<ExtEnvp> {
+    let _size = s.read_u32::<LE>()?;
+    let version = s.read_u8()?;
     let mut value_pairs = vec![];
-    for _ in 0..reader.read_u32::<LE>()? {
+    for _ in 0..s.read_u32::<LE>()? {
         let mut n = vec![];
-        for _ in 0..reader.read_u32::<LE>()? {
-            n.push((
-                names[reader.read_u32::<LE>()? as usize].clone(),
-                reader.read_u64::<LE>()?,
-            ));
+        for _ in 0..s.read_u32::<LE>()? {
+            n.push((s.read_name()?, s.read_u64::<LE>()?));
         }
         value_pairs.push(n);
     }
