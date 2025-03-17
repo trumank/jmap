@@ -1529,6 +1529,7 @@ dependencies = [
  "byteorder",
  "ser-hex",
  "serde",
+ "serde_json",
  "strum",
  "tracing",
  "zstd",
