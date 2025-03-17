@@ -23,7 +23,7 @@ struct SerCtx<'c, S> {
     header: &'c Header,
     names: &'c mut Names,
 }
-impl<'c, S> Read for SerCtx<'c, S>
+impl<S> Read for SerCtx<'_, S>
 where
     S: Read,
 {
@@ -31,7 +31,7 @@ where
         self.inner.read(buf)
     }
 }
-impl<'c, S> Write for SerCtx<'c, S>
+impl<S> Write for SerCtx<'_, S>
 where
     S: Write,
 {
@@ -42,7 +42,7 @@ where
         self.inner.flush()
     }
 }
-impl<'c, S> Seek for SerCtx<'c, S>
+impl<S> Seek for SerCtx<'_, S>
 where
     S: Seek,
 {
@@ -66,7 +66,7 @@ impl<'c, S> SerCtx<'c, S> {
         }
     }
 }
-impl<'c, S: Read> SerCtx<'c, S> {
+impl<S: Read> SerCtx<'_, S> {
     #[instrument(skip_all)]
     fn read_names(&mut self) -> Result<()> {
         for _ in 0..self.read_u32::<LE>()? {

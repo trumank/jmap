@@ -42,7 +42,7 @@ fn main() -> Result<()> {
         Usmap,
     }
 
-    let output_type = match cli.output.extension().map(|e| e.to_str()).flatten() {
+    let output_type = match cli.output.extension().and_then(|e| e.to_str()) {
         Some("json") => OutputType::Json,
         Some("usmap") => OutputType::Usmap,
         _ => bail!("Error: Expected .json or .usmap output type"),
