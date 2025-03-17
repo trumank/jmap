@@ -455,7 +455,8 @@ impl Usmap {
         let mut names = Names::new();
         let mut header = Header {
             version: UsmapVersion::LargeEnums,
-            compression_method: Some(CompressionMethod::Zstd),
+            //compression_method: Some(CompressionMethod::Zstd),
+            compression_method: None, // disable compression because FModel/UAssetAPI parsers seem to be broken
             compressed_size: 0,
             decompressed_size: 0,
         };
