@@ -169,7 +169,17 @@ fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyI
         },
         PT::Float => PI::Float,
         PT::Double => PI::Double,
-        PT::Byte { r#enum: _ } => PI::Byte,
+        PT::Byte { r#enum } => {
+            // usmap special cases ByteProperty to transform into EnumProperty if enum member is populated
+            if let Some(e) = r#enum {
+                PI::Enum {
+                    inner: PI::Byte.into(),
+                    name: obj_name(e).to_string(),
+                }
+            } else {
+                PI::Byte
+            }
+        }
         PT::UInt16 => PI::UInt16,
         PT::UInt32 => PI::UInt32,
         PT::UInt64 => PI::UInt64,
