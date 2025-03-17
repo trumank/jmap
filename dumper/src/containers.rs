@@ -123,7 +123,7 @@ pub struct TSparseArray_TBaseIterator<const N: usize, T, A: TSparseAlloc> {
     pub bit_array_it: TConstSetBitIterator<A::BitArrayAllocator>,
 }
 
-mod alloc {
+pub mod alloc {
     use super::*;
     use crate::mem::{CtxPtr, ExternalPtr, Mem};
     use std::marker::PhantomData;

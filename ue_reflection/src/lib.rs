@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use ordered_float::OrderedFloat;
+use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 
 bitflags::bitflags! {
@@ -300,6 +302,7 @@ pub struct Object {
     pub outer: Option<String>,
     pub class: String,
     pub children: BTreeSet<String>,
+    pub property_values: ValuesWrapper,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -494,4 +497,73 @@ pub enum PropertyType {
     FieldPath,
     #[serde(rename = "OptionalProperty")]
     Optional { inner: Box<Property> },
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(untagged)]
+pub enum PropertyValue {
+    Struct(OrderMap<String, PropertyValue>),
+    Str(String),
+    Name(String),
+    Text, // TODO
+    MulticastInlineDelegate,
+    MulticastSparseDelegate,
+    Delegate,
+    Bool(bool),
+    Array(Vec<PropertyValue>),
+    Enum(String), // String or index?
+    Map(BTreeMap<PropertyValue, PropertyValue>),
+    Set(BTreeSet<PropertyValue>),
+    Float(OrderedFloat<f32>),
+    Double(OrderedFloat<f64>),
+    Byte(u8),
+    UInt16(u16),
+    UInt32(u32),
+    UInt64(u64),
+    Int8(i8),
+    Int16(i16),
+    Int(i32),
+    Int64(i64),
+    Object(Option<String>),
+    WeakObject(String),
+    SoftObject(String),
+    LazyObject(String),
+    Interface(String),
+    FieldPath, // TODO
+    Optional(Option<Box<PropertyValue>>),
+}
+
+/// Wrapper for PropertyValues which require external context to properly deserialize
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ValuesWrapper {
+    Raw(serde_json::value::Value),
+    Value(OrderMap<String, PropertyValue>),
+}
+impl ValuesWrapper {
+    /// Returns Some(values) if already parsed, otherwise None
+    pub fn values(&self) -> Option<&OrderMap<String, PropertyValue>> {
+        match self {
+            ValuesWrapper::Raw(_) => None,
+            ValuesWrapper::Value(value) => Some(value),
+        }
+    }
+}
+impl From<OrderMap<String, PropertyValue>> for ValuesWrapper {
+    fn from(value: OrderMap<String, PropertyValue>) -> Self {
+        ValuesWrapper::Value(value)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_deser() {
+        let ref_data: ReflectionData = serde_json::from_reader(std::io::BufReader::new(
+            std::fs::File::open("../rc.json").unwrap(),
+        ))
+        .unwrap();
+        dbg!(&ref_data.objects);
+    }
 }

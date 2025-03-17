@@ -16,6 +16,8 @@ bytemuck.workspace = true
 clap.workspace = true
 derive-where.workspace = true
 memmap2 = "0.9.5"
+ordered-float = "5.0.0"
+ordermap = "0.5.5"
 patternsleuth_image = { workspace = true, features = ["image-pe", "process-external"] }
 patternsleuth_resolvers = { workspace = true, features = [] }
 pretty-hex.workspace = true
