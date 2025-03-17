@@ -339,6 +339,7 @@ dependencies = [
  "serde",
  "serde_json",
  "ue_reflection",
+ "usmap",
 ]
 
 [[package]]

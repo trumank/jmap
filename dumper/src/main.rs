@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use clap::Parser;
 use dumper::{Input, StructInfo};
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,11 +37,141 @@ fn main() -> Result<()> {
         }
     };
 
+    enum OutputType {
+        Json,
+        Usmap,
+    }
+
+    let output_type = match cli.output.extension().map(|e| e.to_str()).flatten() {
+        Some("json") => OutputType::Json,
+        Some("usmap") => OutputType::Usmap,
+        _ => bail!("Error: Expected .json or .usmap output type"),
+    };
+
     let struct_info: Vec<StructInfo> = serde_json::from_slice(&std::fs::read(cli.struct_info)?)?;
 
     let objects = dumper::dump(input, struct_info)?;
 
-    std::fs::write(cli.output, serde_json::to_vec(&objects)?)?;
+    match output_type {
+        OutputType::Json => {
+            std::fs::write(cli.output, serde_json::to_vec(&objects)?)?;
+        }
+        OutputType::Usmap => {
+            let usmap = into_usmap(&objects);
+            usmap.write(&mut std::io::BufWriter::new(std::fs::File::create(
+                cli.output,
+            )?))?;
+        }
+    }
 
     Ok(())
+}
+
+fn obj_name(path: &str) -> &str {
+    path.rsplit(['/', '.', ':']).next().unwrap()
+}
+
+fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::Usmap {
+    let mut enums = vec![];
+    let mut structs = vec![];
+
+    for (path, obj) in objects {
+        if let Some(s) = obj.get_struct() {
+            structs.push(usmap::Struct {
+                name: obj_name(path).to_string(),
+                super_struct: s.super_struct.as_ref().map(|s| obj_name(s).to_string()),
+                properties: s.properties.iter().map(into_usmap_prop).collect(),
+            });
+        } else if let Some(e) = obj.get_enum() {
+            enums.push(usmap::Enum {
+                name: obj_name(path).to_string(),
+                entries: e
+                    .names
+                    .iter()
+                    .map(|(ref name, _value)| name.to_string())
+                    .collect(),
+            });
+        }
+    }
+
+    usmap::Usmap {
+        enums,
+        structs,
+        cext: None,
+        eatr: None,
+        envp: None,
+        ppth: None,
+    }
+}
+
+fn into_usmap_prop(prop: &ue_reflection::Property) -> usmap::Property {
+    usmap::Property {
+        name: prop.name.clone(),
+        array_dim: prop.array_dim.try_into().unwrap(),
+        offset: prop.offset.try_into().unwrap(),
+        inner: into_usmap_prop_inner(&prop.r#type),
+    }
+}
+
+fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyInner {
+    use ue_reflection::PropertyType as PT;
+    use usmap::PropertyInner as PI;
+    match &prop {
+        PT::Struct { r#struct } => PI::Struct {
+            name: obj_name(r#struct).to_string(),
+        },
+        PT::Str => PI::Str,
+        PT::Name => PI::Name,
+        PT::Text => PI::Text,
+        // TODO distinguish between sparse/inline?
+        PT::MulticastInlineDelegate => PI::MulticastDelegate,
+        PT::MulticastSparseDelegate => PI::MulticastDelegate,
+        PT::Delegate => PI::Delegate,
+        PT::Bool {
+            field_size: _,
+            byte_offset: _,
+            byte_mask: _,
+            field_mask: _,
+        } => PI::Bool,
+        PT::Array { inner } => PI::Array {
+            inner: into_usmap_prop_inner(&inner.r#type).into(),
+        },
+        PT::Enum { container, r#enum } => PI::Enum {
+            inner: into_usmap_prop_inner(&container.r#type).into(),
+            name: r#enum
+                .as_ref()
+                .map(|e| obj_name(e))
+                .unwrap_or("None")
+                .to_string(),
+        },
+        PT::Map {
+            key_prop,
+            value_prop,
+        } => PI::Map {
+            key: into_usmap_prop_inner(&key_prop.r#type).into(),
+            value: into_usmap_prop_inner(&value_prop.r#type).into(),
+        },
+        PT::Set { key_prop } => PI::Set {
+            key: into_usmap_prop_inner(&key_prop.r#type).into(),
+        },
+        PT::Float => PI::Float,
+        PT::Double => PI::Double,
+        PT::Byte { r#enum: _ } => PI::Byte,
+        PT::UInt16 => PI::UInt16,
+        PT::UInt32 => PI::UInt32,
+        PT::UInt64 => PI::UInt64,
+        PT::Int8 => PI::Int8,
+        PT::Int16 => PI::Int16,
+        PT::Int => PI::Int,
+        PT::Int64 => PI::Int64,
+        PT::Object { class: _ } => PI::Object,
+        PT::WeakObject { class: _ } => PI::WeakObject,
+        PT::SoftObject { class: _ } => PI::SoftObject,
+        PT::LazyObject { class: _ } => PI::LazyObject,
+        PT::Interface { class: _ } => PI::Interface,
+        PT::FieldPath => PI::FieldPath,
+        PT::Optional { inner } => PI::Optional {
+            inner: into_usmap_prop_inner(&inner.r#type).into(),
+        },
+    }
 }

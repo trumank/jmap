@@ -23,3 +23,4 @@ read-process-memory.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
+usmap = { version = "0.1.0", path = "../usmap" }
