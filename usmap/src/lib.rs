@@ -614,7 +614,7 @@ fn read_structs<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Struct>> {
         let name = s.read_name()?;
         let super_struct = s.read_opt_name()?;
 
-        let _prop_count = s.read_u16::<LE>()?;
+        let prop_count = s.read_u16::<LE>()?;
         let serializable_prop_count = s.read_u16::<LE>()?;
 
         let mut properties = vec![];
@@ -629,6 +629,11 @@ fn read_structs<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Struct>> {
                 inner: read_property_inner(s)?,
             });
         }
+        assert_eq!(
+            prop_count,
+            properties.iter().map(|p| p.array_dim as u16).sum(),
+            "prop count mismatch"
+        );
         structs.push(Struct {
             name,
             super_struct,
@@ -644,8 +649,9 @@ fn write_structs<S: Write>(s: &mut SerCtx<S>, structs: &[Struct]) -> Result<()> 
         s.write_name(struct_.name.clone())?;
         s.write_opt_name(struct_.super_struct.clone())?;
 
-        // TODO when does prop_count != serializable_prop_count?
-        s.write_u16::<LE>(struct_.properties.len().try_into().unwrap())?;
+        // prop count
+        s.write_u16::<LE>(struct_.properties.iter().map(|p| p.array_dim as u16).sum())?;
+        // serializable prop count
         s.write_u16::<LE>(struct_.properties.len().try_into().unwrap())?;
 
         for prop in &struct_.properties {
