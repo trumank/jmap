@@ -351,7 +351,7 @@ pub struct Enum {
 pub struct Property {
     pub name: String,
     pub array_dim: u8,
-    pub offset: u16,
+    pub index: u16,
     pub inner: PropertyInner,
 }
 
@@ -618,12 +618,12 @@ fn read_structs<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Struct>> {
 
         let mut properties = vec![];
         for _ in 0..serializable_prop_count {
-            let offset = s.read_u16::<LE>()?;
+            let index = s.read_u16::<LE>()?;
             let array_dim = s.read_u8()?;
             let name = s.read_name()?;
             properties.push(Property {
                 array_dim,
-                offset,
+                index,
                 name,
                 inner: read_property_inner(s)?,
             });
@@ -648,7 +648,7 @@ fn write_structs<S: Write>(s: &mut SerCtx<S>, structs: &[Struct]) -> Result<()> 
         s.write_u16::<LE>(struct_.properties.len().try_into().unwrap())?;
 
         for prop in &struct_.properties {
-            s.write_u16::<LE>(prop.offset)?;
+            s.write_u16::<LE>(prop.index)?;
             s.write_u8(prop.array_dim)?;
             s.write_name(prop.name.clone())?;
             write_property_inner(s, &prop.inner)?;

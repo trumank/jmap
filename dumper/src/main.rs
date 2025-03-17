@@ -80,7 +80,12 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
             structs.push(usmap::Struct {
                 name: obj_name(path).to_string(),
                 super_struct: s.super_struct.as_ref().map(|s| obj_name(s).to_string()),
-                properties: s.properties.iter().map(into_usmap_prop).collect(),
+                properties: s
+                    .properties
+                    .iter()
+                    .enumerate()
+                    .map(into_usmap_prop)
+                    .collect(),
             });
         } else if let Some(e) = obj.get_enum() {
             enums.push(usmap::Enum {
@@ -104,11 +109,11 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
     }
 }
 
-fn into_usmap_prop(prop: &ue_reflection::Property) -> usmap::Property {
+fn into_usmap_prop((index, prop): (usize, &ue_reflection::Property)) -> usmap::Property {
     usmap::Property {
         name: prop.name.clone(),
         array_dim: prop.array_dim.try_into().unwrap(),
-        offset: prop.offset.try_into().unwrap(),
+        index: index.try_into().unwrap(),
         inner: into_usmap_prop_inner(&prop.r#type),
     }
 }
