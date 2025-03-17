@@ -16,3 +16,4 @@ ser-hex = { git = "https://github.com/trumank/ser-hex.git", version = "0.1.0" }
 serde = { workspace = true, features = ["derive"] }
 strum = { version = "0.27.1", features = ["derive"] }
 tracing = "0.1.41"
+zstd = "0.13.3"
