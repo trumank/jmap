@@ -77,15 +77,16 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
 
     for (path, obj) in objects {
         if let Some(s) = obj.get_struct() {
+            let mut properties = vec![];
+            let mut index = 0;
+            for prop in &s.properties {
+                properties.push(into_usmap_prop(index, prop));
+                index += prop.array_dim;
+            }
             structs.push(usmap::Struct {
                 name: obj_name(path).to_string(),
                 super_struct: s.super_struct.as_ref().map(|s| obj_name(s).to_string()),
-                properties: s
-                    .properties
-                    .iter()
-                    .enumerate()
-                    .map(into_usmap_prop)
-                    .collect(),
+                properties,
             });
         } else if let Some(e) = obj.get_enum() {
             enums.push(usmap::Enum {
@@ -109,7 +110,7 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
     }
 }
 
-fn into_usmap_prop((index, prop): (usize, &ue_reflection::Property)) -> usmap::Property {
+fn into_usmap_prop(index: usize, prop: &ue_reflection::Property) -> usmap::Property {
     usmap::Property {
         name: prop.name.clone(),
         array_dim: prop.array_dim.try_into().unwrap(),
