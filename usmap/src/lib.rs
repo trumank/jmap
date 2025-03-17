@@ -398,7 +398,6 @@ impl Usmap {
     #[instrument(skip_all, name = "Usmap::read")]
     pub fn read<S: Read>(s: &mut S) -> Result<Usmap> {
         let header = Header::read(s)?;
-        dbg!(&header);
 
         let mut rest = vec![];
         s.read_to_end(&mut rest)?;
@@ -411,7 +410,8 @@ impl Usmap {
             }
         };
 
-        let s = &mut ser_hex::TraceStream::new("trace_inner.json", std::io::Cursor::new(buffer));
+        let s = &mut std::io::Cursor::new(buffer);
+        //let s = &mut ser_hex::TraceStream::new("trace_inner.json", s);
         let mut names = Names::new();
         let s = &mut SerCtx::new(s, &header, &mut names);
 
@@ -453,9 +453,9 @@ impl Usmap {
     #[instrument(skip_all, name = "Usmap::write")]
     pub fn write<S: Write>(&self, s: &mut S) -> Result<()> {
         let mut names = Names::new();
-        let header = Header {
-            version: UsmapVersion::PackageVersioning,
-            compression_method: None,
+        let mut header = Header {
+            version: UsmapVersion::LargeEnums,
+            compression_method: Some(CompressionMethod::Zstd),
             compressed_size: 0,
             decompressed_size: 0,
         };
@@ -490,8 +490,18 @@ impl Usmap {
             s.write_all(&buffer)?;
         }
 
+        let maybe_compressed = match header.compression_method {
+            Some(m) => {
+                let mut b = vec![];
+                compression::compress(m, &full_buffer, &mut b)?;
+                header.decompressed_size = full_buffer.len() as u32;
+                header.compressed_size = b.len() as u32;
+                b
+            }
+            None => full_buffer,
+        };
         header.write(s)?;
-        s.write_all(&full_buffer)?;
+        s.write_all(&maybe_compressed)?;
 
         Ok(())
     }
@@ -886,17 +896,19 @@ mod test {
     use super::*;
 
     fn test_usmap(path: &str) -> Result<()> {
-        let mut input = std::io::Cursor::new(std::fs::read(path)?);
-        let res = ser_hex::read("trace.json", &mut input, Usmap::read)?;
+        let input = &mut std::io::Cursor::new(std::fs::read(path)?);
+        //let input = &mut ser_hex::TraceStream::new("trace.json", input);
+        let res = Usmap::read(input)?;
 
         let mut buffer = vec![];
         res.write(&mut buffer)?;
 
-        let mut input = std::io::Cursor::new(buffer);
-        let res2 = ser_hex::read("trace_rt.json", &mut input, Usmap::read)?;
+        let input = &mut std::io::Cursor::new(buffer);
+        //let input = &mut ser_hex::TraceStream::new("trace_rt.json", input);
+        let res2 = Usmap::read(input)?;
         assert_eq!(res, res2);
 
-        println!("{res:#?}");
+        //println!("{res:#?}");
         Ok(())
     }
     #[test]
