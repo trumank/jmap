@@ -328,12 +328,44 @@ pub struct Enum {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ObjectType {
+    Object(Object),
+    Package(Package),
+    Enum(Enum),
     ScriptStruct(ScriptStruct),
     Class(Class),
     Function(Function),
-    Enum(Enum),
-    Object(Object),
-    Package(Package),
+}
+impl ObjectType {
+    pub fn get_object(&self) -> &Object {
+        match self {
+            ObjectType::Object(obj) => obj,
+            ObjectType::Package(obj) => &obj.object,
+            ObjectType::Enum(obj) => &obj.object,
+            ObjectType::ScriptStruct(obj) => &obj.r#struct.object,
+            ObjectType::Class(obj) => &obj.r#struct.object,
+            ObjectType::Function(obj) => &obj.r#struct.object,
+        }
+    }
+    pub fn get_struct(&self) -> Option<&Struct> {
+        match self {
+            ObjectType::Object(_) => None,
+            ObjectType::Package(_) => None,
+            ObjectType::Enum(_) => None,
+            ObjectType::ScriptStruct(obj) => Some(&obj.r#struct),
+            ObjectType::Class(obj) => Some(&obj.r#struct),
+            ObjectType::Function(obj) => Some(&obj.r#struct),
+        }
+    }
+    pub fn get_enum(&self) -> Option<&Enum> {
+        match self {
+            ObjectType::Object(_) => None,
+            ObjectType::Package(_) => None,
+            ObjectType::Enum(obj) => Some(&obj),
+            ObjectType::ScriptStruct(_) => None,
+            ObjectType::Class(_) => None,
+            ObjectType::Function(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
