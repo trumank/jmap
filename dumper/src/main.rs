@@ -76,7 +76,12 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
     let mut structs = vec![];
 
     for (path, obj) in objects {
-        if let Some(s) = obj.get_struct() {
+        let struct_ = match &obj {
+            ue_reflection::ObjectType::ScriptStruct(obj) => Some(&obj.r#struct),
+            ue_reflection::ObjectType::Class(obj) => Some(&obj.r#struct),
+            _ => None,
+        };
+        if let Some(s) = struct_ {
             let mut properties = vec![];
             let mut index = 0;
             for prop in &s.properties {
