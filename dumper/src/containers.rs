@@ -297,6 +297,7 @@ impl<C: Mem + Clone + NameTrait> CtxPtr<FName, C> {
     pub fn read(&self) -> Result<String> {
         // TODO dynamic struct member
         let value = self.cast::<u32>().read()?;
+        let number = self.byte_offset(4).cast::<u32>().read()?;
         let mem = self.ctx();
 
         let blocks = ExternalPtr::<ExternalPtr<u8>>::new(mem.fnamepool().0 + 0x10);
@@ -313,7 +314,7 @@ impl<C: Mem + Clone + NameTrait> CtxPtr<FName, C> {
         let len = (header >> 6) as usize;
         let is_wide = header & 1 != 0;
 
-        Ok(if is_wide {
+        let base = if is_wide {
             String::from_utf16(
                 &block
                     .offset(offset + 2)
@@ -324,6 +325,11 @@ impl<C: Mem + Clone + NameTrait> CtxPtr<FName, C> {
             )?
         } else {
             String::from_utf8(block.offset(offset + 2).read_vec(mem, len)?)?
+        };
+        Ok(if number == 0 {
+            base
+        } else {
+            format!("{base}_{}", number - 1)
         })
     }
 }
