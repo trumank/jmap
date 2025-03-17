@@ -89,13 +89,20 @@ fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::U
                 properties,
             });
         } else if let Some(e) = obj.get_enum() {
+            let prefix = format!("{}::", obj_name(path));
+            let mut entries = vec![];
+            for (name, _value) in &e.names {
+                let variant_name = if let Some(variant_name) = name.strip_prefix(&prefix) {
+                    variant_name
+                } else {
+                    assert!(!name.contains("::"), "enum prefix was not stripped");
+                    name
+                };
+                entries.push(variant_name.to_string());
+            }
             enums.push(usmap::Enum {
                 name: obj_name(path).to_string(),
-                entries: e
-                    .names
-                    .iter()
-                    .map(|(ref name, _value)| name.to_string())
-                    .collect(),
+                entries,
             });
         }
     }
