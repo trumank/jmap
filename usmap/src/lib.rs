@@ -1,7 +1,10 @@
 mod compression;
 mod gen;
 
-use std::io::{Read, Seek, Write};
+use std::{
+    collections::HashMap,
+    io::{Read, Seek, Write},
+};
 
 use anyhow::{bail, Context, Result};
 
@@ -15,12 +18,12 @@ trait Ser {
         Self: Sized;
     fn write<S: Write>(&self, s: &mut S) -> Result<()>;
 }
-struct SerCtx<S> {
+struct SerCtx<'c, S> {
     inner: S,
-    header: Header,
-    names: Vec<String>,
+    header: &'c Header,
+    names: &'c mut Names,
 }
-impl<S> Read for SerCtx<S>
+impl<'c, S> Read for SerCtx<'c, S>
 where
     S: Read,
 {
@@ -28,7 +31,7 @@ where
         self.inner.read(buf)
     }
 }
-impl<S> Write for SerCtx<S>
+impl<'c, S> Write for SerCtx<'c, S>
 where
     S: Write,
 {
@@ -39,7 +42,7 @@ where
         self.inner.flush()
     }
 }
-impl<S> Seek for SerCtx<S>
+impl<'c, S> Seek for SerCtx<'c, S>
 where
     S: Seek,
 {
@@ -47,14 +50,109 @@ where
         self.inner.seek(pos)
     }
 }
-impl<S: Read> SerCtx<S> {
+impl<'c, S> SerCtx<'c, S> {
+    fn new(inner: S, header: &'c Header, names: &'c mut Names) -> Self {
+        Self {
+            inner,
+            header,
+            names,
+        }
+    }
+    fn chain<I>(&mut self, inner: I) -> SerCtx<I> {
+        SerCtx {
+            inner,
+            header: self.header,
+            names: self.names,
+        }
+    }
+}
+impl<'c, S: Read> SerCtx<'c, S> {
+    #[instrument(skip_all)]
+    fn read_names(&mut self) -> Result<()> {
+        for _ in 0..self.read_u32::<LE>()? {
+            let length = if self.header.version >= UsmapVersion::LongFName {
+                self.read_u16::<LE>()? as usize
+            } else {
+                self.read_u8()? as usize
+            };
+            let mut buf = vec![0; length];
+            self.read_exact(&mut buf)?;
+            let name =
+                String::from_utf8(buf.into_iter().take_while(|b| *b != 0).collect::<Vec<_>>())?;
+            self.names.insert_dup(name);
+        }
+        Ok(())
+    }
     fn read_name(&mut self) -> Result<String> {
-        let i = self.inner.read_u32::<LE>()? as usize;
-        Ok(self.names[i].to_string())
+        let i = self.inner.read_u32::<LE>()?;
+        Ok(self.names.get(i).to_string())
     }
     fn read_opt_name(&mut self) -> Result<Option<String>> {
         let i = self.inner.read_u32::<LE>()?;
-        Ok((i != u32::MAX).then(|| self.names[i as usize].to_string()))
+        Ok((i != u32::MAX).then(|| self.names.get(i).to_string()))
+    }
+}
+impl<S: Write> SerCtx<'_, S> {
+    #[instrument(skip_all)]
+    fn write_names(&mut self) -> Result<()> {
+        self.write_u32::<LE>(self.names.names.len() as u32)?;
+        // split mutable borrow curse
+        let (s, names) = (&mut self.inner, &self.names);
+        for name in &names.names {
+            if self.header.version >= UsmapVersion::LongFName {
+                s.write_u16::<LE>(name.len().try_into().expect("name too long"))?;
+            } else {
+                s.write_u8(name.len().try_into().expect("name too long"))?;
+            };
+            s.write_all(name.as_bytes())?;
+        }
+        Ok(())
+    }
+    fn write_name(&mut self, name: String) -> Result<()> {
+        let i = self.names.insert(name);
+        self.write_u32::<LE>(i)?;
+        Ok(())
+    }
+    fn write_opt_name(&mut self, name: Option<String>) -> Result<()> {
+        let i = if let Some(name) = name {
+            self.names.insert(name)
+        } else {
+            u32::MAX
+        };
+        self.write_u32::<LE>(i)?;
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct Names {
+    names: Vec<String>,
+    index: HashMap<String, u32>,
+}
+impl Names {
+    fn new() -> Self {
+        Self::default()
+    }
+    fn get(&self, index: u32) -> &str {
+        &self.names[index as usize]
+    }
+    fn insert(&mut self, name: String) -> u32 {
+        match self.index.entry(name) {
+            std::collections::hash_map::Entry::Occupied(entry) => *entry.get(),
+            std::collections::hash_map::Entry::Vacant(entry) => {
+                let index = self.names.len() as u32;
+                self.names.push(entry.key().clone());
+                entry.insert(index);
+                index
+            }
+        }
+    }
+    // needed because *some* usmap generators have duplicates in name map
+    fn insert_dup(&mut self, name: String) -> u32 {
+        let index = self.names.len() as u32;
+        self.names.push(name.clone());
+        self.index.insert(name, index);
+        index
     }
 }
 
@@ -94,7 +192,7 @@ enum EPropertyType {
     Unknown = 0xFF,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub enum PropertyInner {
     Byte,
     Bool,
@@ -140,10 +238,44 @@ pub enum PropertyInner {
         inner: Box<PropertyInner>,
     },
 }
+impl PropertyInner {
+    fn get_type(&self) -> EPropertyType {
+        match self {
+            PropertyInner::Byte => EPropertyType::ByteProperty,
+            PropertyInner::Bool => EPropertyType::BoolProperty,
+            PropertyInner::Int => EPropertyType::IntProperty,
+            PropertyInner::Float => EPropertyType::FloatProperty,
+            PropertyInner::Object => EPropertyType::ObjectProperty,
+            PropertyInner::Name => EPropertyType::NameProperty,
+            PropertyInner::Delegate => EPropertyType::DelegateProperty,
+            PropertyInner::Double => EPropertyType::DoubleProperty,
+            PropertyInner::Array { .. } => EPropertyType::ArrayProperty,
+            PropertyInner::Struct { .. } => EPropertyType::StructProperty,
+            PropertyInner::Str => EPropertyType::StrProperty,
+            PropertyInner::Text => EPropertyType::TextProperty,
+            PropertyInner::Interface => EPropertyType::InterfaceProperty,
+            PropertyInner::MulticastDelegate => EPropertyType::MulticastDelegateProperty,
+            PropertyInner::WeakObject => EPropertyType::WeakObjectProperty,
+            PropertyInner::LazyObject => EPropertyType::LazyObjectProperty,
+            PropertyInner::AssetObject => EPropertyType::AssetObjectProperty,
+            PropertyInner::SoftObject => EPropertyType::SoftObjectProperty,
+            PropertyInner::UInt64 => EPropertyType::UInt64Property,
+            PropertyInner::UInt32 => EPropertyType::UInt32Property,
+            PropertyInner::UInt16 => EPropertyType::UInt16Property,
+            PropertyInner::Int64 => EPropertyType::Int64Property,
+            PropertyInner::Int16 => EPropertyType::Int16Property,
+            PropertyInner::Int8 => EPropertyType::Int8Property,
+            PropertyInner::Map { .. } => EPropertyType::MapProperty,
+            PropertyInner::Set { .. } => EPropertyType::SetProperty,
+            PropertyInner::Enum { .. } => EPropertyType::EnumProperty,
+            PropertyInner::FieldPath => EPropertyType::FieldPathProperty,
+            PropertyInner::Optional { .. } => EPropertyType::OptionalProperty,
+        }
+    }
+}
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Usmap {
-    //names: &'n [String],
     pub enums: Vec<Enum>,
     pub structs: Vec<Struct>,
     pub cext: Option<ExtCext>,
@@ -198,25 +330,24 @@ impl Ser for Option<CompressionMethod> {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Header {
-    pub magic: u16,
     pub version: UsmapVersion,
 
     pub compression_method: Option<CompressionMethod>,
     pub compressed_size: u32,
     pub decompressed_size: u32,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Struct {
     pub name: String,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Enum {
     pub name: String,
     pub entries: Vec<String>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Property {
     pub name: String,
     pub array_dim: u8,
@@ -224,32 +355,32 @@ pub struct Property {
     pub inner: PropertyInner,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtCext {
     pub version: u8,
     pub num_ext: u32,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtPpth {
     pub version: u8,
     pub enums: Vec<String>,
     pub structs: Vec<String>,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtEatr {
     pub version: u8,
     pub enum_flags: Vec<u32>,
     pub struct_flags: Vec<StructFlags>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StructFlags {
     pub type_: FlagsType,
     pub value: u32,
     pub prop_flags: Vec<u64>,
 }
-#[derive(Debug, Clone, Serialize, strum::FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::FromRepr)]
 #[repr(u8)]
 pub enum FlagsType {
     Unknown,
@@ -257,7 +388,7 @@ pub enum FlagsType {
     Class,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ExtEnvp {
     pub version: u8,
     pub value_pairs: Vec<Vec<(String, u64)>>,
@@ -281,13 +412,10 @@ impl Usmap {
         };
 
         let s = &mut ser_hex::TraceStream::new("trace_inner.json", std::io::Cursor::new(buffer));
-        let s = &mut SerCtx {
-            inner: s,
-            header,
-            names: vec![],
-        };
+        let mut names = Names::new();
+        let s = &mut SerCtx::new(s, &header, &mut names);
 
-        read_names(s)?;
+        s.read_names()?;
         let enums = read_enums(s)?;
         let structs = read_structs(s)?;
 
@@ -305,16 +433,15 @@ impl Usmap {
                 r => r,
             }?;
             match &ext {
-                b"CEXT" => cext = Some(read_cext(s)?),
-                b"PPTH" => ppth = Some(read_ppth(s)?),
-                b"EATR" => eatr = Some(read_eatr(s)?),
-                b"ENVP" => envp = Some(read_envp(s)?),
+                b"CEXT" => cext = Some(ExtCext::read(s)?),
+                b"PPTH" => ppth = Some(ExtPpth::read(s)?),
+                b"EATR" => eatr = Some(ExtEatr::read(s)?),
+                b"ENVP" => envp = Some(ExtEnvp::read(s)?),
                 _ => bail!("ext {ext:X?}"),
             }
         }
 
         Ok(Usmap {
-            //names: &names,
             enums,
             structs,
             cext,
@@ -323,12 +450,61 @@ impl Usmap {
             envp,
         })
     }
+    #[instrument(skip_all, name = "Usmap::write")]
+    pub fn write<S: Write>(&self, s: &mut S) -> Result<()> {
+        let mut names = Names::new();
+        let header = Header {
+            version: UsmapVersion::PackageVersioning,
+            compression_method: None,
+            compressed_size: 0,
+            decompressed_size: 0,
+        };
+        let mut full_buffer = vec![];
+        {
+            let s = &mut SerCtx::new(&mut full_buffer, &header, &mut names);
+
+            let mut buffer: Vec<u8> = vec![];
+            {
+                let s = &mut s.chain(&mut buffer);
+                write_enums(s, &self.enums)?;
+                write_structs(s, &self.structs)?;
+
+                if let Some(ext) = &self.cext {
+                    s.write_all(b"CEXT")?;
+                    ext.write(s)?;
+                }
+                if let Some(ext) = &self.ppth {
+                    s.write_all(b"PPTH")?;
+                    ext.write(s)?;
+                }
+                if let Some(ext) = &self.eatr {
+                    s.write_all(b"EATR")?;
+                    ext.write(s)?;
+                }
+                if let Some(ext) = &self.envp {
+                    s.write_all(b"ENVP")?;
+                    ext.write(s)?;
+                }
+            }
+            s.write_names()?;
+            s.write_all(&buffer)?;
+        }
+
+        header.write(s)?;
+        s.write_all(&full_buffer)?;
+
+        Ok(())
+    }
 }
 
 impl Header {
+    const MAGIC: u16 = 0x30C4;
     #[instrument(skip_all, name = "Header::read")]
     fn read<S: Read>(s: &mut S) -> Result<Self> {
         let magic = s.read_u16::<LE>()?;
+        if magic != Self::MAGIC {
+            bail!("bad Usmap magic {magic:04x}");
+        }
         let version = UsmapVersion::read(s)?;
 
         // package versioning
@@ -356,22 +532,28 @@ impl Header {
         let decompressed_size = s.read_u32::<LE>()?;
 
         Ok(Self {
-            magic,
             version,
             compression_method,
             compressed_size,
             decompressed_size,
         })
     }
-}
+    #[instrument(skip_all, name = "Header::read")]
+    fn write<S: Write>(&self, s: &mut S) -> Result<()> {
+        s.write_u16::<LE>(Self::MAGIC)?;
+        self.version.write(s)?;
 
-#[instrument(skip_all)]
-fn read_names<S: Read>(s: &mut SerCtx<S>) -> Result<()> {
-    for _ in 0..s.read_u32::<LE>()? {
-        let name = read_string_u8(s)?;
-        s.names.push(name);
+        if self.version >= UsmapVersion::PackageVersioning {
+            s.write_i32::<LE>(0)?;
+            // TODO versioning
+        }
+
+        self.compression_method.write(s)?;
+        s.write_u32::<LE>(self.compressed_size)?;
+        s.write_u32::<LE>(self.decompressed_size)?;
+
+        Ok(())
     }
-    Ok(())
 }
 
 #[instrument(skip_all)]
@@ -393,6 +575,23 @@ fn read_enums<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Enum>> {
         enums.push(Enum { name, entries });
     }
     Ok(enums)
+}
+#[instrument(skip_all)]
+fn write_enums<S: Write>(s: &mut SerCtx<S>, enums: &[Enum]) -> Result<()> {
+    s.write_u32::<LE>(enums.len() as u32)?;
+
+    for e in enums {
+        s.write_name(e.name.clone())?;
+        if s.header.version >= UsmapVersion::LargeEnums {
+            s.write_u16::<LE>(e.entries.len().try_into().expect("enum entries too large"))?;
+        } else {
+            s.write_u8(e.entries.len().try_into().expect("enum entries too large"))?;
+        }
+        for entry in &e.entries {
+            s.write_name(entry.clone())?;
+        }
+    }
+    Ok(())
 }
 
 #[instrument(skip_all)]
@@ -427,9 +626,29 @@ fn read_structs<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Struct>> {
     }
     Ok(structs)
 }
+#[instrument(skip_all)]
+fn write_structs<S: Write>(s: &mut SerCtx<S>, structs: &[Struct]) -> Result<()> {
+    s.write_u32::<LE>(structs.len() as u32)?;
+    for struct_ in structs {
+        s.write_name(struct_.name.clone())?;
+        s.write_opt_name(struct_.super_struct.clone())?;
+
+        // TODO when does prop_count != serializable_prop_count?
+        s.write_u16::<LE>(struct_.properties.len().try_into().unwrap())?;
+        s.write_u16::<LE>(struct_.properties.len().try_into().unwrap())?;
+
+        for prop in &struct_.properties {
+            s.write_u16::<LE>(prop.offset)?;
+            s.write_u8(prop.array_dim)?;
+            s.write_name(prop.name.clone())?;
+            write_property_inner(s, &prop.inner)?;
+        }
+    }
+    Ok(())
+}
 
 #[instrument(skip_all)]
-fn read_property_inner<'n, S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> {
+fn read_property_inner<S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> {
     let type_ = EPropertyType::from_repr(s.read_u8()?).context("unknown EPropertyType")?;
     let inner = match type_ {
         EPropertyType::ByteProperty => PropertyInner::Byte,
@@ -482,103 +701,184 @@ fn read_property_inner<'n, S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> 
 }
 
 #[instrument(skip_all)]
-fn read_cext<R: Read>(reader: &mut R) -> Result<ExtCext> {
-    let version = reader.read_u8()?;
-    let num_ext = reader.read_u32::<LE>()?;
-    Ok(ExtCext { version, num_ext })
-}
-
-#[instrument(skip_all)]
-fn read_ppth<S: Read>(s: &mut SerCtx<S>) -> Result<ExtPpth> {
-    let _size = s.read_u32::<LE>()?;
-    let version = s.read_u8()?;
-    let mut enums = vec![];
-    for _ in 0..s.read_u32::<LE>()? {
-        enums.push(s.read_name()?);
-    }
-    let mut structs = vec![];
-    for _ in 0..s.read_u32::<LE>()? {
-        structs.push(s.read_name()?);
-    }
-    Ok(ExtPpth {
-        version,
-        enums,
-        structs,
-    })
-}
-
-#[instrument(skip_all)]
-fn read_eatr<R: Read>(reader: &mut R) -> Result<ExtEatr> {
-    let _size = reader.read_u32::<LE>()?;
-    let version = reader.read_u8()?;
-    let mut enum_flags = vec![];
-    for _ in 0..reader.read_u32::<LE>()? {
-        enum_flags.push(reader.read_u32::<LE>()?);
-    }
-    let mut struct_flags = vec![];
-    for _ in 0..reader.read_u32::<LE>()? {
-        let type_ = FlagsType::from_repr(reader.read_u8()?).context("unknown FlagsType")?;
-        let value = reader.read_u32::<LE>()?;
-        let mut prop_flags = vec![];
-        for _ in 0..reader.read_u32::<LE>()? {
-            prop_flags.push(reader.read_u64::<LE>()?);
+fn write_property_inner<S: Write>(s: &mut SerCtx<S>, prop: &PropertyInner) -> Result<()> {
+    s.write_u8(prop.get_type() as u8)?;
+    match prop {
+        PropertyInner::Array { inner } => {
+            write_property_inner(s, inner)?;
         }
-        struct_flags.push(StructFlags {
-            type_,
-            value,
-            prop_flags,
-        });
+        PropertyInner::Struct { name } => {
+            s.write_name(name.clone())?;
+        }
+        PropertyInner::Map { key, value } => {
+            write_property_inner(s, key)?;
+            write_property_inner(s, value)?;
+        }
+        PropertyInner::Set { key } => {
+            write_property_inner(s, key)?;
+        }
+        PropertyInner::Enum { inner, name } => {
+            write_property_inner(s, inner)?;
+            s.write_name(name.clone())?;
+        }
+        PropertyInner::Optional { inner } => {
+            write_property_inner(s, inner)?;
+        }
+        _ => {}
     }
-    Ok(ExtEatr {
-        version,
-        enum_flags,
-        struct_flags,
-    })
+    Ok(())
 }
 
-#[instrument(skip_all)]
-fn read_envp<S: Read>(s: &mut SerCtx<S>) -> Result<ExtEnvp> {
-    let _size = s.read_u32::<LE>()?;
-    let version = s.read_u8()?;
-    let mut value_pairs = vec![];
-    for _ in 0..s.read_u32::<LE>()? {
-        let mut n = vec![];
+impl ExtCext {
+    #[instrument(skip_all, name = "ExtCext::read")]
+    fn read<S: Read>(s: &mut SerCtx<S>) -> Result<Self> {
+        let version = s.read_u8()?;
+        let num_ext = s.read_u32::<LE>()?;
+        Ok(Self { version, num_ext })
+    }
+    #[instrument(skip_all, name = "ExtCext::write")]
+    fn write<S: Write>(&self, s: &mut SerCtx<S>) -> Result<()> {
+        s.write_u8(self.version)?;
+        s.write_u32::<LE>(self.num_ext)?;
+        Ok(())
+    }
+}
+
+impl ExtPpth {
+    #[instrument(skip_all, name = "ExpPpth::read")]
+    fn read<S: Read>(s: &mut SerCtx<S>) -> Result<Self> {
+        let _size = s.read_u32::<LE>()?;
+        let version = s.read_u8()?;
+        let mut enums = vec![];
         for _ in 0..s.read_u32::<LE>()? {
-            n.push((s.read_name()?, s.read_u64::<LE>()?));
+            enums.push(s.read_name()?);
         }
-        value_pairs.push(n);
+        let mut structs = vec![];
+        for _ in 0..s.read_u32::<LE>()? {
+            structs.push(s.read_name()?);
+        }
+        Ok(Self {
+            version,
+            enums,
+            structs,
+        })
     }
-    Ok(ExtEnvp {
-        version,
-        value_pairs,
-    })
+    #[instrument(skip_all, name = "ExpPpth::write")]
+    fn write<S: Write>(&self, s: &mut SerCtx<S>) -> Result<()> {
+        let mut buffer = vec![];
+        {
+            let s = &mut s.chain(&mut buffer);
+            s.write_u8(self.version)?;
+            s.write_u32::<LE>(self.enums.len() as u32)?;
+            for enum_ in &self.enums {
+                s.write_name(enum_.clone())?;
+            }
+            s.write_u32::<LE>(self.structs.len() as u32)?;
+            for struct_ in &self.structs {
+                s.write_name(struct_.clone())?;
+            }
+        }
+        s.write_u32::<LE>(buffer.len() as u32)?;
+        s.write_all(&buffer)?;
+        Ok(())
+    }
 }
 
-#[instrument(skip_all)]
-fn read_cstr<R: Read>(reader: &mut R) -> Result<String> {
-    let mut buf = vec![];
-    loop {
-        let next = reader.read_u8()?;
-        if next == 0 {
-            break;
+impl ExtEatr {
+    #[instrument(skip_all, name = "ExtEatr::read")]
+    fn read<S: Read>(s: &mut SerCtx<S>) -> Result<Self> {
+        let _size = s.read_u32::<LE>()?;
+        let version = s.read_u8()?;
+        let mut enum_flags = vec![];
+        for _ in 0..s.read_u32::<LE>()? {
+            enum_flags.push(s.read_u32::<LE>()?);
         }
-        buf.push(next);
+        let mut struct_flags = vec![];
+        for _ in 0..s.read_u32::<LE>()? {
+            let type_ = FlagsType::from_repr(s.read_u8()?).context("unknown FlagsType")?;
+            let value = s.read_u32::<LE>()?;
+            let mut prop_flags = vec![];
+            for _ in 0..s.read_u32::<LE>()? {
+                prop_flags.push(s.read_u64::<LE>()?);
+            }
+            struct_flags.push(StructFlags {
+                type_,
+                value,
+                prop_flags,
+            });
+        }
+        Ok(Self {
+            version,
+            enum_flags,
+            struct_flags,
+        })
     }
-    Ok(String::from_utf8(buf)?)
+    #[instrument(skip_all, name = "ExpEatr::write")]
+    fn write<S: Write>(&self, s: &mut SerCtx<S>) -> Result<()> {
+        let mut buffer = vec![];
+        {
+            let s = &mut s.chain(&mut buffer);
+            s.write_u8(self.version)?;
+
+            s.write_u32::<LE>(self.enum_flags.len() as u32)?;
+            for flags in &self.enum_flags {
+                s.write_u32::<LE>(*flags)?;
+            }
+            s.write_u32::<LE>(self.struct_flags.len() as u32)?;
+            for flags in &self.struct_flags {
+                s.write_u8(flags.type_ as u8)?;
+                s.write_u32::<LE>(flags.value)?;
+
+                s.write_u32::<LE>(flags.prop_flags.len() as u32)?;
+                for flags in &flags.prop_flags {
+                    s.write_u64::<LE>(*flags)?;
+                }
+            }
+        }
+        s.write_u32::<LE>(buffer.len() as u32)?;
+        s.write_all(&buffer)?;
+        Ok(())
+    }
 }
 
-#[instrument(skip_all)]
-fn read_string_u8<S: Read>(s: &mut SerCtx<S>) -> Result<String> {
-    let length = if s.header.version >= UsmapVersion::LongFName {
-        s.read_u16::<LE>()? as usize
-    } else {
-        s.read_u8()? as usize
-    };
-    let mut buf = vec![0; length];
-    s.read_exact(&mut buf)?;
-    Ok(String::from_utf8(
-        buf.into_iter().take_while(|b| *b != 0).collect::<Vec<_>>(),
-    )?)
+impl ExtEnvp {
+    #[instrument(skip_all, name = "ExtEnvp::read")]
+    fn read<S: Read>(s: &mut SerCtx<S>) -> Result<Self> {
+        let _size = s.read_u32::<LE>()?;
+        let version = s.read_u8()?;
+        let mut value_pairs = vec![];
+        for _ in 0..s.read_u32::<LE>()? {
+            let mut n = vec![];
+            for _ in 0..s.read_u32::<LE>()? {
+                n.push((s.read_name()?, s.read_u64::<LE>()?));
+            }
+            value_pairs.push(n);
+        }
+        Ok(Self {
+            version,
+            value_pairs,
+        })
+    }
+    #[instrument(skip_all, name = "ExpEnvp::write")]
+    fn write<S: Write>(&self, s: &mut SerCtx<S>) -> Result<()> {
+        let mut buffer = vec![];
+        {
+            let s = &mut s.chain(&mut buffer);
+            s.write_u8(self.version)?;
+
+            s.write_u32::<LE>(self.value_pairs.len() as u32)?;
+            for pairs in &self.value_pairs {
+                s.write_u32::<LE>(pairs.len() as u32)?;
+                for (name, value) in pairs {
+                    s.write_name(name.clone())?;
+                    s.write_u64::<LE>(*value)?;
+                }
+            }
+        }
+        s.write_u32::<LE>(buffer.len() as u32)?;
+        s.write_all(&buffer)?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -588,6 +888,14 @@ mod test {
     fn test_usmap(path: &str) -> Result<()> {
         let mut input = std::io::Cursor::new(std::fs::read(path)?);
         let res = ser_hex::read("trace.json", &mut input, Usmap::read)?;
+
+        let mut buffer = vec![];
+        res.write(&mut buffer)?;
+
+        let mut input = std::io::Cursor::new(buffer);
+        let res2 = ser_hex::read("trace_rt.json", &mut input, Usmap::read)?;
+        assert_eq!(res, res2);
+
         println!("{res:#?}");
         Ok(())
     }
