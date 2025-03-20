@@ -491,11 +491,11 @@ impl Usmap {
             s.write_all(&buffer)?;
         }
 
+        header.decompressed_size = full_buffer.len() as u32;
         let maybe_compressed = match header.compression_method {
             Some(m) => {
                 let mut b = vec![];
                 compression::compress(m, &full_buffer, &mut b)?;
-                header.decompressed_size = full_buffer.len() as u32;
                 header.compressed_size = b.len() as u32;
                 b
             }
