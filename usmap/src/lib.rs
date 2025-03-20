@@ -10,6 +10,7 @@ use anyhow::{bail, Context, Result};
 
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use serde::Serialize;
+use serde_with::{serde_as, KeyValueMap};
 use tracing::instrument;
 
 trait Ser {
@@ -274,9 +275,12 @@ impl PropertyInner {
     }
 }
 
+#[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Usmap {
+    #[serde_as(as = "KeyValueMap<_>")]
     pub enums: Vec<Enum>,
+    #[serde_as(as = "KeyValueMap<_>")]
     pub structs: Vec<Struct>,
     pub cext: Option<ExtCext>,
     pub ppth: Option<ExtPpth>,
@@ -338,12 +342,14 @@ pub struct Header {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Struct {
+    #[serde(rename = "$key$")]
     pub name: String,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Enum {
+    #[serde(rename = "$key$")]
     pub name: String,
     pub entries: Vec<String>,
 }
