@@ -329,6 +329,7 @@ fn dump_inner<M: Mem + Clone>(
         let f = class.class_cast_flags().read()?;
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
             let obj = obj.cast::<UClass>();
+            let class_cast_flags = obj.class_cast_flags().read()?;
             let class_default_object = obj
                 .class_default_object()
                 .read()?
@@ -338,6 +339,7 @@ fn dump_inner<M: Mem + Clone>(
                 path,
                 ObjectType::Class(Class {
                     r#struct: read_struct(&obj.cast())?,
+                    class_cast_flags,
                     class_default_object,
                 }),
             );

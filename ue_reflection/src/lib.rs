@@ -111,7 +111,7 @@ bitflags::bitflags! {
     }
 
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     #[repr(C)]
     pub struct EClassCastFlags : u64 {
         const CASTCLASS_None = 0x0000000000000000;
@@ -310,6 +310,7 @@ pub struct ScriptStruct {
 pub struct Class {
     #[serde(flatten)]
     pub r#struct: Struct,
+    pub class_cast_flags: EClassCastFlags,
     pub class_default_object: Option<String>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -363,6 +364,16 @@ impl ObjectType {
             ObjectType::Enum(obj) => Some(&obj),
             ObjectType::ScriptStruct(_) => None,
             ObjectType::Class(_) => None,
+            ObjectType::Function(_) => None,
+        }
+    }
+    pub fn get_class(&self) -> Option<&Class> {
+        match self {
+            ObjectType::Object(_) => None,
+            ObjectType::Package(_) => None,
+            ObjectType::Enum(_) => None,
+            ObjectType::ScriptStruct(_) => None,
+            ObjectType::Class(obj) => Some(&obj),
             ObjectType::Function(_) => None,
         }
     }
