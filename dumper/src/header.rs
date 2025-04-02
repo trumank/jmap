@@ -68,6 +68,7 @@ fn obj_name(objects: &Objects, path: &str) -> String {
     }
 }
 
+#[allow(unused)]
 pub fn into_header(
     objects: &Objects,
     filter: impl Fn(&str, &ue_reflection::ObjectType) -> bool,
@@ -81,7 +82,6 @@ pub fn into_header(
 
 impl<'objects> Ctx<'objects, '_> {
     fn into_ctype(&mut self, prop: &'objects Property) -> TypeId {
-        assert_eq!(prop.array_dim, 1, "TODO array_dim != 1");
         let new_type = match &prop.r#type {
             PropertyType::Struct { r#struct } => CType::UEStruct(r#struct),
             PropertyType::Str => CType::FString,
@@ -142,7 +142,12 @@ impl<'objects> Ctx<'objects, '_> {
             }
             PropertyType::Optional { inner } => todo!(),
         };
-        self.store.insert(new_type)
+        let id = self.store.insert(new_type);
+        if prop.array_dim == 1 {
+            id
+        } else {
+            self.store.insert(CType::Array(id, prop.array_dim))
+        }
     }
 
     fn type_to_string(&mut self, id: TypeId, escape: bool) -> String {
@@ -207,6 +212,8 @@ impl<'objects> Ctx<'objects, '_> {
                 let b = self.type_to_string(b, false);
                 TypeName::new(format!("TTuple<{}, {}>", a, b))
             }
+
+            CType::Array(type_id, _size) => TypeName::new(self.type_to_string(type_id, false)), // handle size at struct member, not here
 
             CType::UEEnum(path) => TypeName::new(obj_name(self.objects, path)),
             CType::UEStruct(path) => TypeName::new(obj_name(self.objects, path)),
@@ -285,6 +292,9 @@ impl<'objects> Ctx<'objects, '_> {
                 dependencies.push((DepType::Full, a));
                 dependencies.push((DepType::Full, b));
             }
+            CType::Array(type_id, _size) => {
+                dependencies.push((DepType::Full, type_id));
+            }
             CType::UEEnum(_) => {}
             CType::UEStruct(path) => {
                 let struct_ = &self.objects[path].get_struct().unwrap();
@@ -347,6 +357,10 @@ impl<'objects> Ctx<'objects, '_> {
                 let align = a_a.max(a_b);
                 let size = align_up(s_a + s_b, align);
                 (size, align)
+            }
+            CType::Array(type_id, size) => {
+                let (inner_size, alignment) = self.get_type_size(type_id);
+                (size * inner_size, alignment)
             }
             CType::UEEnum(path) => {
                 // TODO unknown...
@@ -506,6 +520,8 @@ impl<'objects> Ctx<'objects, '_> {
                 .unwrap();
             }
 
+            CType::Array(_, _) => {}
+
             CType::UEEnum(path) => {
                 // TODO unknown...
                 let enum_ = &self.objects[path].get_enum().unwrap();
@@ -594,9 +610,16 @@ impl<'objects> Ctx<'objects, '_> {
 
             let ctype = self.into_ctype(prop);
             let type_name = self.type_to_string(ctype, true);
+
+            // TODO multi-dimension?
+            let array_size = match self.store[ctype] {
+                CType::Array(_, size) => format!("[{size}]"),
+                _ => "".into(),
+            };
+
             writeln!(
                 buffer,
-                "    {} _0x{2:x}_{}; // 0x{:x}",
+                "    {} _0x{2:x}_{}{array_size}; // 0x{:x}",
                 type_name, prop.name, prop.offset
             )
             .unwrap();
@@ -770,6 +793,8 @@ enum CType<'a> {
 
     TTuple(TypeId, TypeId),
 
+    Array(TypeId, usize),
+
     UEEnum(&'a str),
     UEStruct(&'a str),
     UEClass(&'a str),
@@ -920,8 +945,9 @@ mod test {
             //|| path.contains("GeneratedMission")
             //|| path.contains("CampaignManager")
             //|| path.contains(".Campaign")
-            path.contains(".FSDSaveGame")
-            //path.contains("FSDPlayer")
+            //path.contains(".FSDSaveGame")
+            path.contains("PlayerCameraManager")
+            //true
         });
         println!("{header}");
         std::fs::write("header.cpp", header)?;
