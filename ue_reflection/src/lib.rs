@@ -297,6 +297,8 @@ pub struct Struct {
     pub object: Object,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
+    pub properties_size: usize,
+    pub min_alignment: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

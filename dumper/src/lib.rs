@@ -311,6 +311,8 @@ fn dump_inner<M: Mem + Clone>(
                 object: read_object(&obj.cast())?,
                 super_struct,
                 properties,
+                properties_size: obj.properties_size().read()? as usize,
+                min_alignment: obj.min_alignment().read()? as usize,
             })
         }
 

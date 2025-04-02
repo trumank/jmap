@@ -44,6 +44,14 @@ impl<C: Clone + StructsTrait> CtxPtr<UStruct, C> {
         let offset = self.ctx().struct_member("UStruct", "ChildProperties");
         self.byte_offset(offset).cast()
     }
+    pub fn properties_size(&self) -> CtxPtr<i32, C> {
+        let offset = self.ctx().struct_member("UStruct", "PropertiesSize");
+        self.byte_offset(offset).cast()
+    }
+    pub fn min_alignment(&self) -> CtxPtr<i32, C> {
+        let offset = self.ctx().struct_member("UStruct", "MinAlignment");
+        self.byte_offset(offset).cast()
+    }
 }
 
 #[derive(Clone, Copy)]
