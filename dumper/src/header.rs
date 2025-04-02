@@ -106,7 +106,7 @@ pub fn into_header(
     //    }
     //}
 
-    let mut to_visit = HashSet::new();
+    let mut to_visit = vec![];
     let mut dep_graph = HashMap::new();
     // get dependencies of initial top level classes
     for (path, obj) in objects {
@@ -117,31 +117,60 @@ pub fn into_header(
                 get_type_dependencies(&mut dependencies, objects, &mut type_store, class_id);
                 let type_ = (DepType::Full, class_id);
                 dep_graph.insert(type_, dependencies.clone());
-                to_visit.extend(dependencies);
+                for dep in dependencies {
+                    if !dep_graph.contains_key(&dep) {
+                        to_visit.push(dep);
+                        //if dep.0 == DepType::Partial {
+                        //    let full = (DepType::Full, dep.1);
+                        //    if !dep_graph.contains_key(&full) {
+                        //        to_visit.push(full);
+                        //    }
+                        //}
+                    }
+                }
             }
         }
     }
 
     // get dependencies of dependencies
-    loop {
-        let visit = std::mem::take(&mut to_visit);
-        if visit.is_empty() {
-            break;
+    while let Some(next) = to_visit.pop() {
+        let mut dependencies = vec![];
+        if next.0 == DepType::Full && !dep_graph.contains_key(&next) {
+            get_type_dependencies(&mut dependencies, objects, &mut type_store, next.1);
         }
-        for type_ in visit.into_iter() {
-            let mut dependencies = vec![];
-            if !dep_graph.contains_key(&type_) {
-                get_type_dependencies(&mut dependencies, objects, &mut type_store, type_.1);
-                to_visit.extend(dependencies.clone());
+        dep_graph.insert(next, dependencies.clone());
+        for dep in dependencies {
+            if !dep_graph.contains_key(&dep) {
+                to_visit.push(dep);
+                //if dep.0 == DepType::Partial {
+                //    let full = (DepType::Full, dep.1);
+                //    if !dep_graph.contains_key(&full) {
+                //        to_visit.push(full);
+                //    }
+                //}
             }
-            dep_graph.insert(type_, dependencies.clone());
         }
     }
 
     dbg!(&dep_graph);
     dbg!(&type_store.types);
 
-    // foward declarations
+    for (owner, dependencies) in &dep_graph {
+        println!(
+            "{:?} {}",
+            owner,
+            type_to_string(&objects, &type_store, owner.1, false)
+        );
+        for dep in dependencies {
+            println!(
+                "  {:?} {}",
+                dep,
+                type_to_string(&objects, &type_store, dep.1, false)
+            );
+        }
+    }
+
+    // forward declarations
     for (dep_type, type_id) in dep_graph.keys() {
         if *dep_type == DepType::Partial {
             let type_ = &type_store[*type_id];
@@ -158,11 +187,11 @@ pub fn into_header(
                 //CType::TScriptInterface(type_id) => todo!(),
                 //CType::TTuple(type_id, type_id1) => todo!(),
                 CType::UEClass(path) => {
-                    writeln!(&mut buffer, "class {};", obj_name(objects, path)).unwrap();
+                    writeln!(&mut buffer, "class `{}`;", obj_name(objects, path)).unwrap();
                 }
                 CType::UEEnum(_) => todo!(),
                 CType::UEStruct(path) => {
-                    writeln!(&mut buffer, "struct {};", obj_name(objects, path)).unwrap();
+                    writeln!(&mut buffer, "struct `{}`;", obj_name(objects, path)).unwrap();
                 }
                 _ => {}
             }
@@ -174,9 +203,9 @@ pub fn into_header(
 
     // full declarations
     for (dep_type, type_id) in &sorted {
-        //if *dep_type == DepType::Full {
-        decl_ctype(&mut buffer, objects, &mut type_store, *type_id);
-        //}
+        if *dep_type == DepType::Full {
+            decl_ctype(&mut buffer, objects, &mut type_store, *type_id);
+        }
     }
 
     buffer
@@ -191,7 +220,7 @@ fn into_ctype<'a>(objects: &'a Objects, prop: &'a Property, store: &mut TypeStor
         PropertyType::Text => CType::FText,
         PropertyType::MulticastInlineDelegate => CType::MulticastInlineDelegate, // TODO
         PropertyType::MulticastSparseDelegate => CType::MulticastSparseDelegate, // TODO
-        PropertyType::Delegate => todo!(),
+        PropertyType::Delegate => CType::Delegate,
         PropertyType::Bool {
             field_size,
             byte_offset,
@@ -233,7 +262,10 @@ fn into_ctype<'a>(objects: &'a Objects, prop: &'a Property, store: &mut TypeStor
             let class = CType::UEClass(class);
             CType::TSoftObjectPtr(store.insert(class))
         }
-        PropertyType::LazyObject { class } => todo!(),
+        PropertyType::LazyObject { class } => {
+            let class = CType::UEClass(class);
+            CType::TLazyObjectPtr(store.insert(class))
+        }
         PropertyType::Interface { class } => {
             let class = CType::UEClass(class);
             CType::TScriptInterface(store.insert(class))
@@ -272,6 +304,7 @@ enum CType<'a> {
     FText,
     MulticastInlineDelegate,
     MulticastSparseDelegate,
+    Delegate,
 
     TArray(TypeId),
     TMap(TypeId, TypeId),
@@ -279,6 +312,7 @@ enum CType<'a> {
     Ptr(TypeId),
     TWeakObjectPtr(TypeId),
     TSoftObjectPtr(TypeId),
+    TLazyObjectPtr(TypeId),
     TScriptInterface(TypeId),
 
     TTuple(TypeId, TypeId),
@@ -288,66 +322,126 @@ enum CType<'a> {
     UEStruct(&'a str),
 }
 
-fn type_to_string(objects: &Objects, store: &TypeStore<'_>, id: TypeId) -> String {
-    let ctype = &store[id];
-    match ctype {
-        CType::Float => "float".into(),
-        CType::Double => "double".into(),
-        CType::Byte => "uint8_t".into(), // TODO enum
-        CType::UInt16 => "uint16_t".into(),
-        CType::UInt32 => "uint32_t".into(),
-        CType::UInt64 => "uint64_t".into(),
-        CType::Int8 => "int8_t".into(),
-        CType::Int16 => "int16_t".into(),
-        CType::Int32 => "int32_t".into(),
-        CType::Int64 => "int64_t".into(),
-
-        CType::Bool => "bool".into(),
-
-        CType::FName => "FName".into(),
-        CType::FString => "FString".into(),
-        CType::FText => "FText".into(),
-        CType::MulticastInlineDelegate => "MulticastInlineDelegate".into(),
-        CType::MulticastSparseDelegate => "MulticastSparseDelegate".into(),
-
-        CType::TArray(type_id) => format!("TArray<{}>", type_to_string(objects, store, *type_id)),
-        CType::TMap(k, v) => format!(
-            "TMap<{}, {}>",
-            type_to_string(objects, store, *k),
-            type_to_string(objects, store, *v)
-        ),
-        CType::TSet(type_id) => format!("TSet<{}>", type_to_string(objects, store, *type_id)),
-        CType::Ptr(type_id) => format!("{}*", type_to_string(objects, store, *type_id)),
-        CType::TWeakObjectPtr(type_id) => {
-            format!(
-                "TWeakObjectPtr<{}>",
-                type_to_string(objects, store, *type_id)
-            )
+struct TypeName {
+    name: String,
+    primitive: bool,
+    pointer: bool,
+}
+impl TypeName {
+    fn new(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            primitive: false,
+            pointer: false,
         }
-        CType::TSoftObjectPtr(type_id) => {
-            format!(
-                "TSoftObjectPtr<{}>",
-                type_to_string(objects, store, *type_id)
-            )
+    }
+    fn primitive(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            primitive: true,
+            pointer: false,
         }
-        CType::TScriptInterface(type_id) => {
-            format!(
-                "TScriptInterface<{}>",
-                type_to_string(objects, store, *type_id)
-            )
+    }
+    fn pointer(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            primitive: false,
+            pointer: true,
         }
-
-        CType::TTuple(a, b) => {
-            let a = type_to_string(objects, store, *a);
-            let b = type_to_string(objects, store, *b);
-            format!("TTuple<{a}, {b}>",)
+    }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    //fn escaped_name(&self) -> String {
+    //    if self.primitive {
+    //        self.name.to_string()
+    //    } else {
+    //        format!("`{}`", self.name)
+    //    }
+    //}
+    fn escaped_name(&self, escape: bool) -> String {
+        if self.primitive || self.pointer || !escape {
+            self.name.to_string()
+        } else {
+            format!("`{}`", self.name)
         }
-
-        CType::UEClass(path) => obj_name(objects, path),
-        CType::UEEnum(path) => obj_name(objects, path),
-        CType::UEStruct(path) => obj_name(objects, path),
     }
 }
+
+fn type_to_string(objects: &Objects, store: &TypeStore<'_>, id: TypeId, escape: bool) -> String {
+    let ctype = &store[id];
+    let type_name = match ctype {
+        CType::Float => TypeName::primitive("float"),
+        CType::Double => TypeName::primitive("double"),
+        CType::Byte => TypeName::primitive("uint8_t"), // TODO enum
+        CType::UInt16 => TypeName::primitive("uint16_t"),
+        CType::UInt32 => TypeName::primitive("uint32_t"),
+        CType::UInt64 => TypeName::primitive("uint64_t"),
+        CType::Int8 => TypeName::primitive("int8_t"),
+        CType::Int16 => TypeName::primitive("int16_t"),
+        CType::Int32 => TypeName::primitive("int32_t"),
+        CType::Int64 => TypeName::primitive("int64_t"),
+
+        CType::Bool => TypeName::primitive("bool"),
+
+        CType::FName => TypeName::new("FName"),
+        CType::FString => TypeName::new("FString"),
+        CType::FText => TypeName::new("FText"),
+        CType::MulticastInlineDelegate => TypeName::new("MulticastInlineDelegate"),
+        CType::MulticastSparseDelegate => TypeName::new("MulticastSparseDelegate"),
+        CType::Delegate => TypeName::new("Delegate"),
+
+        CType::TArray(type_id) => TypeName::new(format!(
+            "TArray<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+        CType::TMap(k, v) => TypeName::new(format!(
+            "TMap<{}, {}>",
+            type_to_string(objects, store, *k, false),
+            type_to_string(objects, store, *v, false)
+        )),
+        CType::TSet(type_id) => TypeName::new(format!(
+            "TSet<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+        CType::Ptr(type_id) => TypeName::pointer(format!(
+            "{}*",
+            type_to_string(objects, store, *type_id, escape)
+        )),
+        CType::TWeakObjectPtr(type_id) => TypeName::new(format!(
+            "TWeakObjectPtr<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+        CType::TSoftObjectPtr(type_id) => TypeName::new(format!(
+            "TSoftObjectPtr<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+        CType::TLazyObjectPtr(type_id) => TypeName::new(format!(
+            "TLazyObjectPtr<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+        CType::TScriptInterface(type_id) => TypeName::new(format!(
+            "TScriptInterface<{}>",
+            type_to_string(objects, store, *type_id, false)
+        )),
+
+        CType::TTuple(a, b) => {
+            let a = type_to_string(objects, store, *a, false);
+            let b = type_to_string(objects, store, *b, false);
+            TypeName::new(format!("TTuple<{}, {}>", a, b))
+        }
+
+        CType::UEClass(path) => TypeName::new(obj_name(objects, path)),
+        CType::UEEnum(path) => TypeName::new(obj_name(objects, path)),
+        CType::UEStruct(path) => TypeName::new(obj_name(objects, path)),
+    };
+    type_name.escaped_name(escape)
+}
+
+// `TArray<Something*>`
+// `Something`*
+// `TArray<Something*>`*
+// TArray<TArray<Something*>*>
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum DepType {
@@ -383,6 +477,7 @@ fn get_type_dependencies<'a>(
         CType::FText => {}
         CType::MulticastInlineDelegate => {}
         CType::MulticastSparseDelegate => {}
+        CType::Delegate => {}
         CType::TArray(type_id) => {
             dependencies.push((DepType::Full, type_id));
         }
@@ -392,13 +487,24 @@ fn get_type_dependencies<'a>(
             dependencies.push((DepType::Full, k));
             dependencies.push((DepType::Full, v));
         }
-        CType::TSet(type_id) => {}
+        CType::TSet(k) => {
+            dependencies.push((DepType::Full, k));
+        }
         CType::Ptr(type_id) => {
             dependencies.push((DepType::Partial, type_id));
         }
-        CType::TWeakObjectPtr(type_id) => {}
-        CType::TSoftObjectPtr(type_id) => {}
-        CType::TScriptInterface(type_id) => {}
+        CType::TWeakObjectPtr(type_id) => {
+            dependencies.push((DepType::Partial, type_id));
+        }
+        CType::TSoftObjectPtr(type_id) => {
+            dependencies.push((DepType::Partial, type_id));
+        }
+        CType::TLazyObjectPtr(type_id) => {
+            dependencies.push((DepType::Partial, type_id));
+        }
+        CType::TScriptInterface(type_id) => {
+            dependencies.push((DepType::Partial, type_id));
+        }
         CType::TTuple(a, b) => {
             dependencies.push((DepType::Full, a));
             dependencies.push((DepType::Full, b));
@@ -408,7 +514,7 @@ fn get_type_dependencies<'a>(
             for prop in &class.r#struct.properties {
                 let prop_id = into_ctype(objects, prop, store);
                 dependencies.push((DepType::Full, prop_id));
-                get_type_dependencies(dependencies, objects, store, prop_id);
+                //get_type_dependencies(dependencies, objects, store, prop_id);
             }
         }
         CType::UEEnum(_) => {}
@@ -417,7 +523,7 @@ fn get_type_dependencies<'a>(
             for prop in &struct_.properties {
                 let prop_id = into_ctype(objects, prop, store);
                 dependencies.push((DepType::Full, prop_id));
-                get_type_dependencies(dependencies, objects, store, prop_id);
+                //get_type_dependencies(dependencies, objects, store, prop_id);
             }
         }
     }
@@ -430,6 +536,7 @@ fn decl_ctype<'a>(
     id: TypeId,
 ) {
     let ctype = &store[id];
+    let this = type_to_string(objects, store, id, true);
     match ctype {
         CType::Float => {}
         CType::Double => {}
@@ -442,41 +549,40 @@ fn decl_ctype<'a>(
         CType::Int32 => {}
         CType::Int64 => {}
         CType::Bool => {}
-        CType::FName => {}
+        CType::FName => {
+            writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+        }
         CType::FString => {
             // TODO user TArray
             writeln!(
                 buffer,
-                r#"struct FString {{
-    data: wchar_t*,
-    num: int32_t,
-    max: int32_t,
+                r#"struct {this} {{
+    wchar_t* data;
+    int32_t num;
+    int32_t max;
 }};"#
             )
             .unwrap();
         }
         CType::FText => {
-            writeln!(buffer, r#"struct FText {{ /* TODO */ }};"#).unwrap();
+            writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
         CType::MulticastInlineDelegate => {}
         CType::MulticastSparseDelegate => {}
+        CType::Delegate => {}
         CType::TArray(type_id) => {
-            let inner_name = type_to_string(objects, store, *type_id);
+            let inner = type_to_string(objects, store, *type_id, true);
             writeln!(
                 buffer,
-                r#"struct `TArray<{0}>` {{
-    {0} data;
+                r#"struct {this} {{
+    {inner} data;
     int32_t num;
     int32_t max;
 }};"#,
-                inner_name
             )
             .unwrap();
         }
         CType::TMap(k, v) => {
-            let key_name = type_to_string(objects, store, *k);
-            let value_name = type_to_string(objects, store, *v);
-
             // struct TSet<TTuple<int,FGeneratedMissionGroup>,TDefaultMapHashableKeyFuncs<int,FGeneratedMissionGroup,0>,FDefaultSetAllocator>  {
             // /* offset 0x000 */ Elements: TSparseArray<TSetElement<TTuple<int,FGeneratedMissionGroup> >,TSparseArrayAllocator<TSizedDefaultAllocator<32>,FDefaultBitArrayAllocator> >,
             // /* offset 0x038 */ Hash: TInlineAllocator<1,TSizedDefaultAllocator<32> >::ForElementType<FSetElementId>,
@@ -484,52 +590,55 @@ fn decl_ctype<'a>(
 
             writeln!(
                 buffer,
-                r#"struct `TMap<{0}, {1}>` {{
+                r#"struct {this} {{
     // TODO
 }};"#,
-                key_name, value_name,
             )
             .unwrap();
         }
         CType::TSet(type_id) => {}
         CType::Ptr(type_id) => {}
         CType::TWeakObjectPtr(type_id) => {}
-        CType::TSoftObjectPtr(type_id) => {}
+        CType::TSoftObjectPtr(type_id) => {
+            writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+        }
+        CType::TLazyObjectPtr(type_id) => {
+            writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+        }
         CType::TScriptInterface(type_id) => {}
 
         CType::TTuple(a, b) => {
-            let a = type_to_string(objects, store, *a);
-            let b = type_to_string(objects, store, *b);
+            let a = type_to_string(objects, store, *a, true);
+            let b = type_to_string(objects, store, *b, true);
 
             writeln!(
                 buffer,
-                r#"struct `TTuple<{0}, {1}>` {{
-    {0} a;
-    {1} b;
+                r#"struct {this} {{
+    {a} a;
+    {b} b;
 }};"#,
-                a, b,
             )
             .unwrap();
         }
 
         CType::UEClass(path) => {
-            writeln!(buffer, "class {} {{", obj_name(objects, path)).unwrap();
+            writeln!(buffer, "class {this} {{").unwrap();
             let class = &objects[*path].get_class().unwrap();
             for prop in &class.r#struct.properties {
                 let ctype = into_ctype(objects, prop, store);
-                let type_name = type_to_string(objects, store, ctype);
-                writeln!(buffer, "    `{}` {};", type_name, prop.name).unwrap();
+                let type_name = type_to_string(objects, store, ctype, true);
+                writeln!(buffer, "    {} {};", type_name, prop.name).unwrap();
             }
             writeln!(buffer, "}};").unwrap();
         }
         CType::UEEnum(_) => {}
         CType::UEStruct(path) => {
-            writeln!(buffer, "struct {} {{", obj_name(objects, path)).unwrap();
+            writeln!(buffer, "struct {this} {{").unwrap();
             let struct_ = &objects[*path].get_struct().unwrap();
             for prop in &struct_.properties {
                 let ctype = into_ctype(objects, prop, store);
-                let type_name = type_to_string(objects, store, ctype);
-                writeln!(buffer, "    `{}` {};", type_name, prop.name).unwrap();
+                let type_name = type_to_string(objects, store, ctype, true);
+                writeln!(buffer, "    {} {};", type_name, prop.name).unwrap();
             }
             writeln!(buffer, "}};").unwrap();
         }
@@ -540,8 +649,8 @@ fn quote_name(name: &str) -> String {
     format!("`{name}`")
 }
 
-trait GraphKey: Clone + Copy + PartialEq + Eq + std::hash::Hash {}
-impl<T> GraphKey for T where T: Clone + Copy + PartialEq + Eq + std::hash::Hash {}
+trait GraphKey: Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug {}
+impl<T> GraphKey for T where T: Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug {}
 fn topological_sort<T: GraphKey>(graph: &HashMap<T, Vec<T>>) -> Option<Vec<T>> {
     let mut result: Vec<T> = Vec::new();
     let mut visited = HashSet::new();
@@ -557,6 +666,7 @@ fn topological_sort<T: GraphKey>(graph: &HashMap<T, Vec<T>>) -> Option<Vec<T>> {
     ) -> bool {
         // If node is temporarily visited, we have a cycle
         if temp_visited.contains(&node) {
+            println!("CYCLE {node:?}");
             return false;
         }
 
@@ -572,6 +682,7 @@ fn topological_sort<T: GraphKey>(graph: &HashMap<T, Vec<T>>) -> Option<Vec<T>> {
         if let Some(neighbors) = graph.get(&node) {
             for &neighbor in neighbors {
                 if !dfs(neighbor, graph, visited, temp_visited, result) {
+                    println!("  {node:?}");
                     return false;
                 }
             }
@@ -595,6 +706,7 @@ fn topological_sort<T: GraphKey>(graph: &HashMap<T, Vec<T>>) -> Option<Vec<T>> {
                 &mut temp_visited,
                 &mut result,
             ) {
+                //dbg!((node, temp_visited, visited));
                 return None; // Graph has a cycle
             }
         }
@@ -613,9 +725,10 @@ mod test {
     fn test_into_header() -> Result<()> {
         let objects: Objects = serde_json::from_slice(&std::fs::read("../fsd.json")?)?;
         let header = into_header(&objects, |path, obj| {
-            path.contains("MissionGenerationManager")
+            path.contains("MissionGenerationManager") || path.contains("ActorComponent")
         });
         println!("{header}");
+        std::fs::write("header.cpp", header)?;
         Ok(())
     }
 }
