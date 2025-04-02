@@ -81,7 +81,7 @@ pub fn into_header(
 }
 
 impl<'objects> Ctx<'objects, '_> {
-    fn into_ctype(&mut self, prop: &'objects Property) -> TypeId {
+    fn prop_ctype(&mut self, prop: &'objects Property) -> TypeId {
         let new_type = match &prop.r#type {
             PropertyType::Struct { r#struct } => CType::UEStruct(r#struct),
             PropertyType::Str => CType::FString,
@@ -97,7 +97,7 @@ impl<'objects> Ctx<'objects, '_> {
                 byte_mask,
                 field_mask,
             } => CType::Bool, // TODO
-            PropertyType::Array { inner } => CType::TArray(self.into_ctype(inner)),
+            PropertyType::Array { inner } => CType::TArray(self.prop_ctype(inner)),
             PropertyType::Enum { container, r#enum } => {
                 CType::UEEnum(r#enum.as_ref().expect("TODO unknown enum name"))
             }
@@ -105,11 +105,11 @@ impl<'objects> Ctx<'objects, '_> {
                 key_prop,
                 value_prop,
             } => {
-                let key = self.into_ctype(key_prop);
-                let value = self.into_ctype(value_prop);
+                let key = self.prop_ctype(key_prop);
+                let value = self.prop_ctype(value_prop);
                 CType::TMap(key, value)
             }
-            PropertyType::Set { key_prop } => CType::TSet(self.into_ctype(key_prop)),
+            PropertyType::Set { key_prop } => CType::TSet(self.prop_ctype(key_prop)),
             PropertyType::Float => CType::Float,
             PropertyType::Double => CType::Double,
             PropertyType::Byte { r#enum } => CType::Byte,
@@ -303,7 +303,7 @@ impl<'objects> Ctx<'objects, '_> {
                     dependencies.push((DepType::Full, super_id));
                 }
                 for prop in &struct_.properties {
-                    let prop_id = self.into_ctype(prop);
+                    let prop_id = self.prop_ctype(prop);
                     dependencies.push((DepType::Full, prop_id));
                 }
             }
@@ -314,7 +314,7 @@ impl<'objects> Ctx<'objects, '_> {
                     dependencies.push((DepType::Full, super_id));
                 }
                 for prop in &class.r#struct.properties {
-                    let prop_id = self.into_ctype(prop);
+                    let prop_id = self.prop_ctype(prop);
                     dependencies.push((DepType::Full, prop_id));
                 }
             }
@@ -608,7 +608,7 @@ impl<'objects> Ctx<'objects, '_> {
                 .unwrap();
             }
 
-            let ctype = self.into_ctype(prop);
+            let ctype = self.prop_ctype(prop);
             let type_name = self.type_to_string(ctype, true);
 
             // TODO multi-dimension?
@@ -644,27 +644,25 @@ impl<'objects> Ctx<'objects, '_> {
         let mut dep_graph = HashMap::new();
         // get dependencies of initial top level classes
         for (path, obj) in self.objects {
-            if filter(path, obj) {
-                if let Some(_) = obj.get_class() {
-                    let mut dependencies = vec![];
-                    let class_id = self.store.insert(CType::UEClass(path));
-                    let type_ = (DepType::Full, class_id);
-                    self.get_type_dependencies(&mut dependencies, type_);
-                    dep_graph.insert(type_, dependencies.clone());
+            if filter(path, obj) && obj.get_class().is_some() {
+                let mut dependencies = vec![];
+                let class_id = self.store.insert(CType::UEClass(path));
+                let type_ = (DepType::Full, class_id);
+                self.get_type_dependencies(&mut dependencies, type_);
+                dep_graph.insert(type_, dependencies.clone());
 
-                    // in the rare circumstance the current item was already added to the to_visit list
-                    to_visit.remove(&type_);
+                // in the rare circumstance the current item was already added to the to_visit list
+                to_visit.remove(&type_);
 
-                    for dep in dependencies {
-                        if !dep_graph.contains_key(&dep) {
-                            to_visit.insert(dep);
-                            //if dep.0 == DepType::Partial {
-                            //    let full = (DepType::Full, dep.1);
-                            //    if !dep_graph.contains_key(&full) {
-                            //        to_visit.push(full);
-                            //    }
-                            //}
-                        }
+                for dep in dependencies {
+                    if !dep_graph.contains_key(&dep) {
+                        to_visit.insert(dep);
+                        //if dep.0 == DepType::Partial {
+                        //    let full = (DepType::Full, dep.1);
+                        //    if !dep_graph.contains_key(&full) {
+                        //        to_visit.push(full);
+                        //    }
+                        //}
                     }
                 }
             }
@@ -672,7 +670,7 @@ impl<'objects> Ctx<'objects, '_> {
         println!(" --- ERM --- ");
 
         fn pop<T: Clone + Eq + std::hash::Hash>(set: &mut HashSet<T>) -> Option<T> {
-            set.iter().cloned().next().inspect(|item| {
+            set.iter().next().cloned().inspect(|item| {
                 set.remove(item);
             })
         }
@@ -914,17 +912,10 @@ fn topological_sort<T: GraphKey>(graph: &HashMap<T, Vec<T>>) -> Option<Vec<T>> {
 
     // Run DFS for each node
     for node in graph.keys() {
-        if !visited.contains(node) {
-            if !dfs(
-                node.clone(),
-                graph,
-                &mut visited,
-                &mut temp_visited,
-                &mut result,
-            ) {
-                //dbg!((node, temp_visited, visited));
-                return None; // Graph has a cycle
-            }
+        if !visited.contains(node)
+            && !dfs(*node, graph, &mut visited, &mut temp_visited, &mut result)
+        {
+            return None; // Graph has a cycle
         }
     }
 
