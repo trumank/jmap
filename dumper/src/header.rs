@@ -1,17 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::fmt::{write, Write};
+use std::fmt::Write;
 
 use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, Struct};
 
-use crate::objects::UEnum;
-
 type Objects = BTreeMap<String, ObjectType>;
-
-type CTypes<'a> = HashSet<CType<'a>>;
-
-struct GenCtx<'a> {
-    types: CTypes<'a>,
-}
 
 #[derive(Default)]
 struct TypeStore<'a> {
@@ -78,35 +70,6 @@ pub fn into_header(
     let mut buffer = String::new();
 
     let mut type_store = TypeStore::default();
-
-    //for (path, obj) in objects {
-    //    match obj {
-    //        //ue_reflection::ObjectType::Object(object) => todo!(),
-    //        //ue_reflection::ObjectType::Package(package) => todo!(),
-    //        //ue_reflection::ObjectType::Enum(_) => todo!(),
-    //        //ue_reflection::ObjectType::ScriptStruct(script_struct) => todo!(),
-    //        ue_reflection::ObjectType::Class(class) => {
-    //            if filter(path, obj) {
-    //                writeln!(&mut buffer, "class {} {{", obj_name(objects, path)).unwrap();
-
-    //                for prop in &class.r#struct.properties {
-    //                    let type_id = into_ctype(objects, prop, &mut type_store);
-    //                    let type_name = type_to_string(objects, &type_store, type_id);
-    //                    writeln!(
-    //                        &mut buffer,
-    //                        "    {} {}; // 0x{:x}",
-    //                        type_name, prop.name, prop.offset
-    //                    )
-    //                    .unwrap();
-    //                }
-
-    //                writeln!(&mut buffer, "}}").unwrap();
-    //            }
-    //        }
-    //        //ue_reflection::ObjectType::Function(function) => todo!(),
-    //        _ => {}
-    //    }
-    //}
 
     let mut to_visit = HashSet::new();
     let mut dep_graph = HashMap::new();
@@ -310,6 +273,8 @@ enum CType<'a> {
     Int32,
     Int64,
 
+    WChar,
+
     Bool, // TODO bitfield
 
     FName,
@@ -395,6 +360,8 @@ fn type_to_string(objects: &Objects, store: &TypeStore<'_>, id: TypeId, escape: 
         CType::Int16 => TypeName::primitive("int16_t"),
         CType::Int32 => TypeName::primitive("int32_t"),
         CType::Int64 => TypeName::primitive("int64_t"),
+
+        CType::WChar => TypeName::primitive("wchar_t"),
 
         CType::Bool => TypeName::primitive("bool"),
 
@@ -492,12 +459,11 @@ fn get_type_dependencies<'a>(
         CType::Int16 => {}
         CType::Int32 => {}
         CType::Int64 => {}
+        CType::WChar => {}
         CType::Bool => {}
         CType::FName => {}
         CType::FString => {
-            let inner = store.insert(CType::UInt16); // TODO wchar
-            let array = store.insert(CType::TArray(inner));
-            dependencies.push((DepType::Full, array));
+            dependencies.push((DepType::Full, type_fstring_data(store)));
         }
         CType::FText => {}
         CType::FFieldPath => {}
@@ -583,6 +549,7 @@ fn get_type_size<'a>(
         CType::Int16 => (2, 2),
         CType::Int32 => (4, 4),
         CType::Int64 => (8, 8),
+        CType::WChar => (2, 2),
         CType::Bool => (1, 1), // TODO
         CType::FName => (8, 4),
         CType::FString => (16, 8),    // TODO size TArray<wchar_t>
@@ -624,6 +591,11 @@ fn get_type_size<'a>(
     }
 }
 
+fn type_fstring_data(store: &mut TypeStore<'_>) -> TypeId {
+    let t_wchar = store.insert(CType::WChar);
+    store.insert(CType::TArray(t_wchar))
+}
+
 fn decl_ctype<'a>(
     buffer: &mut String,
     objects: &'a Objects,
@@ -643,18 +615,18 @@ fn decl_ctype<'a>(
         CType::Int16 => {}
         CType::Int32 => {}
         CType::Int64 => {}
+        CType::WChar => {}
         CType::Bool => {}
         CType::FName => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
         CType::FString => {
-            // TODO user TArray
+            let data = type_fstring_data(store);
+            let data_name = type_to_string(objects, store, data, true);
             writeln!(
                 buffer,
                 r#"struct {this} {{
-    wchar_t* data;
-    int32_t num;
-    int32_t max;
+    {data_name} data;
 }};"#
             )
             .unwrap();
