@@ -281,6 +281,7 @@ pub type ReflectionData = std::collections::BTreeMap<String, ObjectType>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
+    pub vtable: u64,
     pub outer: Option<String>,
     pub class: String,
 }
@@ -319,6 +320,7 @@ pub struct Class {
 pub struct Function {
     #[serde(flatten)]
     pub r#struct: Struct,
+    pub func: u64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {

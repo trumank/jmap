@@ -289,7 +289,11 @@ fn dump_inner<M: Mem + Clone>(
                 .map(|s| read_path(&s))
                 .transpose()?;
             let class = read_path(&obj.class_private().read()?.ustruct().ufield().uobject())?;
-            Ok(Object { outer, class })
+            Ok(Object {
+                vtable: obj.vtable().read()? as u64,
+                outer,
+                class,
+            })
         }
 
         fn read_struct<M: MemComplete>(obj: &CtxPtr<UStruct, M>) -> Result<Struct> {
@@ -347,10 +351,12 @@ fn dump_inner<M: Mem + Clone>(
                 }),
             );
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
+            let full_obj = obj.cast::<UFunction>();
             objects.insert(
                 path,
                 ObjectType::Function(Function {
                     r#struct: read_struct(&obj.cast())?,
+                    func: full_obj.func().read()? as u64,
                 }),
             );
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {

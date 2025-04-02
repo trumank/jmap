@@ -151,6 +151,7 @@ impl POD for i32 {}
 impl POD for u32 {}
 impl POD for i64 {}
 impl POD for u64 {}
+impl POD for usize {}
 impl POD for EClassCastFlags {}
 impl POD for EClassFlags {}
 impl POD for EFunctionFlags {}

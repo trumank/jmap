@@ -8,6 +8,9 @@ use ue_reflection::{EClassCastFlags, EClassFlags, EFunctionFlags, EPropertyFlags
 #[derive(Clone, Copy)]
 pub struct UObject;
 impl<C: Clone + StructsTrait> CtxPtr<UObject, C> {
+    pub fn vtable(&self) -> CtxPtr<usize, C> {
+        self.cast()
+    }
     pub fn class_private(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
         let offset = self.ctx().struct_member("UObjectBase", "ClassPrivate");
         self.byte_offset(offset).cast()
@@ -94,6 +97,10 @@ impl<C: Clone + StructsTrait> CtxPtr<UFunction, C> {
     }
     pub fn function_flags(&self) -> CtxPtr<EFunctionFlags, C> {
         let offset = self.ctx().struct_member("UFunction", "FunctionFlags");
+        self.byte_offset(offset).cast()
+    }
+    pub fn func(&self) -> CtxPtr<usize, C> {
+        let offset = self.ctx().struct_member("UFunction", "Func");
         self.byte_offset(offset).cast()
     }
 }
