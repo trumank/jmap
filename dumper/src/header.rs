@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{write, Write};
 
-use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType};
+use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, Struct};
+
+use crate::objects::UEnum;
 
 type Objects = BTreeMap<String, ObjectType>;
 
@@ -114,11 +116,11 @@ pub fn into_header(
             if let Some(_) = obj.get_class() {
                 let mut dependencies = vec![];
                 let class_id = type_store.insert(CType::UEClass(path));
-                get_type_dependencies(&mut dependencies, objects, &mut type_store, class_id);
                 let type_ = (DepType::Full, class_id);
+                get_type_dependencies(&mut dependencies, objects, &mut type_store, type_);
                 dep_graph.insert(type_, dependencies.clone());
                 for dep in dependencies {
-                    if !dep_graph.contains_key(&dep) {
+                    if !dep_graph.contains_key(&dep) && !to_visit.contains(&dep) {
                         to_visit.push(dep);
                         //if dep.0 == DepType::Partial {
                         //    let full = (DepType::Full, dep.1);
@@ -135,12 +137,12 @@ pub fn into_header(
     // get dependencies of dependencies
     while let Some(next) = to_visit.pop() {
         let mut dependencies = vec![];
-        if next.0 == DepType::Full && !dep_graph.contains_key(&next) {
-            get_type_dependencies(&mut dependencies, objects, &mut type_store, next.1);
+        if !dep_graph.contains_key(&next) {
+            get_type_dependencies(&mut dependencies, objects, &mut type_store, next);
         }
-        dep_graph.insert(next, dependencies.clone());
+        assert!(dep_graph.insert(next, dependencies.clone()).is_none());
         for dep in dependencies {
-            if !dep_graph.contains_key(&dep) {
+            if !dep_graph.contains_key(&dep) && !to_visit.contains(&dep) {
                 to_visit.push(dep);
                 //if dep.0 == DepType::Partial {
                 //    let full = (DepType::Full, dep.1);
@@ -186,12 +188,12 @@ pub fn into_header(
                 //CType::TSoftObjectPtr(type_id) => todo!(),
                 //CType::TScriptInterface(type_id) => todo!(),
                 //CType::TTuple(type_id, type_id1) => todo!(),
-                CType::UEClass(path) => {
-                    writeln!(&mut buffer, "class `{}`;", obj_name(objects, path)).unwrap();
-                }
-                CType::UEEnum(_) => todo!(),
+                CType::UEEnum(_) => {}
                 CType::UEStruct(path) => {
                     writeln!(&mut buffer, "struct `{}`;", obj_name(objects, path)).unwrap();
+                }
+                CType::UEClass(path) => {
+                    writeln!(&mut buffer, "class `{}`;", obj_name(objects, path)).unwrap();
                 }
                 _ => {}
             }
@@ -317,9 +319,9 @@ enum CType<'a> {
 
     TTuple(TypeId, TypeId),
 
-    UEClass(&'a str),
     UEEnum(&'a str),
     UEStruct(&'a str),
+    UEClass(&'a str),
 }
 
 struct TypeName {
@@ -431,9 +433,9 @@ fn type_to_string(objects: &Objects, store: &TypeStore<'_>, id: TypeId, escape: 
             TypeName::new(format!("TTuple<{}, {}>", a, b))
         }
 
-        CType::UEClass(path) => TypeName::new(obj_name(objects, path)),
         CType::UEEnum(path) => TypeName::new(obj_name(objects, path)),
         CType::UEStruct(path) => TypeName::new(obj_name(objects, path)),
+        CType::UEClass(path) => TypeName::new(obj_name(objects, path)),
     };
     type_name.escaped_name(escape)
 }
@@ -453,9 +455,19 @@ fn get_type_dependencies<'a>(
     dependencies: &mut Vec<(DepType, TypeId)>,
     objects: &'a Objects,
     store: &mut TypeStore<'a>,
-    id: TypeId,
+    (dep_type, id): (DepType, TypeId),
 ) {
     let ctype = store[id].clone();
+
+    match (dep_type, &ctype) {
+        (DepType::Full, _) => {}
+        (DepType::Partial, CType::Ptr(_)) => {}
+        (DepType::Partial, CType::UEEnum(_)) => {
+            // add dependency on full enum because enum forward declarations aren't a thing
+            dependencies.push((DepType::Full, id));
+        }
+        _ => return,
+    }
     match ctype {
         CType::Float => {}
         CType::Double => {}
@@ -479,7 +491,8 @@ fn get_type_dependencies<'a>(
         CType::MulticastSparseDelegate => {}
         CType::Delegate => {}
         CType::TArray(type_id) => {
-            dependencies.push((DepType::Full, type_id));
+            let ptr_id = store.insert(CType::Ptr(type_id));
+            dependencies.push((DepType::Full, ptr_id));
         }
         CType::TMap(k, v) => {
             let tuple = store.insert(CType::TTuple(k, v));
@@ -509,22 +522,89 @@ fn get_type_dependencies<'a>(
             dependencies.push((DepType::Full, a));
             dependencies.push((DepType::Full, b));
         }
-        CType::UEClass(class) => {
-            let class = &objects[class].get_class().unwrap();
-            for prop in &class.r#struct.properties {
-                let prop_id = into_ctype(objects, prop, store);
-                dependencies.push((DepType::Full, prop_id));
-                //get_type_dependencies(dependencies, objects, store, prop_id);
-            }
-        }
         CType::UEEnum(_) => {}
-        CType::UEStruct(struct_) => {
-            let struct_ = &objects[struct_].get_struct().unwrap();
+        CType::UEStruct(path) => {
+            let struct_ = &objects[path].get_struct().unwrap();
+            if let Some(super_) = &struct_.super_struct {
+                let super_id = store.insert(CType::UEStruct(super_));
+                dependencies.push((DepType::Full, super_id));
+            }
             for prop in &struct_.properties {
                 let prop_id = into_ctype(objects, prop, store);
                 dependencies.push((DepType::Full, prop_id));
-                //get_type_dependencies(dependencies, objects, store, prop_id);
             }
+        }
+        CType::UEClass(class) => {
+            let class = &objects[class].get_class().unwrap();
+            if let Some(super_) = &class.r#struct.super_struct {
+                let super_id = store.insert(CType::UEClass(super_));
+                dependencies.push((DepType::Full, super_id));
+            }
+            for prop in &class.r#struct.properties {
+                let prop_id = into_ctype(objects, prop, store);
+                dependencies.push((DepType::Full, prop_id));
+            }
+        }
+    }
+}
+
+fn align_up(addr: usize, alignment: usize) -> usize {
+    (addr + (alignment - 1)) & !alignment
+}
+
+fn get_type_size<'a>(
+    objects: &'a Objects,
+    store: &mut TypeStore<'a>,
+    id: TypeId,
+) -> (usize, usize) {
+    let ctype = store[id].clone();
+    match ctype {
+        CType::Float => (4, 4),
+        CType::Double => (8, 8),
+        CType::Byte => (1, 1),
+        CType::UInt16 => (2, 2),
+        CType::UInt32 => (4, 4),
+        CType::UInt64 => (8, 8),
+        CType::Int8 => (1, 1),
+        CType::Int16 => (2, 2),
+        CType::Int32 => (4, 4),
+        CType::Int64 => (8, 8),
+        CType::Bool => (1, 1), // TODO
+        CType::FName => (8, 4),
+        CType::FString => (16, 8), // TODO size TArray<wchar_t>
+        CType::FText => (1, 1),    // TODO
+        CType::MulticastInlineDelegate => (1, 1), // TODO
+        CType::MulticastSparseDelegate => (1, 1), // TODO
+        CType::Delegate => (1, 1), // TODO
+        CType::TArray(_) => (16, 8),
+        CType::TMap(k, v) => (1, 1), // TODO
+        CType::TSet(k) => (1, 1),    // TODO
+        CType::Ptr(_) => (8, 8),
+        CType::TWeakObjectPtr(_) => (8, 4),
+        CType::TSoftObjectPtr(_) => (1, 1),
+        CType::TLazyObjectPtr(_) => (1, 1),
+        CType::TScriptInterface(_) => (16, 8),
+        CType::TTuple(a, b) => {
+            let (s_a, a_a) = get_type_size(objects, store, a);
+            let (s_b, a_b) = get_type_size(objects, store, b);
+            let align = a_a.max(a_b);
+            let size = align_up(s_a + s_b, align);
+            (size, align)
+        }
+        CType::UEEnum(path) => {
+            // TODO unknown...
+            let enum_ = &objects[path].get_enum().unwrap();
+            let min = enum_.names.iter().map(|(_, v)| v).min().unwrap();
+            let max = enum_.names.iter().map(|(_, v)| v).max().unwrap();
+            if *min < i8::MIN as i64 || *max > u8::MAX as i64 {
+                (4, 4)
+            } else {
+                (1, 1)
+            }
+        }
+        CType::UEClass(path) | CType::UEStruct(path) => {
+            let struct_ = &objects[path].get_struct().unwrap();
+            (struct_.properties_size, struct_.min_alignment)
         }
     }
 }
@@ -535,7 +615,7 @@ fn decl_ctype<'a>(
     store: &mut TypeStore<'a>,
     id: TypeId,
 ) {
-    let ctype = &store[id];
+    let ctype = store[id].clone();
     let this = type_to_string(objects, store, id, true);
     match ctype {
         CType::Float => {}
@@ -567,11 +647,14 @@ fn decl_ctype<'a>(
         CType::FText => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
-        CType::MulticastInlineDelegate => {}
+        CType::MulticastInlineDelegate => {
+            writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+        }
         CType::MulticastSparseDelegate => {}
         CType::Delegate => {}
         CType::TArray(type_id) => {
-            let inner = type_to_string(objects, store, *type_id, true);
+            let ptr_id = store.insert(CType::Ptr(type_id));
+            let inner = type_to_string(objects, store, ptr_id, true);
             writeln!(
                 buffer,
                 r#"struct {this} {{
@@ -598,18 +681,37 @@ fn decl_ctype<'a>(
         }
         CType::TSet(type_id) => {}
         CType::Ptr(type_id) => {}
-        CType::TWeakObjectPtr(type_id) => {}
+        CType::TWeakObjectPtr(type_id) => {
+            writeln!(
+                buffer,
+                r#"struct {this} {{
+    int32_t ObjectIndex;
+    int32_t ObjectSerialNumber;
+}};"#
+            )
+            .unwrap();
+        }
         CType::TSoftObjectPtr(type_id) => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
         CType::TLazyObjectPtr(type_id) => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
-        CType::TScriptInterface(type_id) => {}
+        CType::TScriptInterface(type_id) => {
+            // TODO depend on UObject* type and interface type
+            writeln!(
+                buffer,
+                r#"struct {this} {{
+    void* ObjectPointer;
+    void* InterfacePointer;
+}};"#
+            )
+            .unwrap();
+        }
 
         CType::TTuple(a, b) => {
-            let a = type_to_string(objects, store, *a, true);
-            let b = type_to_string(objects, store, *b, true);
+            let a = type_to_string(objects, store, a, true);
+            let b = type_to_string(objects, store, b, true);
 
             writeln!(
                 buffer,
@@ -621,32 +723,111 @@ fn decl_ctype<'a>(
             .unwrap();
         }
 
-        CType::UEClass(path) => {
-            writeln!(buffer, "class {this} {{").unwrap();
-            let class = &objects[*path].get_class().unwrap();
-            for prop in &class.r#struct.properties {
-                let ctype = into_ctype(objects, prop, store);
-                let type_name = type_to_string(objects, store, ctype, true);
-                writeln!(buffer, "    {} {};", type_name, prop.name).unwrap();
+        CType::UEEnum(path) => {
+            // TODO unknown...
+            let enum_ = &objects[path].get_enum().unwrap();
+            let min = enum_.names.iter().map(|(_, v)| v).min().unwrap();
+            let max = enum_.names.iter().map(|(_, v)| v).max().unwrap();
+            let type_ = if *min < i8::MIN as i64 || *max > u8::MAX as i64 {
+                "uint32_t"
+            } else {
+                "uint8_t"
+            };
+            let enum_name = obj_name(objects, path);
+            let prefix = format!("{enum_name}::");
+            writeln!(buffer, "enum {this} : {type_} {{").unwrap();
+            if let Some((last, rest)) = enum_.names.split_last() {
+                let iter = rest.iter().map(|e| (e, ",")).chain([(last, "")]);
+                for ((name, value), comma) in iter {
+                    let name = name.strip_prefix(&prefix).unwrap_or(&name);
+                    writeln!(buffer, "    {name} = {value}{comma}",).unwrap();
+                }
             }
             writeln!(buffer, "}};").unwrap();
         }
-        CType::UEEnum(_) => {}
         CType::UEStruct(path) => {
-            writeln!(buffer, "struct {this} {{").unwrap();
-            let struct_ = &objects[*path].get_struct().unwrap();
-            for prop in &struct_.properties {
-                let ctype = into_ctype(objects, prop, store);
-                let type_name = type_to_string(objects, store, ctype, true);
-                writeln!(buffer, "    {} {};", type_name, prop.name).unwrap();
+            let (size, alignment) = get_type_size(objects, store, id);
+            writeln!(buffer, "// size=0x{size:x} align=0x{alignment:x}").unwrap();
+
+            let struct_ = &objects[path].get_struct().unwrap();
+            let (super_, super_name, base_offset) = if let Some(super_) = &struct_.super_struct {
+                let super_id = store.insert(CType::UEStruct(super_));
+                let (size, _align) = get_type_size(objects, store, super_id);
+                let super_name = type_to_string(objects, store, super_id, true);
+                (format!("__base({super_name}, 0) "), Some(super_name), size)
+            } else {
+                ("".into(), None, 0)
+            };
+
+            writeln!(buffer, "class {super_}{this} {{").unwrap();
+            if let Some(super_name) = super_name {
+                writeln!(buffer, "    __inherited {super_name} super;").unwrap();
             }
+            decl_props(buffer, objects, store, struct_, base_offset);
+            writeln!(buffer, "}};").unwrap();
+        }
+        CType::UEClass(path) => {
+            let (size, alignment) = get_type_size(objects, store, id);
+            writeln!(buffer, "// size=0x{size:x} align=0x{alignment:x}").unwrap();
+
+            let struct_ = &objects[path].get_class().unwrap().r#struct;
+            let (super_, super_name, base_offset) = if let Some(super_) = &struct_.super_struct {
+                let super_id = store.insert(CType::UEClass(super_));
+                let (size, _align) = get_type_size(objects, store, super_id);
+                let super_name = type_to_string(objects, store, super_id, true);
+                (format!("__base({super_name}, 0) "), Some(super_name), size)
+            } else {
+                ("".into(), None, 0)
+            };
+
+            writeln!(buffer, "class {super_}{this} {{").unwrap();
+            if let Some(super_name) = super_name {
+                writeln!(buffer, "    __inherited {super_name} super;").unwrap();
+            }
+            decl_props(buffer, objects, store, struct_, base_offset);
             writeln!(buffer, "}};").unwrap();
         }
     }
 }
 
-fn quote_name(name: &str) -> String {
-    format!("`{name}`")
+fn decl_props<'a>(
+    buffer: &mut String,
+    objects: &'a Objects,
+    store: &mut TypeStore<'a>,
+    struct_: &'a Struct,
+    mut end_last_prop: usize,
+) {
+    for prop in &struct_.properties {
+        //if align_up(end_last_prop, alignment) != prop.offset {
+        let delta = prop.offset - end_last_prop;
+        if delta != 0 {
+            writeln!(
+                buffer,
+                "    __padding char _{end_last_prop:x}[0x{delta:x}];"
+            )
+            .unwrap();
+        }
+
+        let ctype = into_ctype(objects, prop, store);
+        let type_name = type_to_string(objects, store, ctype, true);
+        writeln!(
+            buffer,
+            "    {} _0x{2:x}_{}; // 0x{:x}",
+            type_name, prop.name, prop.offset
+        )
+        .unwrap();
+
+        let (size, _alignment) = get_type_size(objects, store, ctype);
+        end_last_prop = prop.offset + size;
+    }
+    let delta = struct_.properties_size - end_last_prop;
+    if delta != 0 {
+        writeln!(
+            buffer,
+            "    __padding char _{end_last_prop:x}[0x{delta:x}];"
+        )
+        .unwrap();
+    }
 }
 
 trait GraphKey: Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug {}
@@ -725,7 +906,11 @@ mod test {
     fn test_into_header() -> Result<()> {
         let objects: Objects = serde_json::from_slice(&std::fs::read("../fsd.json")?)?;
         let header = into_header(&objects, |path, obj| {
-            path.contains("MissionGenerationManager") || path.contains("ActorComponent")
+            path.contains("MissionGenerationManager")
+                || path.contains("GeneratedMission")
+                || path.contains("CampaignManager")
+                || path.contains(".Campaign")
+                || path.contains(".FSDGameInstance")
         });
         println!("{header}");
         std::fs::write("header.cpp", header)?;
