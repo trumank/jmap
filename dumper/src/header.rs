@@ -108,7 +108,7 @@ pub fn into_header(
     //    }
     //}
 
-    let mut to_visit = vec![];
+    let mut to_visit = HashSet::new();
     let mut dep_graph = HashMap::new();
     // get dependencies of initial top level classes
     for (path, obj) in objects {
@@ -119,9 +119,13 @@ pub fn into_header(
                 let type_ = (DepType::Full, class_id);
                 get_type_dependencies(&mut dependencies, objects, &mut type_store, type_);
                 dep_graph.insert(type_, dependencies.clone());
+
+                // in the rare circumstance the current item was already added to the to_visit list
+                to_visit.remove(&type_);
+
                 for dep in dependencies {
-                    if !dep_graph.contains_key(&dep) && !to_visit.contains(&dep) {
-                        to_visit.push(dep);
+                    if !dep_graph.contains_key(&dep) {
+                        to_visit.insert(dep);
                         //if dep.0 == DepType::Partial {
                         //    let full = (DepType::Full, dep.1);
                         //    if !dep_graph.contains_key(&full) {
@@ -133,17 +137,24 @@ pub fn into_header(
             }
         }
     }
+    println!(" --- ERM --- ");
+
+    fn pop<T: Clone + Eq + std::hash::Hash>(set: &mut HashSet<T>) -> Option<T> {
+        set.iter().cloned().next().inspect(|item| {
+            set.remove(item);
+        })
+    }
 
     // get dependencies of dependencies
-    while let Some(next) = to_visit.pop() {
+    while let Some(next) = pop(&mut to_visit) {
         let mut dependencies = vec![];
         if !dep_graph.contains_key(&next) {
             get_type_dependencies(&mut dependencies, objects, &mut type_store, next);
         }
         assert!(dep_graph.insert(next, dependencies.clone()).is_none());
         for dep in dependencies {
-            if !dep_graph.contains_key(&dep) && !to_visit.contains(&dep) {
-                to_visit.push(dep);
+            if !dep_graph.contains_key(&dep) {
+                to_visit.insert(dep);
                 //if dep.0 == DepType::Partial {
                 //    let full = (DepType::Full, dep.1);
                 //    if !dep_graph.contains_key(&full) {
@@ -154,8 +165,8 @@ pub fn into_header(
         }
     }
 
-    dbg!(&dep_graph);
-    dbg!(&type_store.types);
+    //dbg!(&dep_graph);
+    //dbg!(&type_store.types);
 
     for (owner, dependencies) in &dep_graph {
         println!(
@@ -176,24 +187,24 @@ pub fn into_header(
     for (dep_type, type_id) in dep_graph.keys() {
         if *dep_type == DepType::Partial {
             let type_ = &type_store[*type_id];
+            let this = type_to_string(&objects, &type_store, *type_id, true);
             match type_ {
-                //CType::FName => todo!(),
-                //CType::FString => todo!(),
-                //CType::FText => todo!(),
-                //CType::TArray(type_id) => todo!(),
-                //CType::TMap(type_id, type_id1) => todo!(),
-                //CType::TSet(type_id) => todo!(),
                 //CType::Ptr(type_id) => todo!(),
-                //CType::TWeakObjectPtr(type_id) => todo!(),
-                //CType::TSoftObjectPtr(type_id) => todo!(),
-                //CType::TScriptInterface(type_id) => todo!(),
-                //CType::TTuple(type_id, type_id1) => todo!(),
-                CType::UEEnum(_) => {}
-                CType::UEStruct(path) => {
-                    writeln!(&mut buffer, "struct `{}`;", obj_name(objects, path)).unwrap();
+                CType::FName
+                | CType::FString
+                | CType::FText
+                | CType::TArray(_)
+                | CType::TMap(_, _)
+                | CType::TSet(_)
+                | CType::TWeakObjectPtr(_)
+                | CType::TSoftObjectPtr(_)
+                | CType::TScriptInterface(_)
+                | CType::TTuple(_, _)
+                | CType::UEStruct(_) => {
+                    writeln!(&mut buffer, "struct {this};").unwrap();
                 }
-                CType::UEClass(path) => {
-                    writeln!(&mut buffer, "class `{}`;", obj_name(objects, path)).unwrap();
+                CType::UEClass(_) => {
+                    writeln!(&mut buffer, "class {this};").unwrap();
                 }
                 _ => {}
             }
@@ -201,7 +212,7 @@ pub fn into_header(
     }
 
     let sorted = topological_sort(&dep_graph).unwrap();
-    dbg!(&sorted);
+    //dbg!(&sorted);
 
     // full declarations
     for (dep_type, type_id) in &sorted {
@@ -214,12 +225,13 @@ pub fn into_header(
 }
 
 fn into_ctype<'a>(objects: &'a Objects, prop: &'a Property, store: &mut TypeStore<'a>) -> TypeId {
-    assert_eq!(prop.array_dim, 1, "TODO array_dim != 1");
+    //assert_eq!(prop.array_dim, 1, "TODO array_dim != 1");
     let new_type = match &prop.r#type {
         PropertyType::Struct { r#struct } => CType::UEStruct(r#struct),
         PropertyType::Str => CType::FString,
         PropertyType::Name => CType::FName,
         PropertyType::Text => CType::FText,
+        PropertyType::FieldPath => CType::FFieldPath,
         PropertyType::MulticastInlineDelegate => CType::MulticastInlineDelegate, // TODO
         PropertyType::MulticastSparseDelegate => CType::MulticastSparseDelegate, // TODO
         PropertyType::Delegate => CType::Delegate,
@@ -272,7 +284,6 @@ fn into_ctype<'a>(objects: &'a Objects, prop: &'a Property, store: &mut TypeStor
             let class = CType::UEClass(class);
             CType::TScriptInterface(store.insert(class))
         }
-        PropertyType::FieldPath => todo!(),
         PropertyType::Optional { inner } => todo!(),
     };
     store.insert(new_type)
@@ -304,6 +315,7 @@ enum CType<'a> {
     FName,
     FString,
     FText,
+    FFieldPath,
     MulticastInlineDelegate,
     MulticastSparseDelegate,
     Delegate,
@@ -389,6 +401,7 @@ fn type_to_string(objects: &Objects, store: &TypeStore<'_>, id: TypeId, escape: 
         CType::FName => TypeName::new("FName"),
         CType::FString => TypeName::new("FString"),
         CType::FText => TypeName::new("FText"),
+        CType::FFieldPath => TypeName::new("FFieldPath"),
         CType::MulticastInlineDelegate => TypeName::new("MulticastInlineDelegate"),
         CType::MulticastSparseDelegate => TypeName::new("MulticastSparseDelegate"),
         CType::Delegate => TypeName::new("Delegate"),
@@ -487,6 +500,7 @@ fn get_type_dependencies<'a>(
             dependencies.push((DepType::Full, array));
         }
         CType::FText => {}
+        CType::FFieldPath => {}
         CType::MulticastInlineDelegate => {}
         CType::MulticastSparseDelegate => {}
         CType::Delegate => {}
@@ -571,11 +585,12 @@ fn get_type_size<'a>(
         CType::Int64 => (8, 8),
         CType::Bool => (1, 1), // TODO
         CType::FName => (8, 4),
-        CType::FString => (16, 8), // TODO size TArray<wchar_t>
-        CType::FText => (1, 1),    // TODO
-        CType::MulticastInlineDelegate => (1, 1), // TODO
+        CType::FString => (16, 8),    // TODO size TArray<wchar_t>
+        CType::FText => (1, 1),       // TODO
+        CType::FFieldPath => (32, 8), // TODO
+        CType::MulticastInlineDelegate => (16, 8), // TODO
         CType::MulticastSparseDelegate => (1, 1), // TODO
-        CType::Delegate => (1, 1), // TODO
+        CType::Delegate => (1, 1),    // TODO
         CType::TArray(_) => (16, 8),
         CType::TMap(k, v) => (1, 1), // TODO
         CType::TSet(k) => (1, 1),    // TODO
@@ -647,10 +662,35 @@ fn decl_ctype<'a>(
         CType::FText => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
+        CType::FFieldPath => {
+            // TODO
+            writeln!(
+                buffer,
+                r#"struct {this} {{
+    void* ResolvedField;
+    void* ResolvedOwner;
+    void* PathData;
+    int32_t PathNum;
+    int32_t PathMax;
+}};"#
+            )
+            .unwrap();
+        }
         CType::MulticastInlineDelegate => {
+            // TODO user TArray
+            writeln!(
+                buffer,
+                r#"struct {this} {{
+    void* data;
+    int32_t num;
+    int32_t max;
+}};"#
+            )
+            .unwrap();
+        }
+        CType::MulticastSparseDelegate => {
             writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
         }
-        CType::MulticastSparseDelegate => {}
         CType::Delegate => {}
         CType::TArray(type_id) => {
             let ptr_id = store.insert(CType::Ptr(type_id));
@@ -679,7 +719,13 @@ fn decl_ctype<'a>(
             )
             .unwrap();
         }
-        CType::TSet(type_id) => {}
+        CType::TSet(k) => writeln!(
+            buffer,
+            r#"struct {this} {{
+    // TODO
+}};"#,
+        )
+        .unwrap(),
         CType::Ptr(type_id) => {}
         CType::TWeakObjectPtr(type_id) => {
             writeln!(
@@ -739,8 +785,8 @@ fn decl_ctype<'a>(
             if let Some((last, rest)) = enum_.names.split_last() {
                 let iter = rest.iter().map(|e| (e, ",")).chain([(last, "")]);
                 for ((name, value), comma) in iter {
-                    let name = name.strip_prefix(&prefix).unwrap_or(&name);
-                    writeln!(buffer, "    {name} = {value}{comma}",).unwrap();
+                    //let name = name.strip_prefix(&prefix).unwrap_or(&name);
+                    writeln!(buffer, "    `{name}` = {value}{comma}",).unwrap();
                 }
             }
             writeln!(buffer, "}};").unwrap();
@@ -799,7 +845,7 @@ fn decl_props<'a>(
 ) {
     for prop in &struct_.properties {
         //if align_up(end_last_prop, alignment) != prop.offset {
-        let delta = prop.offset - end_last_prop;
+        let delta = prop.offset.saturating_sub(end_last_prop);
         if delta != 0 {
             writeln!(
                 buffer,
@@ -906,11 +952,12 @@ mod test {
     fn test_into_header() -> Result<()> {
         let objects: Objects = serde_json::from_slice(&std::fs::read("../fsd.json")?)?;
         let header = into_header(&objects, |path, obj| {
-            path.contains("MissionGenerationManager")
-                || path.contains("GeneratedMission")
-                || path.contains("CampaignManager")
-                || path.contains(".Campaign")
-                || path.contains(".FSDGameInstance")
+            //path.contains("MissionGenerationManager")
+            //|| path.contains("GeneratedMission")
+            //|| path.contains("CampaignManager")
+            //|| path.contains(".Campaign")
+            path.contains(".FSDSaveGame")
+            //path.contains("FSDPlayer")
         });
         println!("{header}");
         std::fs::write("header.cpp", header)?;
