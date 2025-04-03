@@ -4,6 +4,8 @@ use std::fmt::Write;
 use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, Struct};
 
 struct Ctx<'objects, 'types> {
+    header_style: HeaderStyle,
+
     objects: &'objects Objects,
     store: &'types mut TypeStore<'objects>,
 }
@@ -45,13 +47,13 @@ fn obj_name(objects: &Objects, path: &str) -> String {
     let obj = &objects[path];
     let name = path.rsplit(['/', '.', ':']).next().unwrap();
     match obj {
-        //ue_reflection::ObjectType::Object(object) => todo!(),
-        //ue_reflection::ObjectType::Package(package) => todo!(),
-        ue_reflection::ObjectType::Enum(_) => name.into(),
-        ue_reflection::ObjectType::ScriptStruct(_script_struct) => {
+        //ObjectType::Object(object) => todo!(),
+        //ObjectType::Package(package) => todo!(),
+        ObjectType::Enum(_) => name.into(),
+        ObjectType::ScriptStruct(_script_struct) => {
             format!("F{name}")
         }
-        ue_reflection::ObjectType::Class(class) => {
+        ObjectType::Class(class) => {
             let is_actor = class
                 .class_cast_flags
                 .contains(EClassCastFlags::CASTCLASS_AActor);
@@ -63,21 +65,62 @@ fn obj_name(objects: &Objects, path: &str) -> String {
                 format!("U{name}")
             }
         }
-        //ue_reflection::ObjectType::Function(function) => todo!(),
+        //ObjectType::Function(function) => todo!(),
         _ => todo!("{path} {obj:?}"),
     }
 }
 
 #[allow(unused)]
-pub fn into_header(
-    objects: &Objects,
-    filter: impl Fn(&str, &ue_reflection::ObjectType) -> bool,
-) -> String {
+pub fn into_header(objects: &Objects, filter: impl Fn(&str, &ObjectType) -> bool) -> String {
     Ctx {
+        header_style: HeaderStyle::Binja,
+
         objects,
         store: &mut TypeStore::default(),
     }
     .generate(filter)
+}
+
+#[derive(Debug, Clone, Copy)]
+enum HeaderStyle {
+    Binja,
+    C,
+}
+impl HeaderStyle {
+    fn class_name(&self) -> &'static str {
+        match self {
+            HeaderStyle::Binja => "class",
+            HeaderStyle::C => "struct",
+        }
+    }
+    fn format_template<'a>(
+        &self,
+        name: &'a str,
+        params: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> String {
+        let (c_open, c_sep, c_close) = match self {
+            HeaderStyle::Binja => ("<", ", ", ">"),
+            HeaderStyle::C => ("_", "_", "_"),
+        };
+
+        let mut buffer = String::new();
+        buffer.push_str(name);
+
+        buffer.push_str(c_open);
+
+        let mut iter = params.into_iter();
+        if let Some(first) = iter.next() {
+            buffer.push_str(first.as_ref());
+        }
+        while let Some(next) = iter.next() {
+            buffer.push_str(c_sep);
+            buffer.push_str(next.as_ref());
+        }
+
+        buffer.push_str(c_close);
+
+        buffer
+    }
 }
 
 impl<'objects> Ctx<'objects, '_> {
@@ -96,7 +139,18 @@ impl<'objects> Ctx<'objects, '_> {
                 byte_offset,
                 byte_mask,
                 field_mask,
-            } => CType::Bool, // TODO
+            } => {
+                let inner = match field_size {
+                    1 => CType::UInt8,
+                    //2 => CType::UInt16,
+                    //4 => CType::UInt32,
+                    //8 => CType::UInt64,
+                    _ => todo!("handle bitfield field_size={field_size}"),
+                };
+                let inner = self.store.insert(inner);
+                let index = get_bitfield_bit_index(*byte_offset, *byte_mask);
+                CType::Bool(inner, index)
+            }
             PropertyType::Array { inner } => CType::TArray(self.prop_ctype(inner)),
             PropertyType::Enum { container, r#enum } => {
                 CType::UEEnum(r#enum.as_ref().expect("TODO unknown enum name"))
@@ -112,7 +166,7 @@ impl<'objects> Ctx<'objects, '_> {
             PropertyType::Set { key_prop } => CType::TSet(self.prop_ctype(key_prop)),
             PropertyType::Float => CType::Float,
             PropertyType::Double => CType::Double,
-            PropertyType::Byte { r#enum } => CType::Byte,
+            PropertyType::Byte { r#enum } => CType::UInt8,
             PropertyType::UInt16 => CType::UInt16,
             PropertyType::UInt32 => CType::UInt32,
             PropertyType::UInt64 => CType::UInt64,
@@ -150,12 +204,16 @@ impl<'objects> Ctx<'objects, '_> {
         }
     }
 
-    fn type_to_string(&mut self, id: TypeId, escape: bool) -> String {
+    fn type_to_string(&mut self, id: TypeId, escape: bool, in_template: bool) -> String {
+        let escape_inner = match self.header_style {
+            HeaderStyle::Binja => escape,
+            HeaderStyle::C => false,
+        };
         let ctype = self.store[id];
         let type_name = match ctype {
             CType::Float => TypeName::primitive("float"),
             CType::Double => TypeName::primitive("double"),
-            CType::Byte => TypeName::primitive("uint8_t"), // TODO enum
+            CType::UInt8 => TypeName::primitive("uint8_t"), // TODO enum
             CType::UInt16 => TypeName::primitive("uint16_t"),
             CType::UInt32 => TypeName::primitive("uint32_t"),
             CType::UInt64 => TypeName::primitive("uint64_t"),
@@ -166,7 +224,7 @@ impl<'objects> Ctx<'objects, '_> {
 
             CType::WChar => TypeName::primitive("wchar_t"),
 
-            CType::Bool => TypeName::primitive("bool"),
+            CType::Bool(type_id, _) => TypeName::new(self.type_to_string(type_id, false, false)),
 
             CType::FName => TypeName::new("FName"),
             CType::FString => TypeName::new("FString"),
@@ -177,49 +235,57 @@ impl<'objects> Ctx<'objects, '_> {
             CType::Delegate => TypeName::new("Delegate"),
 
             CType::TArray(type_id) => {
-                TypeName::new(format!("TArray<{}>", self.type_to_string(type_id, false)))
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(self.header_style.format_template("TArray", [inner]))
             }
-            CType::TMap(k, v) => TypeName::new(format!(
-                "TMap<{}, {}>",
-                self.type_to_string(k, false),
-                self.type_to_string(v, false)
-            )),
+            CType::TMap(k, v) => {
+                let k = self.type_to_string(k, false, true);
+                let v = self.type_to_string(v, false, true);
+                TypeName::new(self.header_style.format_template("TMap", [k, v]))
+            }
             CType::TSet(type_id) => {
-                TypeName::new(format!("TSet<{}>", self.type_to_string(type_id, false)))
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(self.header_style.format_template("TSet", [inner]))
             }
-            CType::Ptr(type_id) => {
-                TypeName::pointer(format!("{}*", self.type_to_string(type_id, escape)))
+            CType::Ptr(type_id) => TypeName::pointer(format!(
+                "{}{}",
+                self.type_to_string(type_id, escape_inner, in_template),
+                if in_template { "P" } else { "*" }
+            )),
+            CType::TWeakObjectPtr(type_id) => {
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(self.header_style.format_template("TWeakObjectPtr", [inner]))
             }
-            CType::TWeakObjectPtr(type_id) => TypeName::new(format!(
-                "TWeakObjectPtr<{}>",
-                self.type_to_string(type_id, false)
-            )),
-            CType::TSoftObjectPtr(type_id) => TypeName::new(format!(
-                "TSoftObjectPtr<{}>",
-                self.type_to_string(type_id, false)
-            )),
-            CType::TLazyObjectPtr(type_id) => TypeName::new(format!(
-                "TLazyObjectPtr<{}>",
-                self.type_to_string(type_id, false)
-            )),
-            CType::TScriptInterface(type_id) => TypeName::new(format!(
-                "TScriptInterface<{}>",
-                self.type_to_string(type_id, false)
-            )),
-
+            CType::TSoftObjectPtr(type_id) => {
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(self.header_style.format_template("TSoftObjectPtr", [inner]))
+            }
+            CType::TLazyObjectPtr(type_id) => {
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(self.header_style.format_template("TLazyObjectPtr", [inner]))
+            }
+            CType::TScriptInterface(type_id) => {
+                let inner = self.type_to_string(type_id, false, true);
+                TypeName::new(
+                    self.header_style
+                        .format_template("TScriptInterface", [inner]),
+                )
+            }
             CType::TTuple(a, b) => {
-                let a = self.type_to_string(a, false);
-                let b = self.type_to_string(b, false);
-                TypeName::new(format!("TTuple<{}, {}>", a, b))
+                let a = self.type_to_string(a, false, true);
+                let b = self.type_to_string(b, false, true);
+                TypeName::new(self.header_style.format_template("TTuple", [a, b]))
             }
 
-            CType::Array(type_id, _size) => TypeName::new(self.type_to_string(type_id, false)), // handle size at struct member, not here
+            CType::Array(type_id, _size) => {
+                TypeName::new(self.type_to_string(type_id, false, in_template))
+            } // handle size at struct member, not here
 
             CType::UEEnum(path) => TypeName::new(obj_name(self.objects, path)),
             CType::UEStruct(path) => TypeName::new(obj_name(self.objects, path)),
             CType::UEClass(path) => TypeName::new(obj_name(self.objects, path)),
         };
-        type_name.escaped_name(escape)
+        type_name.escaped_name(escape_inner)
     }
 
     fn get_type_dependencies(
@@ -241,7 +307,7 @@ impl<'objects> Ctx<'objects, '_> {
         match ctype {
             CType::Float => {}
             CType::Double => {}
-            CType::Byte => {}
+            CType::UInt8 => {}
             CType::UInt16 => {}
             CType::UInt32 => {}
             CType::UInt64 => {}
@@ -250,7 +316,9 @@ impl<'objects> Ctx<'objects, '_> {
             CType::Int32 => {}
             CType::Int64 => {}
             CType::WChar => {}
-            CType::Bool => {}
+            CType::Bool(type_id, _field_mask) => {
+                dependencies.push((DepType::Full, type_id));
+            }
             CType::FName => {}
             CType::FString => {
                 dependencies.push((DepType::Full, type_fstring_data(self.store)));
@@ -326,7 +394,7 @@ impl<'objects> Ctx<'objects, '_> {
         match ctype {
             CType::Float => (4, 4),
             CType::Double => (8, 8),
-            CType::Byte => (1, 1),
+            CType::UInt8 => (1, 1),
             CType::UInt16 => (2, 2),
             CType::UInt32 => (4, 4),
             CType::UInt64 => (8, 8),
@@ -335,7 +403,7 @@ impl<'objects> Ctx<'objects, '_> {
             CType::Int32 => (4, 4),
             CType::Int64 => (8, 8),
             CType::WChar => (2, 2),
-            CType::Bool => (1, 1), // TODO
+            CType::Bool(type_id, _field_mask) => self.get_type_size(type_id),
             CType::FName => (8, 4),
             CType::FString => (16, 8),    // TODO size TArray<wchar_t>
             CType::FText => (1, 1),       // TODO
@@ -382,11 +450,11 @@ impl<'objects> Ctx<'objects, '_> {
 
     fn decl_ctype(&mut self, buffer: &mut String, id: TypeId) {
         let ctype = self.store[id];
-        let this = self.type_to_string(id, true);
+        let this = self.type_to_string(id, true, false);
         match ctype {
             CType::Float => {}
             CType::Double => {}
-            CType::Byte => {}
+            CType::UInt8 => {}
             CType::UInt16 => {}
             CType::UInt32 => {}
             CType::UInt64 => {}
@@ -395,13 +463,20 @@ impl<'objects> Ctx<'objects, '_> {
             CType::Int32 => {}
             CType::Int64 => {}
             CType::WChar => {}
-            CType::Bool => {}
+            CType::Bool(_, _) => {}
             CType::FName => {
-                writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+                writeln!(
+                    buffer,
+                    r#"struct {this} {{
+    uint32_t ComparisonIndex;
+    uint32_t Number;
+}};"#
+                )
+                .unwrap();
             }
             CType::FString => {
                 let data = type_fstring_data(self.store);
-                let data_name = self.type_to_string(data, true);
+                let data_name = self.type_to_string(data, true, false);
                 writeln!(
                     buffer,
                     r#"struct {this} {{
@@ -442,10 +517,12 @@ impl<'objects> Ctx<'objects, '_> {
             CType::MulticastSparseDelegate => {
                 writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
             }
-            CType::Delegate => {}
+            CType::Delegate => {
+                writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+            }
             CType::TArray(type_id) => {
                 let ptr_id = self.store.insert(CType::Ptr(type_id));
-                let inner = self.type_to_string(ptr_id, true);
+                let inner = self.type_to_string(ptr_id, true, false);
                 writeln!(
                     buffer,
                     r#"struct {this} {{
@@ -507,8 +584,8 @@ impl<'objects> Ctx<'objects, '_> {
             }
 
             CType::TTuple(a, b) => {
-                let a = self.type_to_string(a, true);
-                let b = self.type_to_string(b, true);
+                let a = self.type_to_string(a, true, false);
+                let b = self.type_to_string(b, true, false);
 
                 writeln!(
                     buffer,
@@ -539,54 +616,96 @@ impl<'objects> Ctx<'objects, '_> {
                     let iter = rest.iter().map(|e| (e, ",")).chain([(last, "")]);
                     for ((name, value), comma) in iter {
                         //let name = name.strip_prefix(&prefix).unwrap_or(&name);
-                        writeln!(buffer, "    `{name}` = {value}{comma}",).unwrap();
+                        let name = match self.header_style {
+                            HeaderStyle::Binja => {
+                                format!("`{name}`")
+                            }
+                            HeaderStyle::C => name.replace(":", "_"),
+                        };
+                        writeln!(buffer, "    {name} = {value}{comma}",).unwrap();
                     }
                 }
                 writeln!(buffer, "}};").unwrap();
             }
-            CType::UEStruct(path) => {
+            CType::UEStruct(path) | CType::UEClass(path) => {
+                let class_or_struct = match (self.header_style, ctype) {
+                    (HeaderStyle::Binja, CType::UEStruct(_)) => "struct",
+                    (HeaderStyle::Binja, CType::UEClass(_)) => "class",
+                    (HeaderStyle::C, _) => self.header_style.class_name(),
+                    _ => unreachable!(),
+                };
+
                 let (size, alignment) = self.get_type_size(id);
                 writeln!(buffer, "// size=0x{size:x} align=0x{alignment:x}").unwrap();
 
                 let struct_ = &self.objects[path].get_struct().unwrap();
                 let (super_, super_name, base_offset) = if let Some(super_) = &struct_.super_struct
                 {
-                    let super_id = self.store.insert(CType::UEStruct(super_));
-                    let (size, _align) = self.get_type_size(super_id);
-                    let super_name = self.type_to_string(super_id, true);
-                    (format!("__base({super_name}, 0) "), Some(super_name), size)
-                } else {
-                    ("".into(), None, 0)
-                };
-
-                writeln!(buffer, "class {super_}{this} {{").unwrap();
-                if let Some(super_name) = super_name {
-                    writeln!(buffer, "    __inherited {super_name} super;").unwrap();
-                }
-                self.decl_props(buffer, struct_, base_offset);
-                writeln!(buffer, "}};").unwrap();
-            }
-            CType::UEClass(path) => {
-                let (size, alignment) = self.get_type_size(id);
-                writeln!(buffer, "// size=0x{size:x} align=0x{alignment:x}").unwrap();
-
-                let struct_ = &self.objects[path].get_class().unwrap().r#struct;
-                let (super_, super_name, base_offset) = if let Some(super_) = &struct_.super_struct
-                {
                     let super_id = self.store.insert(CType::UEClass(super_));
                     let (size, _align) = self.get_type_size(super_id);
-                    let super_name = self.type_to_string(super_id, true);
-                    (format!("__base({super_name}, 0) "), Some(super_name), size)
+                    let super_name = self.type_to_string(super_id, true, false);
+                    let base = match self.header_style {
+                        HeaderStyle::Binja => format!("__base({super_name}, 0) "),
+                        HeaderStyle::C => "".into(),
+                    };
+                    (base, Some(super_name), size)
                 } else {
                     ("".into(), None, 0)
                 };
 
-                writeln!(buffer, "class {super_}{this} {{").unwrap();
-                if let Some(super_name) = super_name {
-                    writeln!(buffer, "    __inherited {super_name} super;").unwrap();
-                }
-                self.decl_props(buffer, struct_, base_offset);
+                let align_attribute = match self.header_style {
+                    HeaderStyle::Binja => "".to_string(),
+                    HeaderStyle::C => format!("__attribute__((aligned({alignment}))) "),
+                };
+
+                writeln!(
+                    buffer,
+                    "{class_or_struct} {align_attribute}{super_}{this} {{"
+                )
+                .unwrap();
+                //if let Some(super_name) = super_name {
+                //    let inherited = match self.header_style {
+                //        HeaderStyle::Binja => "__inherited ",
+                //        HeaderStyle::C => "",
+                //    };
+                //    writeln!(buffer, "    {inherited}{super_name} super;").unwrap();
+                //}
+
+                let mut offset = match self.header_style {
+                    HeaderStyle::Binja => {
+                        let mut parent = *struct_;
+                        let mut parents = vec![];
+                        while let Some(next) = &parent.super_struct {
+                            parent = self.objects[next].get_struct().unwrap();
+                            parents.push((next, parent));
+                        }
+
+                        let mut offset = 0;
+
+                        for (path, parent) in parents.iter().rev() {
+                            self.decl_props(
+                                buffer,
+                                parent,
+                                &mut offset,
+                                Some(&obj_name(self.objects, path)),
+                            );
+                        }
+
+                        offset
+                    }
+                    HeaderStyle::C => base_offset,
+                };
+
+                self.decl_props(buffer, struct_, &mut offset, None);
                 writeln!(buffer, "}};").unwrap();
+
+                match self.header_style {
+                    HeaderStyle::Binja => {}
+                    HeaderStyle::C => {
+                        writeln!(buffer, "static_assert(sizeof({this}) == 0x{size:x}, \"{this} has incorrect size\");").unwrap();
+                        writeln!(buffer, "static_assert(alignof({this}) == 0x{alignment:x}, \"{this} has incorrect alignment\");").unwrap();
+                    }
+                }
             }
         }
     }
@@ -595,50 +714,70 @@ impl<'objects> Ctx<'objects, '_> {
         &mut self,
         buffer: &mut String,
         struct_: &'objects Struct,
-        mut end_last_prop: usize,
+        end_last_prop: &mut usize,
+        inherited_from: Option<&str>,
     ) {
-        for prop in &struct_.properties {
-            //if align_up(end_last_prop, alignment) != prop.offset {
-            let delta = prop.offset.saturating_sub(end_last_prop);
+        let header_style = self.header_style;
+        let pad = |buffer: &mut String, expected: usize, at: usize| {
+            let delta = expected.saturating_sub(at);
             if delta != 0 {
-                writeln!(
-                    buffer,
-                    "    __padding char _{end_last_prop:x}[0x{delta:x}];"
-                )
-                .unwrap();
+                let pad = match header_style {
+                    HeaderStyle::Binja => "__padding ",
+                    HeaderStyle::C => "/* pad */ ",
+                };
+                writeln!(buffer, "    {pad}char _{at:x}[0x{delta:x}];").unwrap();
             }
+        };
+        for prop in &struct_.properties {
+            pad(buffer, prop.offset, *end_last_prop);
 
             let ctype = self.prop_ctype(prop);
-            let type_name = self.type_to_string(ctype, true);
+            let type_name = self.type_to_string(ctype, true, false);
 
-            // TODO multi-dimension?
-            let array_size = match self.store[ctype] {
-                CType::Array(_, size) => format!("[{size}]"),
+            let prop_offset = prop.offset;
+
+            let prop_name = format!("_0x{prop_offset:x}_{}", prop.name);
+            let prop_name = match (inherited_from, self.header_style) {
+                (None, _) => prop_name,
+                (Some(parent), HeaderStyle::Binja) => format!("`{parent}::{prop_name}`"),
+                (_, HeaderStyle::C) => prop_name,
+            };
+
+            let postfix = match self.store[ctype] {
+                CType::Array(_, size) => format!("[{size}]"), // TODO multi-dimension?
+                CType::Bool(_, _) => ":1".into(),
                 _ => "".into(),
+            };
+
+            let inherited = match inherited_from {
+                Some(_) => "__inherited ",
+                None => "",
             };
 
             writeln!(
                 buffer,
-                "    {} _0x{2:x}_{}{array_size}; // 0x{:x}",
-                type_name, prop.name, prop.offset
+                "    {inherited}{type_name} {prop_name}{postfix}; // 0x{prop_offset:x}",
             )
             .unwrap();
 
             let (size, _alignment) = self.get_type_size(ctype);
-            end_last_prop = prop.offset + size;
+            *end_last_prop = prop.offset + size;
         }
-        let delta = struct_.properties_size - end_last_prop;
-        if delta != 0 {
-            writeln!(
-                buffer,
-                "    __padding char _{end_last_prop:x}[0x{delta:x}];"
-            )
-            .unwrap();
+        // do not add trailing padding if these are inherited props
+        if inherited_from.is_none() {
+            pad(buffer, struct_.properties_size, *end_last_prop);
         }
     }
 
     fn generate(&mut self, filter: impl Fn(&str, &ObjectType) -> bool) -> String {
         let mut buffer = String::new();
+
+        match self.header_style {
+            HeaderStyle::Binja => {}
+            HeaderStyle::C => {
+                writeln!(&mut buffer, "#include <stdint.h>\n").unwrap();
+            }
+        }
 
         let mut to_visit = HashSet::new();
         let mut dep_graph = HashMap::new();
@@ -698,23 +837,25 @@ impl<'objects> Ctx<'objects, '_> {
         //dbg!(&dep_graph);
         //dbg!(&type_store.types);
 
-        for (owner, dependencies) in &dep_graph {
-            println!("{:?} {}", owner, self.type_to_string(owner.1, false));
-            for dep in dependencies {
-                println!("  {:?} {}", dep, self.type_to_string(dep.1, false));
-            }
-        }
+        // debug print graph
+        //for (owner, dependencies) in &dep_graph {
+        //    println!("{:?} {}", owner, self.type_to_string(owner.1, false, false));
+        //    for dep in dependencies {
+        //        println!("  {:?} {}", dep, self.type_to_string(dep.1, false, false));
+        //    }
+        //}
 
         // forward declarations
         for (dep_type, type_id) in dep_graph.keys() {
             if *dep_type == DepType::Partial {
                 let type_ = self.store[*type_id];
-                let this = self.type_to_string(*type_id, true);
+                let this = self.type_to_string(*type_id, true, false);
                 match type_ {
                     //CType::Ptr(type_id) => todo!(),
                     CType::FName
                     | CType::FString
                     | CType::FText
+                    | CType::FFieldPath
                     | CType::TArray(_)
                     | CType::TMap(_, _)
                     | CType::TSet(_)
@@ -726,7 +867,8 @@ impl<'objects> Ctx<'objects, '_> {
                         writeln!(&mut buffer, "struct {this};").unwrap();
                     }
                     CType::UEClass(_) => {
-                        writeln!(&mut buffer, "class {this};").unwrap();
+                        let class_or_struct = self.header_style.class_name();
+                        writeln!(&mut buffer, "{class_or_struct} {this};").unwrap();
                     }
                     _ => {}
                 }
@@ -759,7 +901,7 @@ impl std::fmt::Debug for TypeId {
 enum CType<'a> {
     Float,
     Double,
-    Byte,
+    UInt8,
     UInt16,
     UInt32,
     UInt64,
@@ -770,7 +912,7 @@ enum CType<'a> {
 
     WChar,
 
-    Bool, // TODO bitfield
+    Bool(TypeId, usize), // TODO bitfield
 
     FName,
     FString,
@@ -858,6 +1000,10 @@ fn align_up(addr: usize, alignment: usize) -> usize {
     (addr + (alignment - 1)) & !alignment
 }
 
+fn get_bitfield_bit_index(byte_offset: u8, byte_mask: u8) -> usize {
+    byte_offset as usize + 8 - byte_mask.leading_zeros() as usize
+}
+
 fn type_fstring_data(store: &mut TypeStore<'_>) -> TypeId {
     let t_wchar = store.insert(CType::WChar);
     store.insert(CType::TArray(t_wchar))
@@ -929,6 +1075,27 @@ mod test {
     use anyhow::Result;
 
     #[test]
+    fn test_bitfield() {
+        assert_eq!(0x0, get_bitfield_bit_index(0, 0b0000_0001));
+        assert_eq!(0x1, get_bitfield_bit_index(0, 0b0000_0010));
+        assert_eq!(0x2, get_bitfield_bit_index(0, 0b0000_0100));
+        assert_eq!(0x3, get_bitfield_bit_index(0, 0b0000_1000));
+        assert_eq!(0x4, get_bitfield_bit_index(0, 0b0001_0000));
+        assert_eq!(0x5, get_bitfield_bit_index(0, 0b0010_0000));
+        assert_eq!(0x6, get_bitfield_bit_index(0, 0b0100_0000));
+        assert_eq!(0x7, get_bitfield_bit_index(0, 0b1000_0000));
+
+        assert_eq!(0x8, get_bitfield_bit_index(1, 0b0000_0001));
+        assert_eq!(0x9, get_bitfield_bit_index(1, 0b0000_0010));
+        assert_eq!(0xa, get_bitfield_bit_index(1, 0b0000_0100));
+        assert_eq!(0xb, get_bitfield_bit_index(1, 0b0000_1000));
+        assert_eq!(0xc, get_bitfield_bit_index(1, 0b0001_0000));
+        assert_eq!(0xd, get_bitfield_bit_index(1, 0b0010_0000));
+        assert_eq!(0xe, get_bitfield_bit_index(1, 0b0100_0000));
+        assert_eq!(0xf, get_bitfield_bit_index(1, 0b1000_0000));
+    }
+
+    #[test]
     fn test_into_header() -> Result<()> {
         let objects: Objects = serde_json::from_slice(&std::fs::read("../fsd.json")?)?;
         let header = into_header(&objects, |path, obj| {
@@ -937,11 +1104,11 @@ mod test {
             //|| path.contains("CampaignManager")
             //|| path.contains(".Campaign")
             //path.contains(".FSDSaveGame")
-            path.contains("PlayerCameraManager")
+            path.contains(".CameraComponent")
             //true
         });
-        println!("{header}");
-        std::fs::write("header.cpp", header)?;
+        //println!("{header}");
+        std::fs::write("header.h", header)?;
         Ok(())
     }
 }
