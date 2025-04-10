@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
+use std::num::NonZero;
 
 use anyhow::Result;
 use binaryninja::architecture::CoreArchitecture;
@@ -79,11 +80,19 @@ struct Ctx<'objects, 'types, 'bv> {
 
 type Objects = BTreeMap<String, ObjectType>;
 
-#[derive(Default)]
 struct TypeStore<'a> {
-    next: usize,
+    next: NonZero<usize>,
     types: HashMap<TypeId, CType<'a>>,
     types_reverse: HashMap<CType<'a>, TypeId>,
+}
+impl Default for TypeStore<'_> {
+    fn default() -> Self {
+        Self {
+            next: 1.try_into().unwrap(),
+            types: Default::default(),
+            types_reverse: Default::default(),
+        }
+    }
 }
 
 impl<'a> TypeStore<'a> {
@@ -94,7 +103,7 @@ impl<'a> TypeStore<'a> {
             let id = TypeId(self.next);
             self.types.insert(id, type_);
             self.types_reverse.insert(type_, id);
-            self.next += 1;
+            self.next = self.next.checked_add(1).unwrap();
             id
         }
     }
@@ -672,38 +681,18 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
             }
             CType::TArray(type_id) => {
-                let ptr_id = self.store.insert(CType::Ptr(type_id));
+                let s = &mut self.store;
 
-                let int = self.store.insert(CType::Int32);
-                let int = self.bn_type(int);
+                let ptr_id = CType::Ptr(type_id).i(s);
+                let int = CType::Int32.i(s);
 
                 let inner = self.bn_type(ptr_id);
+                let int = self.bn_type(int);
 
                 let struct_ = Structure::builder()
-                    .insert(
-                        &inner,
-                        "Data",
-                        0,
-                        false,
-                        MemberAccess::PublicAccess,
-                        MemberScope::NoScope,
-                    )
-                    .insert(
-                        &int,
-                        "Num",
-                        8,
-                        false,
-                        MemberAccess::PublicAccess,
-                        MemberScope::NoScope,
-                    )
-                    .insert(
-                        &int,
-                        "Max",
-                        12,
-                        false,
-                        MemberAccess::PublicAccess,
-                        MemberScope::NoScope,
-                    )
+                    .m(&inner, "Data", 0)
+                    .m(&int, "Num", 8)
+                    .m(&int, "Max", 12)
                     .finalize();
 
                 self.bv.define_user_type(this, &Type::structure(&struct_));
@@ -713,6 +702,12 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 // /* offset 0x000 */ Elements: TSparseArray<TSetElement<TTuple<int,FGeneratedMissionGroup> >,TSparseArrayAllocator<TSizedDefaultAllocator<32>,FDefaultBitArrayAllocator> >,
                 // /* offset 0x038 */ Hash: TInlineAllocator<1,TSizedDefaultAllocator<32> >::ForElementType<FSetElementId>,
                 // /* offset 0x048 */ HashSize: i32,
+
+                // struct TSparseArray<TSetElement<TTuple<int,FGeneratedMissionGroup> >,TSparseArrayAllocator<TSizedDefaultAllocator<32>,FDefaultBitArrayAllocator> >  {
+                // /* offset 0x000 */ Data: TArray<TSparseArrayElementOrFreeListLink<TAlignedBytes<32,8> >,TSizedDefaultAllocator<32> >,
+                // /* offset 0x010 */ AllocationFlags: TBitArray<FDefaultBitArrayAllocator>,
+                // /* offset 0x030 */ FirstFreeIndex: i32,
+                // /* offset 0x034 */ NumFreeIndices: i32,
 
                 writeln!(
                     buffer,
@@ -935,8 +930,43 @@ impl<'objects> Ctx<'objects, '_, '_> {
     }
 }
 
+trait StructureBuilderExt {
+    fn m<
+        'a,
+        S: binaryninja::string::BnStrCompatible,
+        T: Into<binaryninja::confidence::Conf<&'a Type>>,
+    >(
+        &mut self,
+        ty: T,
+        name: S,
+        offset: u64,
+    ) -> &mut Self;
+}
+
+impl StructureBuilderExt for StructureBuilder {
+    fn m<
+        'a,
+        S: binaryninja::string::BnStrCompatible,
+        T: Into<binaryninja::confidence::Conf<&'a Type>>,
+    >(
+        &mut self,
+        ty: T,
+        name: S,
+        offset: u64,
+    ) -> &mut Self {
+        self.insert(
+            ty,
+            name,
+            offset,
+            false,
+            MemberAccess::PublicAccess,
+            MemberScope::NoScope,
+        )
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct TypeId(usize);
+struct TypeId(NonZero<usize>);
 impl std::fmt::Debug for TypeId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "TypeId({})", self.0)
@@ -944,7 +974,7 @@ impl std::fmt::Debug for TypeId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CType<'a> {
+enum CType<'a, T = TypeId> {
     Float,
     Double,
     UInt8,
@@ -958,7 +988,7 @@ enum CType<'a> {
 
     WChar,
 
-    Bool(TypeId, usize), // TODO bitfield
+    Bool(T, usize), // TODO bitfield
 
     FName,
     FString,
@@ -968,22 +998,27 @@ enum CType<'a> {
     MulticastSparseDelegate,
     Delegate,
 
-    TArray(TypeId),
-    TMap(TypeId, TypeId),
-    TSet(TypeId),
-    Ptr(TypeId),
-    TWeakObjectPtr(TypeId),
-    TSoftObjectPtr(TypeId),
-    TLazyObjectPtr(TypeId),
-    TScriptInterface(TypeId),
+    TArray(T),
+    TMap(T, T),
+    TSet(T),
+    Ptr(T),
+    TWeakObjectPtr(T),
+    TSoftObjectPtr(T),
+    TLazyObjectPtr(T),
+    TScriptInterface(T),
 
-    TTuple(TypeId, TypeId),
+    TTuple(T, T),
 
-    Array(TypeId, usize),
+    Array(T, usize),
 
     UEEnum(&'a str),
     UEStruct(&'a str),
     UEClass(&'a str),
+}
+impl<'a> CType<'a> {
+    fn i(&self, store: &mut TypeStore<'a>) -> TypeId {
+        store.insert(*self)
+    }
 }
 
 struct TypeName {
@@ -1016,13 +1051,6 @@ impl TypeName {
     fn name(&self) -> &str {
         &self.name
     }
-    //fn escaped_name(&self) -> String {
-    //    if self.primitive {
-    //        self.name.to_string()
-    //    } else {
-    //        format!("`{}`", self.name)
-    //    }
-    //}
     fn escaped_name(&self, escape: bool) -> String {
         if self.primitive || self.pointer || !escape {
             self.name.to_string()
@@ -1031,10 +1059,6 @@ impl TypeName {
         }
     }
 }
-// `TArray<Something*>`
-// `Something`*
-// `TArray<Something*>`*
-// TArray<TArray<Something*>*>
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum DepType {
@@ -1050,9 +1074,8 @@ fn get_bitfield_bit_index(byte_offset: u8, byte_mask: u8) -> usize {
     byte_offset as usize + 8 - byte_mask.leading_zeros() as usize
 }
 
-fn type_fstring_data(store: &mut TypeStore<'_>) -> TypeId {
-    let t_wchar = store.insert(CType::WChar);
-    store.insert(CType::TArray(t_wchar))
+fn type_fstring_data(s: &mut TypeStore<'_>) -> TypeId {
+    CType::TArray(CType::WChar.i(s)).i(s)
 }
 
 trait GraphKey: Clone + Copy + PartialEq + Eq + std::hash::Hash + std::fmt::Debug {}
