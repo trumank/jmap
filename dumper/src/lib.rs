@@ -16,7 +16,7 @@ use read_process_memory::{Pid, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use ue_reflection::{
     Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
-    ObjectType, Package, Property, PropertyType, ScriptStruct, Struct,
+    ObjectType, Package, Property, PropertyType, ReflectionData, ScriptStruct, Struct,
 };
 
 use crate::containers::PtrFNamePool;
@@ -228,7 +228,7 @@ pub enum Input {
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<BTreeMap<String, ObjectType>> {
+pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
@@ -251,7 +251,7 @@ fn dump_inner<M: Mem + Clone>(
     mem: M,
     image: &Image<'_>,
     struct_info: Vec<StructInfo>,
-) -> Result<BTreeMap<String, ObjectType>> {
+) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
 
@@ -395,5 +395,8 @@ fn dump_inner<M: Mem + Clone>(
         }
     }
 
-    Ok(objects)
+    Ok(ReflectionData {
+        image_base_address: image.base_address as u64,
+        objects,
+    })
 }

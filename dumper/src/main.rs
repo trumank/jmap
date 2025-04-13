@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use clap::Parser;
 use dumper::{Input, StructInfo};
 use std::{collections::BTreeMap, path::PathBuf};
+use ue_reflection::ReflectionData;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -50,14 +51,14 @@ fn main() -> Result<()> {
 
     let struct_info: Vec<StructInfo> = serde_json::from_slice(&std::fs::read(cli.struct_info)?)?;
 
-    let objects = dumper::dump(input, struct_info)?;
+    let reflection_data = dumper::dump(input, struct_info)?;
 
     match output_type {
         OutputType::Json => {
-            std::fs::write(cli.output, serde_json::to_vec(&objects)?)?;
+            std::fs::write(cli.output, serde_json::to_vec(&reflection_data)?)?;
         }
         OutputType::Usmap => {
-            let usmap = into_usmap(&objects);
+            let usmap = into_usmap(&reflection_data);
             usmap.write(&mut std::io::BufWriter::new(std::fs::File::create(
                 cli.output,
             )?))?;
@@ -71,11 +72,11 @@ fn obj_name(path: &str) -> &str {
     path.rsplit(['/', '.', ':']).next().unwrap()
 }
 
-fn into_usmap(objects: &BTreeMap<String, ue_reflection::ObjectType>) -> usmap::Usmap {
+fn into_usmap(reflection_data: &ReflectionData) -> usmap::Usmap {
     let mut enums = vec![];
     let mut structs = vec![];
 
-    for (path, obj) in objects {
+    for (path, obj) in &reflection_data.objects {
         let struct_ = match &obj {
             ue_reflection::ObjectType::ScriptStruct(obj) => Some(&obj.r#struct),
             ue_reflection::ObjectType::Class(obj) => Some(&obj.r#struct),

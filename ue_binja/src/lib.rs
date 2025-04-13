@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 use std::num::NonZero;
 
@@ -18,7 +18,7 @@ use binaryninja::{
 };
 use log::{error, info};
 
-use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, Struct};
+use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, ReflectionData, Struct};
 
 struct ImportCommand {}
 
@@ -26,8 +26,8 @@ impl Command for ImportCommand {
     fn action(&self, bv: &binaryninja::binary_view::BinaryView) {
         info!("do the stuff");
 
-        let objects = match load() {
-            Ok(objects) => objects,
+        let ref_data = match load() {
+            Ok(d) => d,
             Err(e) => {
                 error!("failed to load objects: {e}");
                 return;
@@ -36,9 +36,9 @@ impl Command for ImportCommand {
 
         let action = bv.file().begin_undo_actions(false);
 
-        info!("loaded {} objects", objects.len());
+        info!("loaded {} objects", ref_data.objects.len());
 
-        into_header(&objects, bv, |path, obj| true);
+        into_header(&ref_data, bv, |path, obj| true);
 
         bv.file().commit_undo_actions(action);
     }
@@ -48,8 +48,8 @@ impl Command for ImportCommand {
     }
 }
 
-fn load() -> Result<Objects> {
-    let path = "/Users/truman/src/meatloaf/test-data/fsd.json";
+fn load() -> Result<ReflectionData> {
+    let path = "/home/truman/projects/ue/meatloaf/fsd.json";
     Ok(serde_json::from_reader(std::io::BufReader::new(
         std::fs::File::open(path)?,
     ))?)
@@ -70,16 +70,14 @@ pub extern "C" fn CorePluginInit() -> bool {
     true
 }
 
-struct Ctx<'objects, 'types, 'bv> {
+struct Ctx<'ref_data, 'types, 'bv> {
     header_style: HeaderStyle,
 
     bv: &'bv BinaryView,
 
-    objects: &'objects Objects,
-    store: &'types mut TypeStore<'objects>,
+    ref_data: &'ref_data ReflectionData,
+    store: &'types mut TypeStore<'ref_data>,
 }
-
-type Objects = BTreeMap<String, ObjectType>;
 
 struct TypeStore<'a> {
     next: NonZero<usize>,
@@ -120,8 +118,8 @@ impl<'a> std::ops::Index<TypeId> for TypeStore<'a> {
     }
 }
 
-fn obj_name(objects: &Objects, path: &str) -> String {
-    let obj = &objects[path];
+fn obj_name(ref_data: &ReflectionData, path: &str) -> String {
+    let obj = &ref_data.objects[path];
     let name = path.rsplit(['/', '.', ':']).next().unwrap();
     match obj {
         ObjectType::Object(object) => name.to_string(),
@@ -148,13 +146,17 @@ fn obj_name(objects: &Objects, path: &str) -> String {
 }
 
 #[allow(unused)]
-pub fn into_header(objects: &Objects, bv: &BinaryView, filter: impl Fn(&str, &ObjectType) -> bool) {
+pub fn into_header(
+    ref_data: &ReflectionData,
+    bv: &BinaryView,
+    filter: impl Fn(&str, &ObjectType) -> bool,
+) {
     Ctx {
         header_style: HeaderStyle::Binja,
 
         bv,
 
-        objects,
+        ref_data,
         store: &mut TypeStore::default(),
     }
     .generate(filter)
@@ -202,8 +204,8 @@ impl HeaderStyle {
     }
 }
 
-impl<'objects> Ctx<'objects, '_, '_> {
-    fn prop_ctype(&mut self, prop: &'objects Property) -> TypeId {
+impl<'ref_data> Ctx<'ref_data, '_, '_> {
+    fn prop_ctype(&mut self, prop: &'ref_data Property) -> TypeId {
         let new_type = match &prop.r#type {
             PropertyType::Struct { r#struct } => CType::UEStruct(r#struct),
             PropertyType::Str => CType::FString,
@@ -359,9 +361,9 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 TypeName::new(self.type_to_string(type_id, false, in_template))
             } // handle size at struct member, not here
 
-            CType::UEEnum(path) => TypeName::new(obj_name(self.objects, path)),
-            CType::UEStruct(path) => TypeName::new(obj_name(self.objects, path)),
-            CType::UEClass(path) => TypeName::new(obj_name(self.objects, path)),
+            CType::UEEnum(path) => TypeName::new(obj_name(self.ref_data, path)),
+            CType::UEStruct(path) => TypeName::new(obj_name(self.ref_data, path)),
+            CType::UEClass(path) => TypeName::new(obj_name(self.ref_data, path)),
         };
         type_name.escaped_name(escape_inner)
     }
@@ -443,9 +445,9 @@ impl<'objects> Ctx<'objects, '_, '_> {
 
             CType::Array(type_id, size) => Type::array(&self.bn_type(type_id), size as u64),
 
-            CType::UEEnum(path) => struct_(&obj_name(self.objects, path)), // TODO type enum
-            CType::UEStruct(path) => struct_(&obj_name(self.objects, path)),
-            CType::UEClass(path) => struct_(&obj_name(self.objects, path)), // TODO type class
+            CType::UEEnum(path) => struct_(&obj_name(self.ref_data, path)), // TODO type enum
+            CType::UEStruct(path) => struct_(&obj_name(self.ref_data, path)),
+            CType::UEClass(path) => struct_(&obj_name(self.ref_data, path)), // TODO type class
         }
     }
 
@@ -526,7 +528,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
             }
             CType::UEEnum(_) => {}
             CType::UEStruct(path) => {
-                let struct_ = &self.objects[path].get_struct().unwrap();
+                let struct_ = &self.ref_data.objects[path].get_struct().unwrap();
                 if let Some(super_) = &struct_.super_struct {
                     let super_id = self.store.insert(CType::UEStruct(super_));
                     dependencies.push((DepType::Full, super_id));
@@ -537,7 +539,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 }
             }
             CType::UEClass(class) => {
-                let class = &self.objects[class].get_class().unwrap();
+                let class = &self.ref_data.objects[class].get_class().unwrap();
                 if let Some(super_) = &class.r#struct.super_struct {
                     let super_id = self.store.insert(CType::UEClass(super_));
                     dependencies.push((DepType::Full, super_id));
@@ -593,7 +595,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
             }
             CType::UEEnum(path) => {
                 // TODO unknown...
-                let enum_ = &self.objects[path].get_enum().unwrap();
+                let enum_ = &self.ref_data.objects[path].get_enum().unwrap();
                 let min = enum_.names.iter().map(|(_, v)| v).min().unwrap();
                 let max = enum_.names.iter().map(|(_, v)| v).max().unwrap();
                 if *min < i8::MIN as i64 || *max > u8::MAX as i64 {
@@ -603,7 +605,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 }
             }
             CType::UEClass(path) | CType::UEStruct(path) => {
-                let struct_ = &self.objects[path].get_struct().unwrap();
+                let struct_ = &self.ref_data.objects[path].get_struct().unwrap();
                 (struct_.properties_size, struct_.min_alignment)
             }
         }
@@ -772,7 +774,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
 
             CType::UEEnum(path) => {
                 // TODO unknown...
-                let enum_ = &self.objects[path].get_enum().unwrap();
+                let enum_ = &self.ref_data.objects[path].get_enum().unwrap();
                 let min = enum_.names.iter().map(|(_, v)| v).min().unwrap();
                 let max = enum_.names.iter().map(|(_, v)| v).max().unwrap();
                 let type_ = if *min < i8::MIN as i64 || *max > u8::MAX as i64 {
@@ -780,7 +782,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 } else {
                     "uint8_t"
                 };
-                let enum_name = obj_name(self.objects, path);
+                let enum_name = obj_name(self.ref_data, path);
                 let prefix = format!("{enum_name}::");
                 writeln!(buffer, "enum {this} : {type_} {{").unwrap();
                 if let Some((last, rest)) = enum_.names.split_last() {
@@ -799,18 +801,18 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 writeln!(buffer, "}};").unwrap();
             }
             CType::UEStruct(path) | CType::UEClass(path) => {
-                let struct_ = &self.objects[path].get_struct().unwrap();
-                let name = obj_name(self.objects, path);
+                let struct_ = &self.ref_data.objects[path].get_struct().unwrap();
+                let name = obj_name(self.ref_data, path);
 
                 // TODO class or struct
 
                 let mut builder = Structure::builder();
 
                 if let Some(parent) = &struct_.super_struct {
-                    let parent_struct = &self.objects[parent].get_struct().unwrap();
+                    let parent_struct = &self.ref_data.objects[parent].get_struct().unwrap();
                     let parent = NamedTypeReference::new(
                         NamedTypeReferenceClass::StructNamedTypeClass,
-                        obj_name(self.objects, &parent),
+                        obj_name(self.ref_data, &parent),
                     );
                     builder.base_structures(&[BaseStructure {
                         ty: parent,
@@ -827,7 +829,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
         }
     }
 
-    fn decl_props(&mut self, bn_struct: &mut StructureBuilder, struct_: &'objects Struct) {
+    fn decl_props(&mut self, bn_struct: &mut StructureBuilder, struct_: &'ref_data Struct) {
         for prop in &struct_.properties {
             let ctype = self.prop_ctype(prop);
 
@@ -858,16 +860,16 @@ impl<'objects> Ctx<'objects, '_, '_> {
         // find common vtable members to infer owner
 
         let image_base = self.bv.original_image_base();
-        let base = 0x7ff726e90000;
+        let og_base = self.ref_data.image_base_address;
 
         let mut vtables = HashMap::new();
-        for (path, obj) in self.objects {
+        for (path, obj) in &self.ref_data.objects {
             let object = obj.get_object();
-            vtables.insert(&object.class, object.vtable - base + image_base);
+            vtables.insert(&object.class, object.vtable - og_base + image_base);
         }
 
         for (class, vtable) in vtables {
-            let name = obj_name(self.objects, class);
+            let name = obj_name(self.ref_data, class);
             let sym =
                 Symbol::builder(SymbolType::Data, &format!("{name}::vtable"), vtable).create();
             self.bv.define_user_symbol(&sym);
@@ -876,7 +878,7 @@ impl<'objects> Ctx<'objects, '_, '_> {
         let mut to_visit = HashSet::new();
         let mut dep_graph = HashMap::new();
         // get dependencies of initial top level classes
-        for (path, obj) in self.objects {
+        for (path, obj) in &self.ref_data.objects {
             match obj {
                 ObjectType::Object(object) => {}
                 ObjectType::Package(package) => {}
@@ -884,14 +886,14 @@ impl<'objects> Ctx<'objects, '_, '_> {
                 ObjectType::ScriptStruct(script_struct) => {}
                 ObjectType::Class(class) => {}
                 ObjectType::Function(function) => {
-                    let addr = function.func - base + image_base;
+                    let addr = function.func - og_base + image_base;
 
                     let Some(outer) = function.r#struct.object.outer.as_deref() else {
                         continue;
                     };
 
-                    let outer_name = obj_name(self.objects, &outer);
-                    let func_name = obj_name(self.objects, &path);
+                    let outer_name = obj_name(self.ref_data, &outer);
+                    let func_name = obj_name(self.ref_data, &path);
                     let func_name = format!("{outer_name}::exec{func_name}");
 
                     let sym = Symbol::builder(SymbolType::Function, &func_name, addr).create();

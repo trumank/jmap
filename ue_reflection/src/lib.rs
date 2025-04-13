@@ -277,7 +277,11 @@ bitflags::bitflags! {
     }
 }
 
-pub type ReflectionData = std::collections::BTreeMap<String, ObjectType>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReflectionData {
+    pub image_base_address: u64,
+    pub objects: std::collections::BTreeMap<String, ObjectType>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
