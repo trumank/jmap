@@ -6,6 +6,7 @@ use anyhow::Result;
 use binaryninja::architecture::CoreArchitecture;
 use binaryninja::binary_view::BinaryView;
 use binaryninja::rc::Ref;
+use binaryninja::symbol::{Symbol, SymbolType};
 use binaryninja::types::{
     BaseStructure, NamedTypeReference, NamedTypeReferenceClass, StructureBuilder,
 };
@@ -48,7 +49,7 @@ impl Command for ImportCommand {
 }
 
 fn load() -> Result<Objects> {
-    let path = "/home/truman/projects/ue/meatloaf/fsd.json";
+    let path = "/Users/truman/src/meatloaf/test-data/fsd.json";
     Ok(serde_json::from_reader(std::io::BufReader::new(
         std::fs::File::open(path)?,
     ))?)
@@ -123,8 +124,8 @@ fn obj_name(objects: &Objects, path: &str) -> String {
     let obj = &objects[path];
     let name = path.rsplit(['/', '.', ':']).next().unwrap();
     match obj {
-        //ObjectType::Object(object) => todo!(),
-        //ObjectType::Package(package) => todo!(),
+        ObjectType::Object(object) => name.to_string(),
+        ObjectType::Package(package) => name.to_string(),
         ObjectType::Enum(_) => name.into(),
         ObjectType::ScriptStruct(_script_struct) => {
             format!("F{name}")
@@ -141,7 +142,7 @@ fn obj_name(objects: &Objects, path: &str) -> String {
                 format!("U{name}")
             }
         }
-        //ObjectType::Function(function) => todo!(),
+        ObjectType::Function(_) => name.to_string(),
         _ => todo!("{path} {obj:?}"),
     }
 }
@@ -171,9 +172,9 @@ impl HeaderStyle {
             HeaderStyle::C => "struct",
         }
     }
-    fn format_template<'a>(
+    fn format_template(
         &self,
-        name: &'a str,
+        name: &str,
         params: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> String {
         let (c_open, c_sep, c_close) = match self {
@@ -190,7 +191,7 @@ impl HeaderStyle {
         if let Some(first) = iter.next() {
             buffer.push_str(first.as_ref());
         }
-        while let Some(next) = iter.next() {
+        for next in iter {
             buffer.push_str(c_sep);
             buffer.push_str(next.as_ref());
         }
@@ -851,10 +852,53 @@ impl<'objects> Ctx<'objects, '_, '_> {
             }
         }
 
+        // create vtable structs
+        // add vtable member
+        //
+        // find common vtable members to infer owner
+
+        let image_base = self.bv.original_image_base();
+        let base = 0x7ff726e90000;
+
+        let mut vtables = HashMap::new();
+        for (path, obj) in self.objects {
+            let object = obj.get_object();
+            vtables.insert(&object.class, object.vtable - base + image_base);
+        }
+
+        for (class, vtable) in vtables {
+            let name = obj_name(self.objects, class);
+            let sym =
+                Symbol::builder(SymbolType::Data, &format!("{name}::vtable"), vtable).create();
+            self.bv.define_user_symbol(&sym);
+        }
+
         let mut to_visit = HashSet::new();
         let mut dep_graph = HashMap::new();
         // get dependencies of initial top level classes
         for (path, obj) in self.objects {
+            match obj {
+                ObjectType::Object(object) => {}
+                ObjectType::Package(package) => {}
+                ObjectType::Enum(_) => {}
+                ObjectType::ScriptStruct(script_struct) => {}
+                ObjectType::Class(class) => {}
+                ObjectType::Function(function) => {
+                    let addr = function.func - base + image_base;
+
+                    let Some(outer) = function.r#struct.object.outer.as_deref() else {
+                        continue;
+                    };
+
+                    let outer_name = obj_name(self.objects, &outer);
+                    let func_name = obj_name(self.objects, &path);
+                    let func_name = format!("{outer_name}::exec{func_name}");
+
+                    let sym = Symbol::builder(SymbolType::Function, &func_name, addr).create();
+
+                    self.bv.define_user_symbol(&sym);
+                }
+            }
             if filter(path, obj) && obj.get_class().is_some() {
                 let mut dependencies = vec![];
                 let class_id = self.store.insert(CType::UEClass(path));
