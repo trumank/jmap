@@ -369,7 +369,7 @@ impl ObjectType {
         match self {
             ObjectType::Object(_) => None,
             ObjectType::Package(_) => None,
-            ObjectType::Enum(obj) => Some(&obj),
+            ObjectType::Enum(obj) => Some(obj),
             ObjectType::ScriptStruct(_) => None,
             ObjectType::Class(_) => None,
             ObjectType::Function(_) => None,
@@ -381,7 +381,7 @@ impl ObjectType {
             ObjectType::Package(_) => None,
             ObjectType::Enum(_) => None,
             ObjectType::ScriptStruct(_) => None,
-            ObjectType::Class(obj) => Some(&obj),
+            ObjectType::Class(obj) => Some(obj),
             ObjectType::Function(_) => None,
         }
     }

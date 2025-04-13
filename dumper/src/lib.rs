@@ -15,8 +15,8 @@ use patternsleuth_resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use serde::{Deserialize, Serialize};
 use ue_reflection::{
-    Class, EClassCastFlags, EClassFlags, EFunctionFlags, EStructFlags, Enum, Function, Object,
-    ObjectType, Package, Property, PropertyType, ReflectionData, ScriptStruct, Struct,
+    Class, EClassCastFlags, Enum, Function, Object, ObjectType, Package, Property, PropertyType,
+    ReflectionData, ScriptStruct, Struct,
 };
 
 use crate::containers::PtrFNamePool;
