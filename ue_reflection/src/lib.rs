@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 bitflags::bitflags! {
@@ -280,7 +282,8 @@ bitflags::bitflags! {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReflectionData {
     pub image_base_address: u64,
-    pub objects: std::collections::BTreeMap<String, ObjectType>,
+    pub objects: BTreeMap<String, ObjectType>,
+    pub vtables: BTreeMap<u64, Vec<u64>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -319,6 +322,8 @@ pub struct Class {
     pub r#struct: Struct,
     pub class_cast_flags: EClassCastFlags,
     pub class_default_object: Option<String>,
+    /// VTable ptr of any instance of this UClass if found
+    pub instance_vtable: Option<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Function {

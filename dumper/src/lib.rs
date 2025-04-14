@@ -2,6 +2,7 @@ mod containers;
 mod header;
 mod mem;
 mod objects;
+mod vtable;
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -348,6 +349,7 @@ fn dump_inner<M: Mem + Clone>(
                     r#struct: read_struct(&obj.cast())?,
                     class_cast_flags,
                     class_default_object,
+                    instance_vtable: None,
                 }),
             );
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
@@ -395,8 +397,11 @@ fn dump_inner<M: Mem + Clone>(
         }
     }
 
+    let vtables = vtable::analyze_vtables(image, &mut objects);
+
     Ok(ReflectionData {
         image_base_address: image.base_address as u64,
         objects,
+        vtables,
     })
 }
