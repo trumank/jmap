@@ -18,7 +18,9 @@ use binaryninja::{
 };
 use log::{error, info};
 
-use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, ReflectionData, Struct};
+use ue_reflection::{
+    Class, EClassCastFlags, ObjectType, Property, PropertyType, ReflectionData, Struct,
+};
 
 struct ImportCommand {}
 
@@ -821,6 +823,25 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                     }]);
                 }
 
+                if let Some(_class) = self.ref_data.objects.get(path).unwrap().get_class() {
+                    let vtable_name = format!("{name}::VTable");
+                    let vtable = Type::named_type(&NamedTypeReference::new(
+                        NamedTypeReferenceClass::StructNamedTypeClass,
+                        vtable_name,
+                    ));
+                    let vtable_ptr =
+                        Type::pointer(&CoreArchitecture::by_name("x86_64").unwrap(), &vtable);
+
+                    builder.insert(
+                        &vtable_ptr,
+                        "vtable",
+                        0,
+                        false,
+                        MemberAccess::PublicAccess,
+                        MemberScope::NoScope, // virtual scope? or does that apply only to functions
+                    );
+                }
+
                 self.decl_props(&mut builder, struct_);
 
                 self.bv
@@ -862,17 +883,157 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
         let image_base = self.bv.original_image_base();
         let og_base = self.ref_data.image_base_address;
 
-        let mut vtables = HashMap::new();
-        for (path, obj) in &self.ref_data.objects {
-            let object = obj.get_object();
-            vtables.insert(&object.class, object.vtable - og_base + image_base);
+        fn get_class<'a>(ref_data: &'a ReflectionData, class: &str) -> &'a Class {
+            ref_data.objects.get(class).unwrap().get_class().unwrap()
+        }
+        fn get_parent_in<'a>(
+            ref_data: &'a ReflectionData,
+            mut class: &'a str,
+            in_set: &HashSet<&'a str>,
+        ) -> &'a str {
+            loop {
+                let class_obj = get_class(ref_data, class);
+                if let Some(parent) = class_obj.r#struct.super_struct.as_deref() {
+                    if in_set.contains(parent) {
+                        class = parent;
+                        continue;
+                    }
+                }
+                break;
+            }
+            class
         }
 
-        for (class, vtable) in vtables {
-            let name = obj_name(self.ref_data, class);
-            let sym =
-                Symbol::builder(SymbolType::Data, &format!("{name}::vtable"), vtable).create();
-            self.bv.define_user_symbol(&sym);
+        let mut vtable_func_map: HashMap<u64, HashMap<usize, HashSet<&str>>> = Default::default();
+
+        {
+            fn vtable_len(ref_data: &ReflectionData, class: &str) -> usize {
+                let mut class = Some(class);
+                while let Some(next) = class {
+                    let obj = ref_data.objects.get(next).unwrap().get_class().unwrap();
+                    if let Some(vtable) = obj.instance_vtable {
+                        return ref_data.vtables.get(&vtable).unwrap().len();
+                    }
+                    class = obj.r#struct.super_struct.as_deref();
+                }
+                0
+            }
+
+            for (path, obj) in &self.ref_data.objects {
+                let Some(class) = obj.get_class() else {
+                    continue;
+                };
+
+                let name = obj_name(self.ref_data, path);
+
+                {
+                    let mut builder = Structure::builder();
+                    builder.propagates_data_var_refs(true);
+
+                    let len = vtable_len(self.ref_data, path);
+                    let parent_len = if let Some(parent) = &class.r#struct.super_struct {
+                        let parent_name = obj_name(self.ref_data, &parent);
+                        let parent_type = NamedTypeReference::new(
+                            NamedTypeReferenceClass::StructNamedTypeClass,
+                            format!("{parent_name}::VTable"),
+                        );
+                        let parent_len = vtable_len(self.ref_data, parent);
+                        builder.base_structures(&[BaseStructure {
+                            ty: parent_type,
+                            offset: 0,
+                            width: 8 * parent_len as u64,
+                        }]);
+                        parent_len
+                    } else {
+                        0
+                    };
+
+                    builder.width(8 * len as u64);
+
+                    //let vtable_name = format!("{name}::VTable");
+                    //let vtable = Type::named_type(&NamedTypeReference::new(
+                    //    NamedTypeReferenceClass::StructNamedTypeClass,
+                    //    vtable_name,
+                    //));
+
+                    for i in parent_len..len {
+                        let offset = i as u64 * 8;
+                        let func = Type::function(&Type::void(), vec![], false);
+                        let func_ptr =
+                            Type::pointer(&CoreArchitecture::by_name("x86_64").unwrap(), &func);
+                        //let func_name = format!("{outer_name}::exec{func_name}");
+                        //let sym = Symbol::builder(SymbolType::Function, &func_name, addr).create();
+                        //self.bv.define_user_symbol(&sym);
+                        builder.insert(
+                            &func_ptr,
+                            format!("vfunc_0x{offset:x}"),
+                            offset,
+                            false,
+                            MemberAccess::PublicAccess,
+                            MemberScope::NoScope, // virtual scope?
+                        );
+                    }
+
+                    self.bv.define_user_type(
+                        format!("{name}::VTable"),
+                        &Type::structure(&builder.finalize()),
+                    );
+                }
+
+                if let Some(vtable) = class.instance_vtable {
+                    let vtable_addr = vtable - og_base + image_base;
+                    let sym =
+                        Symbol::builder(SymbolType::Data, &format!("{name}::vtable"), vtable_addr)
+                            .create();
+                    self.bv.define_user_symbol(&sym);
+
+                    let vtable_type = NamedTypeReference::new(
+                        NamedTypeReferenceClass::StructNamedTypeClass,
+                        format!("{name}::VTable"),
+                    );
+
+                    self.bv
+                        .define_user_data_var(vtable_addr, &Type::named_type(&vtable_type));
+
+                    for (i, func) in self
+                        .ref_data
+                        .vtables
+                        .get(&vtable)
+                        .unwrap()
+                        .iter()
+                        .enumerate()
+                    {
+                        vtable_func_map
+                            .entry(*func)
+                            .or_default()
+                            .entry(i)
+                            .or_default()
+                            .insert(path);
+                    }
+                }
+            }
+
+            // define symbols for functions belonging to a single parent class
+            for (func, refs) in vtable_func_map {
+                if refs.len() != 1 {
+                    continue;
+                }
+                let (index, refs) = refs.iter().next().unwrap();
+                let mut roots = HashSet::new();
+                for r in refs {
+                    roots.insert(get_parent_in(self.ref_data, r, refs));
+                }
+                if roots.len() != 1 {
+                    continue;
+                }
+                let owner = roots.iter().next().unwrap();
+
+                let owner_name = obj_name(self.ref_data, owner);
+                let func_name = format!("{owner_name}::vfunc_0x{:x}", 8 * index);
+                let func_addr = func - og_base + image_base;
+                let sym = Symbol::builder(SymbolType::Function, &func_name, func_addr).create();
+                self.bv.define_user_symbol(&sym);
+            }
         }
 
         let mut to_visit = HashSet::new();
