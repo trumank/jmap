@@ -497,6 +497,7 @@ impl Usmap {
             s.write_all(&buffer)?;
         }
 
+        header.compressed_size = full_buffer.len() as u32;
         header.decompressed_size = full_buffer.len() as u32;
         let maybe_compressed = match header.compression_method {
             Some(m) => {
