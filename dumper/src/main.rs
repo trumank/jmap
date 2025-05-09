@@ -1,42 +1,36 @@
 use anyhow::{bail, Result};
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use dumper::{Input, StructInfo};
 use std::{collections::BTreeMap, path::PathBuf};
 use ue_reflection::ReflectionData;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None,
+        group = ArgGroup::new("input").args(&["process", "minidump", "json"]).required(true))]
 struct Cli {
     /// Dump from process ID
-    #[arg(long, short, group = "input")]
+    #[arg(long, short, group = "input", requires = "struct_info")]
     process: Option<i32>,
 
     /// Dump from minidump
+    #[arg(long, short, group = "input", requires = "struct_info")]
+    minidump: Option<PathBuf>,
+
+    /// Use existing .json dump
     #[arg(long, short, group = "input")]
-    dump: Option<PathBuf>,
+    json: Option<PathBuf>,
 
     /// Struct layout info .json (from pdb_dumper)
-    #[arg(index = 1)]
-    struct_info: PathBuf,
+    #[arg(long, short)]
+    struct_info: Option<PathBuf>,
 
     /// Output dump .json path
-    #[arg(index = 2)]
+    #[arg(index = 1)]
     output: PathBuf,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
-
-    let input = match (cli.process, cli.dump) {
-        (Some(number), None) => Input::Process(number),
-        (None, Some(path)) => Input::Dump(path),
-        (None, None) => {
-            bail!("Error: Requires --process or --dump");
-        }
-        (Some(_), Some(_)) => {
-            bail!("Error: Must specify either --process OR --dump");
-        }
-    };
 
     enum OutputType {
         Json,
@@ -49,9 +43,21 @@ fn main() -> Result<()> {
         _ => bail!("Error: Expected .json or .usmap output type"),
     };
 
-    let struct_info: Vec<StructInfo> = serde_json::from_slice(&std::fs::read(cli.struct_info)?)?;
+    let struct_info: Option<Vec<StructInfo>> = if let Some(path) = cli.struct_info {
+        Some(serde_json::from_slice(&std::fs::read(path)?)?)
+    } else {
+        None
+    };
 
-    let reflection_data = dumper::dump(input, struct_info)?;
+    let reflection_data: ReflectionData = if let Some(path) = cli.json {
+        serde_json::from_slice(&std::fs::read(path)?)?
+    } else if let Some(pid) = cli.process {
+        dumper::dump(Input::Process(pid), struct_info.unwrap())?
+    } else if let Some(path) = cli.minidump {
+        dumper::dump(Input::Dump(path), struct_info.unwrap())?
+    } else {
+        unreachable!();
+    };
 
     match output_type {
         OutputType::Json => {
