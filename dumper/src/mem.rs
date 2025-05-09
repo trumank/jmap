@@ -9,7 +9,9 @@ use std::{
     ptr::NonNull,
     sync::{Arc, Mutex},
 };
-use ue_reflection::{EClassCastFlags, EClassFlags, EFunctionFlags, EPropertyFlags, EStructFlags};
+use ue_reflection::{
+    EClassCastFlags, EClassFlags, EFunctionFlags, EObjectFlags, EPropertyFlags, EStructFlags,
+};
 
 #[repr(C)]
 pub struct ExternalPtr<T> {
@@ -152,6 +154,7 @@ impl POD for u32 {}
 impl POD for i64 {}
 impl POD for u64 {}
 impl POD for usize {}
+impl POD for EObjectFlags {}
 impl POD for EClassCastFlags {}
 impl POD for EClassFlags {}
 impl POD for EFunctionFlags {}

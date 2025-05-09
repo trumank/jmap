@@ -290,8 +290,10 @@ fn dump_inner<M: Mem + Clone>(
                 .map(|s| read_path(&s))
                 .transpose()?;
             let class = read_path(&obj.class_private().read()?.ustruct().ufield().uobject())?;
+            let object_flags = obj.object_flags().read()?;
             Ok(Object {
                 vtable: obj.vtable().read()? as u64,
+                object_flags,
                 outer,
                 class,
             })
@@ -337,6 +339,7 @@ fn dump_inner<M: Mem + Clone>(
         let f = class.class_cast_flags().read()?;
         if f.contains(EClassCastFlags::CASTCLASS_UClass) {
             let obj = obj.cast::<UClass>();
+            let class_flags = obj.class_flags().read()?;
             let class_cast_flags = obj.class_cast_flags().read()?;
             let class_default_object = obj
                 .class_default_object()
@@ -347,6 +350,7 @@ fn dump_inner<M: Mem + Clone>(
                 path,
                 ObjectType::Class(Class {
                     r#struct: read_struct(&obj.cast())?,
+                    class_flags,
                     class_cast_flags,
                     class_default_object,
                     instance_vtable: None,
@@ -354,10 +358,12 @@ fn dump_inner<M: Mem + Clone>(
             );
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
             let full_obj = obj.cast::<UFunction>();
+            let function_flags = full_obj.function_flags().read()?;
             objects.insert(
                 path,
                 ObjectType::Function(Function {
                     r#struct: read_struct(&obj.cast())?,
+                    function_flags,
                     func: full_obj.func().read()? as u64,
                 }),
             );

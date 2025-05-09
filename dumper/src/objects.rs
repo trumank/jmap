@@ -3,13 +3,19 @@ use crate::{
     mem::{CtxPtr, ExternalPtr, Mem, StructsTrait},
 };
 use anyhow::Result;
-use ue_reflection::{EClassCastFlags, EClassFlags, EFunctionFlags, EPropertyFlags, EStructFlags};
+use ue_reflection::{
+    EClassCastFlags, EClassFlags, EFunctionFlags, EObjectFlags, EPropertyFlags, EStructFlags,
+};
 
 #[derive(Clone, Copy)]
 pub struct UObject;
 impl<C: Clone + StructsTrait> CtxPtr<UObject, C> {
     pub fn vtable(&self) -> CtxPtr<usize, C> {
         self.cast()
+    }
+    pub fn object_flags(&self) -> CtxPtr<EObjectFlags, C> {
+        let offset = self.ctx().struct_member("UObjectBase", "ObjectFlags");
+        self.byte_offset(offset).cast()
     }
     pub fn class_private(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
         let offset = self.ctx().struct_member("UObjectBase", "ClassPrivate");

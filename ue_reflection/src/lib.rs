@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     #[repr(C)]
     pub struct EObjectFlags: u32 {
         const RF_NoFlags = 0x0000;
@@ -37,7 +37,7 @@ bitflags::bitflags! {
         const RF_WillBeLoaded = 0x08000000;
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     #[repr(C)]
     pub struct EFunctionFlags: u32 {
         const FUNC_None = 0x0000;
@@ -74,7 +74,7 @@ bitflags::bitflags! {
         const FUNC_AllFlags = 0xffffffff;
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
     #[repr(C)]
     pub struct EClassFlags: i32 {
         const CLASS_None = 0x0000;
@@ -289,6 +289,7 @@ pub struct ReflectionData {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
     pub vtable: u64,
+    pub object_flags: EObjectFlags,
     pub outer: Option<String>,
     pub class: String,
 }
@@ -320,6 +321,7 @@ pub struct ScriptStruct {
 pub struct Class {
     #[serde(flatten)]
     pub r#struct: Struct,
+    pub class_flags: EClassFlags,
     pub class_cast_flags: EClassCastFlags,
     pub class_default_object: Option<String>,
     /// VTable ptr of any instance of this UClass if found
@@ -329,6 +331,7 @@ pub struct Class {
 pub struct Function {
     #[serde(flatten)]
     pub r#struct: Struct,
+    pub function_flags: EFunctionFlags,
     pub func: u64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
