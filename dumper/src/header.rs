@@ -93,9 +93,9 @@ impl HeaderStyle {
             HeaderStyle::C => "struct",
         }
     }
-    fn format_template<'a>(
+    fn format_template(
         &self,
-        name: &'a str,
+        name: &str,
         params: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> String {
         let (c_open, c_sep, c_close) = match self {
@@ -112,7 +112,7 @@ impl HeaderStyle {
         if let Some(first) = iter.next() {
             buffer.push_str(first.as_ref());
         }
-        while let Some(next) = iter.next() {
+        for next in iter {
             buffer.push_str(c_sep);
             buffer.push_str(next.as_ref());
         }

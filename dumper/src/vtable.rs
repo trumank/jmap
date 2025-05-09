@@ -9,7 +9,7 @@ pub fn analyze_vtables(
 ) -> BTreeMap<u64, Vec<u64>> {
     let mut class_vtables: HashMap<String, u64> = HashMap::new();
     let mut grouped: BTreeMap<u64, HashSet<&str>> = Default::default();
-    for (_path, obj) in &*objects {
+    for obj in objects.values() {
         let object = obj.get_object();
         let vtable = object.vtable;
         let class = object.class.as_str();
@@ -72,7 +72,7 @@ pub fn analyze_vtables(
 
     // trim vtables as they must be bounded by size of child vtable
     for (path, obj) in &*objects {
-        if let Some(_) = obj.get_class() {
+        if obj.get_class().is_some() {
             let mut class = path.as_str();
             let Some(vtable_ptr) = class_vtables.get(class) else {
                 // println!("no vtable found for class {class}");

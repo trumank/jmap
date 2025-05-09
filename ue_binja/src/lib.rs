@@ -40,12 +40,12 @@ impl Command for ImportCommand {
 
         info!("loaded {} objects", ref_data.objects.len());
 
-        into_header(&ref_data, bv, |path, obj| true);
+        into_header(&ref_data, bv, |_path, _obj| true);
 
         bv.file().commit_undo_actions(action);
     }
 
-    fn valid(&self, view: &binaryninja::binary_view::BinaryView) -> bool {
+    fn valid(&self, _view: &binaryninja::binary_view::BinaryView) -> bool {
         true
     }
 }
@@ -124,8 +124,8 @@ fn obj_name(ref_data: &ReflectionData, path: &str) -> String {
     let obj = &ref_data.objects[path];
     let name = path.rsplit(['/', '.', ':']).next().unwrap();
     match obj {
-        ObjectType::Object(object) => name.to_string(),
-        ObjectType::Package(package) => name.to_string(),
+        ObjectType::Object(_) => name.to_string(),
+        ObjectType::Package(_) => name.to_string(),
         ObjectType::Enum(_) => name.into(),
         ObjectType::ScriptStruct(_script_struct) => {
             format!("F{name}")
@@ -143,7 +143,6 @@ fn obj_name(ref_data: &ReflectionData, path: &str) -> String {
             }
         }
         ObjectType::Function(_) => name.to_string(),
-        _ => todo!("{path} {obj:?}"),
     }
 }
 
@@ -221,7 +220,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 field_size,
                 byte_offset,
                 byte_mask,
-                field_mask,
+                field_mask: _,
             } => {
                 let inner = match field_size {
                     1 => CType::UInt8,
@@ -235,9 +234,10 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 CType::Bool(inner, index)
             }
             PropertyType::Array { inner } => CType::TArray(self.prop_ctype(inner)),
-            PropertyType::Enum { container, r#enum } => {
-                CType::UEEnum(r#enum.as_ref().expect("TODO unknown enum name"))
-            }
+            PropertyType::Enum {
+                container: _,
+                r#enum,
+            } => CType::UEEnum(r#enum.as_ref().expect("TODO unknown enum name")),
             PropertyType::Map {
                 key_prop,
                 value_prop,
@@ -249,7 +249,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             PropertyType::Set { key_prop } => CType::TSet(self.prop_ctype(key_prop)),
             PropertyType::Float => CType::Float,
             PropertyType::Double => CType::Double,
-            PropertyType::Byte { r#enum } => CType::UInt8,
+            PropertyType::Byte { r#enum: _ } => CType::UInt8,
             PropertyType::UInt16 => CType::UInt16,
             PropertyType::UInt32 => CType::UInt32,
             PropertyType::UInt64 => CType::UInt64,
@@ -277,7 +277,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let class = CType::UEClass(class);
                 CType::TScriptInterface(self.store.insert(class))
             }
-            PropertyType::Optional { inner } => todo!(),
+            PropertyType::Optional { inner: _ } => todo!(),
         };
         let id = self.store.insert(new_type);
         if prop.array_dim == 1 {
@@ -287,7 +287,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
         }
     }
 
-    fn type_to_string(&mut self, id: TypeId, escape: bool, in_template: bool) -> String {
+    fn type_to_string(&mut self, id: TypeId, escape: bool) -> String {
         let escape_inner = match self.header_style {
             HeaderStyle::Binja => escape,
             HeaderStyle::C => false,
@@ -307,7 +307,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::WChar => TypeName::primitive("wchar_t"),
 
-            CType::Bool(type_id, _) => TypeName::new(self.type_to_string(type_id, false, false)),
+            CType::Bool(type_id, _) => TypeName::new(self.type_to_string(type_id, false)),
 
             CType::FName => TypeName::new("FName"),
             CType::FString => TypeName::new("FString"),
@@ -318,50 +318,47 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Delegate => TypeName::new("Delegate"),
 
             CType::TArray(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(self.header_style.format_template("TArray", [inner]))
             }
             CType::TMap(k, v) => {
-                let k = self.type_to_string(k, false, true);
-                let v = self.type_to_string(v, false, true);
+                let k = self.type_to_string(k, false);
+                let v = self.type_to_string(v, false);
                 TypeName::new(self.header_style.format_template("TMap", [k, v]))
             }
             CType::TSet(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(self.header_style.format_template("TSet", [inner]))
             }
-            CType::Ptr(type_id) => TypeName::pointer(format!(
-                "{}*",
-                self.type_to_string(type_id, escape_inner, in_template),
-            )),
+            CType::Ptr(type_id) => {
+                TypeName::pointer(format!("{}*", self.type_to_string(type_id, escape_inner),))
+            }
             CType::TWeakObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(self.header_style.format_template("TWeakObjectPtr", [inner]))
             }
             CType::TSoftObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(self.header_style.format_template("TSoftObjectPtr", [inner]))
             }
             CType::TLazyObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(self.header_style.format_template("TLazyObjectPtr", [inner]))
             }
             CType::TScriptInterface(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 TypeName::new(
                     self.header_style
                         .format_template("TScriptInterface", [inner]),
                 )
             }
             CType::TTuple(a, b) => {
-                let a = self.type_to_string(a, false, true);
-                let b = self.type_to_string(b, false, true);
+                let a = self.type_to_string(a, false);
+                let b = self.type_to_string(b, false);
                 TypeName::new(self.header_style.format_template("TTuple", [a, b]))
             }
 
-            CType::Array(type_id, _size) => {
-                TypeName::new(self.type_to_string(type_id, false, in_template))
-            } // handle size at struct member, not here
+            CType::Array(type_id, _size) => TypeName::new(self.type_to_string(type_id, false)), // handle size at struct member, not here
 
             CType::UEEnum(path) => TypeName::new(obj_name(self.ref_data, path)),
             CType::UEStruct(path) => TypeName::new(obj_name(self.ref_data, path)),
@@ -403,16 +400,16 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Delegate => struct_("Delegate"),
 
             CType::TArray(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(&self.header_style.format_template("TArray", [inner]))
             }
             CType::TMap(k, v) => {
-                let k = self.type_to_string(k, false, true);
-                let v = self.type_to_string(v, false, true);
+                let k = self.type_to_string(k, false);
+                let v = self.type_to_string(v, false);
                 struct_(&self.header_style.format_template("TMap", [k, v]))
             }
             CType::TSet(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(&self.header_style.format_template("TSet", [inner]))
             }
             CType::Ptr(type_id) => Type::pointer(
@@ -420,19 +417,19 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 &self.bn_type(type_id),
             ),
             CType::TWeakObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(&self.header_style.format_template("TWeakObjectPtr", [inner]))
             }
             CType::TSoftObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(&self.header_style.format_template("TSoftObjectPtr", [inner]))
             }
             CType::TLazyObjectPtr(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(&self.header_style.format_template("TLazyObjectPtr", [inner]))
             }
             CType::TScriptInterface(type_id) => {
-                let inner = self.type_to_string(type_id, false, true);
+                let inner = self.type_to_string(type_id, false);
                 struct_(
                     &self
                         .header_style
@@ -440,8 +437,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 )
             }
             CType::TTuple(a, b) => {
-                let a = self.type_to_string(a, false, true);
-                let b = self.type_to_string(b, false, true);
+                let a = self.type_to_string(a, false);
+                let b = self.type_to_string(b, false);
                 struct_(&self.header_style.format_template("TTuple", [a, b]))
             }
 
@@ -615,7 +612,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
     fn decl_ctype(&mut self, buffer: &mut String, id: TypeId) {
         let ctype = self.store[id];
-        let this = self.type_to_string(id, false, false);
+        let this = self.type_to_string(id, false);
         match ctype {
             CType::Float => {}
             CType::Double => {}
@@ -641,7 +638,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             }
             CType::FString => {
                 let data = type_fstring_data(self.store);
-                let data_name = self.type_to_string(data, true, false);
+                let data_name = self.type_to_string(data, true);
                 writeln!(
                     buffer,
                     r#"struct {this} {{
@@ -759,8 +756,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             }
 
             CType::TTuple(a, b) => {
-                let a = self.type_to_string(a, true, false);
-                let b = self.type_to_string(b, true, false);
+                let a = self.type_to_string(a, true);
+                let b = self.type_to_string(b, true);
 
                 writeln!(
                     buffer,
@@ -814,7 +811,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                     let parent_struct = &self.ref_data.objects[parent].get_struct().unwrap();
                     let parent = NamedTypeReference::new(
                         NamedTypeReferenceClass::StructNamedTypeClass,
-                        obj_name(self.ref_data, &parent),
+                        obj_name(self.ref_data, parent),
                     );
                     builder.base_structures(&[BaseStructure {
                         ty: parent,
@@ -932,7 +929,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
                     let len = vtable_len(self.ref_data, path);
                     let parent_len = if let Some(parent) = &class.r#struct.super_struct {
-                        let parent_name = obj_name(self.ref_data, &parent);
+                        let parent_name = obj_name(self.ref_data, parent);
                         let parent_type = NamedTypeReference::new(
                             NamedTypeReferenceClass::StructNamedTypeClass,
                             format!("{parent_name}::VTable"),
@@ -1053,8 +1050,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                         continue;
                     };
 
-                    let outer_name = obj_name(self.ref_data, &outer);
-                    let func_name = obj_name(self.ref_data, &path);
+                    let outer_name = obj_name(self.ref_data, outer);
+                    let func_name = obj_name(self.ref_data, path);
                     let func_name = format!("{outer_name}::exec{func_name}");
 
                     let sym = Symbol::builder(SymbolType::Function, &func_name, addr).create();
