@@ -4,7 +4,7 @@ mod mem;
 mod objects;
 mod vtable;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -273,6 +273,7 @@ fn dump_inner<M: Mem + Clone>(
     let uobject_array = guobjectarray.ctx(mem);
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
+    let mut child_map = HashMap::<String, BTreeSet<String>>::default();
 
     for i in 0..uobject_array.obj_object().num_elements().read()? {
         let obj_item = uobject_array.obj_object().read_item_ptr(i as usize)?;
@@ -296,6 +297,7 @@ fn dump_inner<M: Mem + Clone>(
                 object_flags,
                 outer,
                 class,
+                children: Default::default(),
             })
         }
 
@@ -337,7 +339,7 @@ fn dump_inner<M: Mem + Clone>(
             continue;
         }
         let f = class.class_cast_flags().read()?;
-        if f.contains(EClassCastFlags::CASTCLASS_UClass) {
+        let object = if f.contains(EClassCastFlags::CASTCLASS_UClass) {
             let obj = obj.cast::<UClass>();
             let class_flags = obj.class_flags().read()?;
             let class_cast_flags = obj.class_cast_flags().read()?;
@@ -346,32 +348,23 @@ fn dump_inner<M: Mem + Clone>(
                 .read()?
                 .map(|s| read_path(&s))
                 .transpose()?;
-            objects.insert(
-                path,
-                ObjectType::Class(Class {
-                    r#struct: read_struct(&obj.cast())?,
-                    class_flags,
-                    class_cast_flags,
-                    class_default_object,
-                    instance_vtable: None,
-                }),
-            );
+            ObjectType::Class(Class {
+                r#struct: read_struct(&obj.cast())?,
+                class_flags,
+                class_cast_flags,
+                class_default_object,
+                instance_vtable: None,
+            })
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
             let full_obj = obj.cast::<UFunction>();
             let function_flags = full_obj.function_flags().read()?;
-            objects.insert(
-                path,
-                ObjectType::Function(Function {
-                    r#struct: read_struct(&obj.cast())?,
-                    function_flags,
-                    func: full_obj.func().read()? as u64,
-                }),
-            );
+            ObjectType::Function(Function {
+                r#struct: read_struct(&obj.cast())?,
+                function_flags,
+                func: full_obj.func().read()? as u64,
+            })
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
-            objects.insert(
-                path,
-                ObjectType::ScriptStruct(read_script_struct(&obj.cast())?),
-            );
+            ObjectType::ScriptStruct(read_script_struct(&obj.cast())?)
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
             let full_obj = obj.cast::<UEnum>();
             let mut names = vec![];
@@ -380,27 +373,42 @@ fn dump_inner<M: Mem + Clone>(
                 let value = item.b().read()?;
                 names.push((key, value));
             }
-            objects.insert(
-                path,
-                ObjectType::Enum(Enum {
-                    object: read_object(&obj.cast())?,
-                    cpp_type: full_obj.cpp_type().read()?,
-                    names,
-                }),
-            );
+            ObjectType::Enum(Enum {
+                object: read_object(&obj.cast())?,
+                cpp_type: full_obj.cpp_type().read()?,
+                names,
+            })
         } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
             let obj = obj.cast::<UObject>();
-            objects.insert(
-                path,
-                ObjectType::Package(Package {
-                    object: read_object(&obj)?,
-                }),
-            );
+            ObjectType::Package(Package {
+                object: read_object(&obj)?,
+            })
         } else {
             let obj = obj.cast::<UObject>();
-            objects.insert(path, ObjectType::Object(read_object(&obj)?));
+            ObjectType::Object(read_object(&obj)?)
             //println!("{path:?} {:?}", f);
+        };
+
+        // update child_map
+        {
+            if let Some(outer) = object.get_object().outer.clone() {
+                child_map.entry(outer).or_default().insert(path.clone());
+            }
         }
+
+        objects.insert(path, object);
+    }
+
+    for (outer, children) in child_map {
+        match objects.get_mut(&outer).unwrap() {
+            ObjectType::Package(obj) => &mut obj.object,
+            ObjectType::Enum(obj) => &mut obj.object,
+            ObjectType::ScriptStruct(obj) => &mut obj.r#struct.object,
+            ObjectType::Class(obj) => &mut obj.r#struct.object,
+            ObjectType::Function(obj) => &mut obj.r#struct.object,
+            ObjectType::Object(obj) => obj,
+        }
+        .children = children;
     }
 
     let vtables = vtable::analyze_vtables(image, &mut objects);

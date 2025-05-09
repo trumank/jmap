@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -292,6 +292,7 @@ pub struct Object {
     pub object_flags: EObjectFlags,
     pub outer: Option<String>,
     pub class: String,
+    pub children: BTreeSet<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
