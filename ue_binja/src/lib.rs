@@ -23,12 +23,18 @@ use ue_reflection::{
 };
 
 struct ImportCommand {}
-
 impl Command for ImportCommand {
     fn action(&self, bv: &binaryninja::binary_view::BinaryView) {
         info!("do the stuff");
 
-        let ref_data = match load() {
+        let Some(path) = binaryninja::interaction::get_open_filename_input(
+            "Import Unreal Engine reflection data",
+            "json",
+        ) else {
+            return;
+        };
+
+        let ref_data = match load(path) {
             Ok(d) => d,
             Err(e) => {
                 error!("failed to load objects: {e}");
@@ -50,8 +56,7 @@ impl Command for ImportCommand {
     }
 }
 
-fn load() -> Result<ReflectionData> {
-    let path = "/home/truman/projects/ue/meatloaf/fsd.json";
+fn load(path: std::path::PathBuf) -> Result<ReflectionData> {
     Ok(serde_json::from_reader(std::io::BufReader::new(
         std::fs::File::open(path)?,
     ))?)
