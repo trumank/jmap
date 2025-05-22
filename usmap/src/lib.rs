@@ -1,5 +1,4 @@
 mod compression;
-mod gen;
 
 use std::{
     collections::HashMap,
