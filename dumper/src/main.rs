@@ -6,11 +6,11 @@ use ue_reflection::ReflectionData;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None,
-        group = ArgGroup::new("input").args(&["process", "minidump", "json"]).required(true))]
+        group = ArgGroup::new("input").args(&["pid", "minidump", "json"]).required(true))]
 struct Cli {
     /// Dump from process ID
     #[arg(long, short, group = "input")]
-    process: Option<i32>,
+    pid: Option<i32>,
 
     /// Dump from minidump
     #[arg(long, short, group = "input")]
@@ -51,7 +51,7 @@ fn main() -> Result<()> {
 
     let reflection_data: ReflectionData = if let Some(path) = cli.json {
         serde_json::from_slice(&std::fs::read(path)?)?
-    } else if let Some(pid) = cli.process {
+    } else if let Some(pid) = cli.pid {
         dumper::dump(Input::Process(pid), struct_info)?
     } else if let Some(path) = cli.minidump {
         dumper::dump(Input::Dump(path), struct_info)?
