@@ -1,6 +1,6 @@
 use anyhow::{bail, Result};
 use clap::{ArgGroup, Parser};
-use dumper::{Input, StructInfo};
+use dumper::{structs::Structs, Input};
 use std::{collections::BTreeMap, path::PathBuf};
 use ue_reflection::ReflectionData;
 
@@ -9,11 +9,11 @@ use ue_reflection::ReflectionData;
         group = ArgGroup::new("input").args(&["process", "minidump", "json"]).required(true))]
 struct Cli {
     /// Dump from process ID
-    #[arg(long, short, group = "input", requires = "struct_info")]
+    #[arg(long, short, group = "input")]
     process: Option<i32>,
 
     /// Dump from minidump
-    #[arg(long, short, group = "input", requires = "struct_info")]
+    #[arg(long, short, group = "input")]
     minidump: Option<PathBuf>,
 
     /// Use existing .json dump
@@ -43,7 +43,7 @@ fn main() -> Result<()> {
         _ => bail!("Error: Expected .json or .usmap output type"),
     };
 
-    let struct_info: Option<Vec<StructInfo>> = if let Some(path) = cli.struct_info {
+    let struct_info: Option<Structs> = if let Some(path) = cli.struct_info {
         Some(serde_json::from_slice(&std::fs::read(path)?)?)
     } else {
         None
@@ -52,9 +52,9 @@ fn main() -> Result<()> {
     let reflection_data: ReflectionData = if let Some(path) = cli.json {
         serde_json::from_slice(&std::fs::read(path)?)?
     } else if let Some(pid) = cli.process {
-        dumper::dump(Input::Process(pid), struct_info.unwrap())?
+        dumper::dump(Input::Process(pid), struct_info)?
     } else if let Some(path) = cli.minidump {
-        dumper::dump(Input::Dump(path), struct_info.unwrap())?
+        dumper::dump(Input::Dump(path), struct_info)?
     } else {
         unreachable!();
     };

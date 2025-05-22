@@ -1,4 +1,4 @@
-use crate::{containers::PtrFNamePool, StructInfo};
+use crate::{containers::PtrFNamePool, structs::StructInfo};
 use anyhow::{Context as _, Result};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
@@ -282,7 +282,7 @@ impl Mem for ProcessHandle {
 pub struct Ctx<M: Mem> {
     pub mem: M,
     pub fnamepool: PtrFNamePool,
-    pub structs: Arc<HashMap<String, crate::StructInfo>>,
+    pub structs: Arc<HashMap<String, StructInfo>>,
 }
 impl<M: Mem> Mem for Ctx<M> {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {

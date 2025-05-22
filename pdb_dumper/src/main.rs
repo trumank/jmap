@@ -155,7 +155,7 @@ fn main() -> Result<()> {
 
     // Write to JSON file
     let output_file = File::create(&cli.output)?;
-    serde_json::to_writer(output_file, &structs)?;
+    serde_json::to_writer_pretty(output_file, &structs)?;
 
     println!("Successfully wrote struct information to {:?}", cli.output);
     Ok(())

@@ -2,13 +2,14 @@ mod containers;
 mod header;
 mod mem;
 mod objects;
+pub mod structs;
 mod vtable;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use mem::{Ctx, CtxPtr, ExternalPtr, Mem, MemCache, NameTrait, StructsTrait};
 use objects::FOptionalProperty;
 use patternsleuth_image::image::Image;
@@ -27,6 +28,7 @@ use crate::objects::{
     FSoftObjectProperty, FStructProperty, FUObjectArray, FWeakObjectProperty, UClass, UEnum,
     UFunction, UObject, UScriptStruct, UStruct,
 };
+use crate::structs::Structs;
 
 impl_try_collector! {
     #[derive(Debug, PartialEq, Clone)]
@@ -209,27 +211,12 @@ impl Mem for ImgMem<'_, '_> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
-struct StructMember {
-    name: String,
-    offset: u64,
-    size: u64,
-    //type_name: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct StructInfo {
-    name: String,
-    size: u64,
-    members: Vec<StructMember>,
-}
-
 pub enum Input {
     Process(i32),
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<ReflectionData> {
+pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
@@ -251,7 +238,7 @@ pub fn dump(input: Input, struct_info: Vec<StructInfo>) -> Result<ReflectionData
 fn dump_inner<M: Mem + Clone>(
     mem: M,
     image: &Image<'_>,
-    struct_info: Vec<StructInfo>,
+    struct_info: Option<Structs>,
 ) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
@@ -259,11 +246,21 @@ fn dump_inner<M: Mem + Clone>(
     let guobjectarray = ExternalPtr::<FUObjectArray>::new(results.guobject_array.0);
     let fnamepool = PtrFNamePool(results.fname_pool.0);
 
+    let struct_info = struct_info
+        .or_else(|| structs::get_struct_info_for_version(&results.engine_version))
+        .with_context(|| {
+            format!(
+                "Missing built-in struct info for {:?} please supply one with --struct_info or make an issue",
+                results.engine_version
+            )
+        })?;
+
     let mem = Ctx {
         mem,
         fnamepool,
         structs: Arc::new(
             struct_info
+                .0
                 .into_iter()
                 .map(|s| (s.name.clone(), s))
                 .collect(),
