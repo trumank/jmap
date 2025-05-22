@@ -236,7 +236,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 };
                 let inner = self.store.insert(inner);
                 let index = get_bitfield_bit_index(*byte_offset, *byte_mask);
-                CType::Bool(inner, index)
+                CType::BoolBit(inner, index)
             }
             PropertyType::Array { inner } => CType::TArray(self.prop_ctype(inner)),
             PropertyType::Enum {
@@ -282,7 +282,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let class = CType::UEClass(class);
                 CType::TScriptInterface(self.store.insert(class))
             }
-            PropertyType::Optional { inner: _ } => todo!(),
+            PropertyType::Optional { inner } => CType::TOptional(self.prop_ctype(inner)),
         };
         let id = self.store.insert(new_type);
         if prop.array_dim == 1 {
@@ -312,7 +312,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::WChar => TypeName::primitive("wchar_t"),
 
-            CType::Bool(type_id, _) => TypeName::new(self.type_to_string(type_id, false)),
+            CType::Bool => TypeName::primitive("bool"),
+            CType::BoolBit(type_id, _) => TypeName::new(self.type_to_string(type_id, false)),
 
             CType::FName => TypeName::new("FName"),
             CType::FString => TypeName::new("FString"),
@@ -362,6 +363,10 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let b = self.type_to_string(b, false);
                 TypeName::new(self.header_style.format_template("TTuple", [a, b]))
             }
+            CType::TOptional(inner) => {
+                let inner = self.type_to_string(inner, false);
+                TypeName::new(self.header_style.format_template("TOptional", [inner]))
+            }
 
             CType::Array(type_id, _size) => TypeName::new(self.type_to_string(type_id, false)), // handle size at struct member, not here
 
@@ -394,7 +399,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::WChar => Type::named_int(2, false, "wchar_t"),
 
-            CType::Bool(type_id, _) => self.bn_type(type_id),
+            CType::Bool => Type::bool(),
+            CType::BoolBit(type_id, _) => self.bn_type(type_id),
 
             CType::FName => struct_("FName"),
             CType::FString => struct_("FString"),
@@ -446,6 +452,10 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let b = self.type_to_string(b, false);
                 struct_(&self.header_style.format_template("TTuple", [a, b]))
             }
+            CType::TOptional(inner) => {
+                let inner = self.type_to_string(inner, false);
+                struct_(&self.header_style.format_template("TOptional", [inner]))
+            }
 
             CType::Array(type_id, size) => Type::array(&self.bn_type(type_id), size as u64),
 
@@ -483,7 +493,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int32 => {}
             CType::Int64 => {}
             CType::WChar => {}
-            CType::Bool(type_id, _field_mask) => {
+            CType::Bool => {}
+            CType::BoolBit(type_id, _field_mask) => {
                 dependencies.push((DepType::Full, type_id));
             }
             CType::FName => {}
@@ -526,6 +537,9 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::TTuple(a, b) => {
                 dependencies.push((DepType::Full, a));
                 dependencies.push((DepType::Full, b));
+            }
+            CType::TOptional(inner) => {
+                dependencies.push((DepType::Full, inner));
             }
             CType::Array(type_id, _size) => {
                 dependencies.push((DepType::Full, type_id));
@@ -570,7 +584,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int32 => (4, 4),
             CType::Int64 => (8, 8),
             CType::WChar => (2, 2),
-            CType::Bool(type_id, _field_mask) => self.get_type_size(type_id),
+            CType::Bool => (1, 1),
+            CType::BoolBit(type_id, _field_mask) => self.get_type_size(type_id),
             CType::FName => (8, 4),
             CType::FString => (16, 8),    // TODO size TArray<wchar_t>
             CType::FText => (1, 1),       // TODO
@@ -589,6 +604,13 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::TTuple(a, b) => {
                 let (s_a, a_a) = self.get_type_size(a);
                 let (s_b, a_b) = self.get_type_size(b);
+                let align = a_a.max(a_b);
+                let size = align_up(s_a + s_b, align);
+                (size, align)
+            }
+            CType::TOptional(inner) => {
+                let (s_a, a_a) = self.get_type_size(inner);
+                let (s_b, a_b) = (1, 1);
                 let align = a_a.max(a_b);
                 let size = align_up(s_a + s_b, align);
                 (size, align)
@@ -630,7 +652,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int32 => {}
             CType::Int64 => {}
             CType::WChar => {}
-            CType::Bool(_, _) => {}
+            CType::Bool => {}
+            CType::BoolBit(_, _) => {}
             CType::FName => {
                 writeln!(
                     buffer,
@@ -772,6 +795,22 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 }};"#,
                 )
                 .unwrap();
+            }
+            CType::TOptional(inner) => {
+                let s = &mut self.store;
+
+                let bool = CType::Bool.i(s);
+                let bool = self.bn_type(bool);
+                let (size, _align) = self.get_type_size(inner);
+
+                let inner = self.bn_type(inner);
+
+                let struct_ = Structure::builder()
+                    .m(&inner, "Value", 0)
+                    .m(&bool, "bIsSet", size as u64)
+                    .finalize();
+
+                self.bv.define_user_type(this, &Type::structure(&struct_));
             }
 
             CType::Array(_, _) => {}
@@ -1197,7 +1236,8 @@ enum CType<'a, T = TypeId> {
 
     WChar,
 
-    Bool(T, usize), // TODO bitfield
+    Bool,
+    BoolBit(T, usize), // TODO bitfield
 
     FName,
     FString,
@@ -1217,6 +1257,7 @@ enum CType<'a, T = TypeId> {
     TScriptInterface(T),
 
     TTuple(T, T),
+    TOptional(T),
 
     Array(T, usize),
 
