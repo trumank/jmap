@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["dumper", "ue_reflection", "pdb_dumper", "dynamic_structs", "usmap", "ue_binja"]
+members = ["dumper", "ue_reflection", "pdb_dumper", "usmap", "ue_binja"]
 
 [workspace.package]
 version = "0.1.0"

@@ -12,7 +12,6 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
-dynamic_structs = { version = "0.1.0", path = "../dynamic_structs" }
 getopts = "0.2.21"
 pdb = "0.8.0"
 serde = { workspace = true, features = ["derive"] }
