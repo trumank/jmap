@@ -12,6 +12,15 @@ struct TArray {
     int Max;
 };
 
+template<typename T>
+struct TArrayInline {
+    public:
+    T Inline[4];
+    T* Data;
+    int Num;
+    int Max;
+};
+
 struct FString {
     public:
     TArray<char> String;

@@ -20,6 +20,7 @@ pub enum LayoutType {
     Pointer(Box<LayoutType>),
     Reference(Box<LayoutType>),
     Template(String, Vec<LayoutType>),
+    Array(Box<LayoutType>, usize), // (element_type, length)
 }
 
 #[derive(Debug, Clone)]
@@ -59,6 +60,9 @@ impl LayoutType {
                 name.to_string(),
                 args.iter().map(LayoutType::from_parser_type).collect(),
             ),
+            DataType::Array(inner, size) => {
+                LayoutType::Array(Box::new(LayoutType::from_parser_type(inner)), *size)
+            }
         }
     }
 
@@ -78,6 +82,10 @@ impl LayoutType {
             LayoutType::Template(name, _) => layouts
                 .get(name)
                 .map_or((8, 8), |layout| (layout.size, layout.alignment)),
+            LayoutType::Array(inner, size) => {
+                let (element_size, element_alignment) = inner.size_and_alignment(layouts);
+                (element_size * size, element_alignment)
+            }
         }
     }
 }
@@ -292,5 +300,38 @@ mod tests {
         let container_layout = layouts.get("Container").unwrap();
         assert_eq!(container_layout.size, 16);
         assert_eq!(container_layout.alignment, 8);
+    }
+
+    #[test]
+    fn test_array_type_layout() {
+        let declarations = vec![LayoutDeclaration {
+            name: "ArrayStruct".to_string(),
+            sections: vec![LayoutSection {
+                members: vec![
+                    LayoutMember {
+                        name: "ints".to_string(),
+                        data_type: LayoutType::Array(Box::new(LayoutType::Int), 5),
+                    },
+                    LayoutMember {
+                        name: "doubles".to_string(),
+                        data_type: LayoutType::Array(Box::new(LayoutType::Double), 3),
+                    },
+                ],
+            }],
+        }];
+
+        let layouts = compute_layouts(&declarations);
+        let layout = layouts.get("ArrayStruct").unwrap();
+
+        // Array of 5 ints (4 bytes each) = 20 bytes
+        // Array of 3 doubles (8 bytes each) = 24 bytes
+        // Total size should be 48 bytes (aligned to 8 bytes)
+        assert_eq!(layout.size, 48);
+        assert_eq!(layout.alignment, 8);
+
+        // Check member offsets
+        let offsets: HashMap<_, _> = layout.members.iter().cloned().collect();
+        assert_eq!(offsets.get("ints"), Some(&0));
+        assert_eq!(offsets.get("doubles"), Some(&24));
     }
 }

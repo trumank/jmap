@@ -27,19 +27,22 @@ enum Token<'src> {
 
     // Identifiers and literals
     Ident(&'src str),
+    Number(&'src str),
 
     // Operators and punctuation
-    Colon,      // :
-    Semicolon,  // ;
-    Comma,      // ,
-    Star,       // *
-    Ampersand,  // &
-    LeftParen,  // (
-    RightParen, // )
-    LeftBrace,  // {
-    RightBrace, // }
-    LeftAngle,  // <
-    RightAngle, // >
+    Colon,        // :
+    Semicolon,    // ;
+    Comma,        // ,
+    Star,         // *
+    Ampersand,    // &
+    LeftParen,    // (
+    RightParen,   // )
+    LeftBrace,    // {
+    RightBrace,   // }
+    LeftAngle,    // <
+    RightAngle,   // >
+    LeftBracket,  // [
+    RightBracket, // ]
 
     // Whitespace and comments (filtered out)
     Whitespace,
@@ -64,6 +67,7 @@ impl fmt::Display for Token<'_> {
             Token::Bool => write!(f, "bool"),
             Token::Void => write!(f, "void"),
             Token::Ident(s) => write!(f, "{s}"),
+            Token::Number(n) => write!(f, "{n}"),
             Token::Colon => write!(f, ":"),
             Token::Semicolon => write!(f, ";"),
             Token::Comma => write!(f, ","),
@@ -75,6 +79,8 @@ impl fmt::Display for Token<'_> {
             Token::RightBrace => write!(f, "}}"),
             Token::LeftAngle => write!(f, "<"),
             Token::RightAngle => write!(f, ">"),
+            Token::LeftBracket => write!(f, "["),
+            Token::RightBracket => write!(f, "]"),
             Token::Whitespace => write!(f, " "),
             Token::Comment => write!(f, "//"),
         }
@@ -96,7 +102,12 @@ fn lexer<'src>(
         just('}').to(Token::RightBrace),
         just('<').to(Token::LeftAngle),
         just('>').to(Token::RightAngle),
+        just('[').to(Token::LeftBracket),
+        just(']').to(Token::RightBracket),
     ));
+
+    // Numbers
+    let number = text::int(10).map(Token::Number);
 
     // Identifiers and keywords
     let ident = text::ascii::ident().map(|ident: &str| match ident {
@@ -135,7 +146,7 @@ fn lexer<'src>(
         .at_least(1)
         .to(Token::Whitespace);
 
-    let token = single_char.or(ident).or(comment).or(whitespace);
+    let token = single_char.or(ident).or(number).or(comment).or(whitespace);
 
     token
         .map_with(|tok, e| (tok, e.span()))
@@ -169,6 +180,7 @@ pub(crate) enum DataType<'src> {
     Pointer(Box<DataType<'src>>),
     Reference(Box<DataType<'src>>),
     Template(&'src str, Vec<DataType<'src>>),
+    Array(Box<DataType<'src>>, usize),
 }
 
 impl fmt::Display for DataType<'_> {
@@ -193,6 +205,7 @@ impl fmt::Display for DataType<'_> {
                 }
                 write!(f, ">")
             }
+            DataType::Array(inner, size) => write!(f, "{inner}[{size}]"),
         }
     }
 }
@@ -298,8 +311,19 @@ where
 
         let basic_type = template_type.or(base_type);
 
+        // Array types
+        let array_type = basic_type
+            .clone()
+            .then(
+                just(Token::LeftBracket)
+                    .ignore_then(select! { Token::Number(n) => n.parse::<usize>().unwrap() })
+                    .then_ignore(just(Token::RightBracket)),
+            )
+            .map(|(base, size)| DataType::Array(Box::new(base), size));
+
         // Pointer and reference types
-        basic_type
+        array_type
+            .or(basic_type)
             .then(
                 choice((
                     just(Token::Star).repeated().at_least(1).to("*"),
@@ -350,8 +374,21 @@ where
     let data_member = data_type
         .clone()
         .then(ident)
+        .then(
+            just(Token::LeftBracket)
+                .ignore_then(select! { Token::Number(n) => n.parse::<usize>().unwrap() })
+                .then_ignore(just(Token::RightBracket))
+                .or_not(),
+        )
         .then_ignore(just(Token::Semicolon))
-        .map(|(data_type, name)| DataMember { data_type, name });
+        .map(|((data_type, name), array_size)| {
+            let data_type = if let Some(size) = array_size {
+                DataType::Array(Box::new(data_type), size)
+            } else {
+                data_type
+            };
+            DataMember { data_type, name }
+        });
 
     // Members
     let member = function
@@ -758,6 +795,118 @@ mod tests {
         if let Declaration::Struct { name, members, .. } = &declarations[0] {
             assert_eq!(*name, "Point");
             assert_eq!(members.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_array_type_parsing() {
+        let input = r#"
+            struct ArrayStruct {
+                public:
+                    int values[5];
+                    double points[3];
+                    char name[32];
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Struct { name, members, .. } = &declarations[0] {
+            assert_eq!(*name, "ArrayStruct");
+            assert_eq!(members.len(), 1);
+
+            let section = &members[0];
+            assert_eq!(section.members.len(), 3);
+
+            // Check first member (int values[5])
+            if let Member::Data(data) = &section.members[0] {
+                assert_eq!(data.name, "values");
+                if let DataType::Array(inner, size) = &data.data_type {
+                    assert!(matches!(**inner, DataType::Int));
+                    assert_eq!(*size, 5);
+                } else {
+                    panic!("Expected array type");
+                }
+            }
+
+            // Check second member (double points[3])
+            if let Member::Data(data) = &section.members[1] {
+                assert_eq!(data.name, "points");
+                if let DataType::Array(inner, size) = &data.data_type {
+                    assert!(matches!(**inner, DataType::Double));
+                    assert_eq!(*size, 3);
+                } else {
+                    panic!("Expected array type");
+                }
+            }
+
+            // Check third member (char name[32])
+            if let Member::Data(data) = &section.members[2] {
+                assert_eq!(data.name, "name");
+                if let DataType::Array(inner, size) = &data.data_type {
+                    assert!(matches!(**inner, DataType::Char));
+                    assert_eq!(*size, 32);
+                } else {
+                    panic!("Expected array type");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_mixed_array_and_non_array_members() {
+        let input = r#"
+            struct MixedStruct {
+                public:
+                    int regular;
+                    int array[5];
+                    double value;
+                    char name[32];
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Struct { name, members, .. } = &declarations[0] {
+            assert_eq!(*name, "MixedStruct");
+            assert_eq!(members.len(), 1);
+
+            let section = &members[0];
+            assert_eq!(section.members.len(), 4);
+
+            // Check regular member
+            if let Member::Data(data) = &section.members[0] {
+                assert_eq!(data.name, "regular");
+                assert!(matches!(data.data_type, DataType::Int));
+            }
+
+            // Check array member
+            if let Member::Data(data) = &section.members[1] {
+                assert_eq!(data.name, "array");
+                if let DataType::Array(inner, size) = &data.data_type {
+                    assert!(matches!(**inner, DataType::Int));
+                    assert_eq!(*size, 5);
+                } else {
+                    panic!("Expected array type");
+                }
+            }
+
+            // Check regular member
+            if let Member::Data(data) = &section.members[2] {
+                assert_eq!(data.name, "value");
+                assert!(matches!(data.data_type, DataType::Double));
+            }
+
+            // Check array member
+            if let Member::Data(data) = &section.members[3] {
+                assert_eq!(data.name, "name");
+                if let DataType::Array(inner, size) = &data.data_type {
+                    assert!(matches!(**inner, DataType::Char));
+                    assert_eq!(*size, 32);
+                } else {
+                    panic!("Expected array type");
+                }
+            }
         }
     }
 }
