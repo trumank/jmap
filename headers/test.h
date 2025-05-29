@@ -12,6 +12,11 @@ struct TArray {
     int Max;
 };
 
+struct FString {
+    public:
+    TArray<char> String;
+};
+
 template<typename T>
 struct TSet {
     public:
@@ -37,3 +42,13 @@ public:
     float y;
     Point add(Point other);
 };
+
+            class Base {
+                public:
+                    virtual void foo();
+            };
+            
+            class Derived : public Base {
+                public:
+                    void foo();
+            };

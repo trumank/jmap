@@ -151,14 +151,14 @@ fn lexer<'src>(
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum AccessSpecifier {
+pub(crate) enum AccessSpecifier {
     Public,
     Private,
     Protected,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum DataType<'src> {
+pub(crate) enum DataType<'src> {
     Int,
     Float,
     Double,
@@ -198,45 +198,45 @@ impl fmt::Display for DataType<'_> {
 }
 
 #[derive(Clone, Debug)]
-struct Parameter<'src> {
-    data_type: DataType<'src>,
-    name: &'src str,
+pub(crate) struct Parameter<'src> {
+    pub(crate) data_type: DataType<'src>,
+    pub(crate) name: &'src str,
 }
 
 #[derive(Clone, Debug)]
-struct Function<'src> {
-    is_virtual: bool,
-    return_type: DataType<'src>,
-    name: &'src str,
-    parameters: Vec<Parameter<'src>>,
+pub(crate) struct Function<'src> {
+    pub(crate) is_virtual: bool,
+    pub(crate) return_type: DataType<'src>,
+    pub(crate) name: &'src str,
+    pub(crate) parameters: Vec<Parameter<'src>>,
 }
 
 #[derive(Clone, Debug)]
-struct DataMember<'src> {
-    data_type: DataType<'src>,
-    name: &'src str,
+pub(crate) struct DataMember<'src> {
+    pub(crate) data_type: DataType<'src>,
+    pub(crate) name: &'src str,
 }
 
 #[derive(Clone, Debug)]
-enum Member<'src> {
+pub(crate) enum Member<'src> {
     Data(DataMember<'src>),
     Function(Function<'src>),
 }
 
 #[derive(Clone, Debug)]
-struct AccessSection<'src> {
-    access: AccessSpecifier,
-    members: Vec<Member<'src>>,
+pub(crate) struct AccessSection<'src> {
+    pub(crate) access: AccessSpecifier,
+    pub(crate) members: Vec<Member<'src>>,
 }
 
 #[derive(Clone, Debug)]
-struct Inheritance<'src> {
-    access: AccessSpecifier,
-    base_class: &'src str,
+pub(crate) struct Inheritance<'src> {
+    pub(crate) access: AccessSpecifier,
+    pub(crate) base_class: &'src str,
 }
 
 #[derive(Clone, Debug)]
-enum Declaration<'src> {
+pub(crate) enum Declaration<'src> {
     Struct {
         template_params: Option<Vec<&'src str>>,
         name: &'src str,
@@ -554,7 +554,7 @@ fn print_declarations(declarations: &[Declaration]) {
     }
 }
 
-pub(crate) fn parse(filename: &str, src: &str) {
+pub(crate) fn parse<'src>(filename: &str, src: &'src str) -> Vec<Declaration<'src>> {
     let (tokens, errs) = lexer().parse(src).into_output_errors();
     let errors = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
 
@@ -567,11 +567,10 @@ pub(crate) fn parse(filename: &str, src: &str) {
             )
             .into_output_errors();
 
-        if let Some(declarations) = ast {
+        if let Some(declarations) = &ast {
             println!("Parsed C++ declarations:");
             println!("========================");
-            print_declarations(&declarations);
-            dbg!(declarations);
+            print_declarations(declarations);
         }
 
         parse_errs
@@ -605,7 +604,26 @@ pub(crate) fn parse(filename: &str, src: &str) {
             .print((filename, Source::from(src)))
             .unwrap()
     }
+
+    // Return the parsed declarations or an empty vector if parsing failed
+    if let Some(tokens) = tokens {
+        if let (Some(declarations), _) = parser()
+            .parse(
+                tokens
+                    .as_slice()
+                    .map((src.len()..src.len()).into(), |(t, s)| (t, s)),
+            )
+            .into_output_errors()
+        {
+            declarations
+        } else {
+            Vec::new()
+        }
+    } else {
+        Vec::new()
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
