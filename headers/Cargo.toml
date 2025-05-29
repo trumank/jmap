@@ -1,0 +1,14 @@
+[package]
+name = "headers"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
+keywords.workspace = true
+license.workspace = true
+
+[dependencies]
+ariadne = "0.5.1"
+chumsky = "0.10.1"
