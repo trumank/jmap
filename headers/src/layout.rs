@@ -40,21 +40,6 @@ pub struct LayoutDeclaration {
 }
 
 impl LayoutType {
-    fn size_and_alignment(&self) -> (usize, usize) {
-        match self {
-            LayoutType::Int => (4, 4),
-            LayoutType::Float => (4, 4),
-            LayoutType::Double => (8, 8),
-            LayoutType::Char => (1, 1),
-            LayoutType::Bool => (1, 1),
-            LayoutType::Void => (0, 1),
-            LayoutType::Custom(_) => (8, 8), // Assume pointer size for custom types
-            LayoutType::Pointer(_) => (8, 8),
-            LayoutType::Reference(_) => (8, 8),
-            LayoutType::Template(_, _) => (8, 8), // Assume pointer size for template types
-        }
-    }
-
     fn from_parser_type(data_type: &DataType) -> Self {
         match data_type {
             DataType::Int => LayoutType::Int,
@@ -76,20 +61,43 @@ impl LayoutType {
             ),
         }
     }
+
+    fn size_and_alignment(&self, layouts: &HashMap<String, MemoryLayout>) -> (usize, usize) {
+        match self {
+            LayoutType::Int => (4, 4),
+            LayoutType::Float => (4, 4),
+            LayoutType::Double => (8, 8),
+            LayoutType::Char => (1, 1),
+            LayoutType::Bool => (1, 1),
+            LayoutType::Void => (0, 1),
+            LayoutType::Custom(name) => layouts
+                .get(name)
+                .map_or((8, 8), |layout| (layout.size, layout.alignment)),
+            LayoutType::Pointer(_) => (8, 8),
+            LayoutType::Reference(_) => (8, 8),
+            LayoutType::Template(name, _) => layouts
+                .get(name)
+                .map_or((8, 8), |layout| (layout.size, layout.alignment)),
+        }
+    }
 }
 
 pub fn compute_layouts(declarations: &[LayoutDeclaration]) -> HashMap<String, MemoryLayout> {
     let mut layouts = HashMap::new();
 
+    // First pass: compute sizes and alignments for all types
     for decl in declarations {
-        let layout = compute_type_layout(&decl.sections);
+        let layout = compute_type_layout(&decl.sections, &layouts);
         layouts.insert(decl.name.clone(), layout);
     }
 
     layouts
 }
 
-fn compute_type_layout(sections: &[LayoutSection]) -> MemoryLayout {
+fn compute_type_layout(
+    sections: &[LayoutSection],
+    layouts: &HashMap<String, MemoryLayout>,
+) -> MemoryLayout {
     let mut size = 0;
     let mut alignment = 1;
     let mut member_offsets = Vec::new();
@@ -97,7 +105,7 @@ fn compute_type_layout(sections: &[LayoutSection]) -> MemoryLayout {
     // Process each section
     for section in sections {
         for member in &section.members {
-            let (member_size, member_alignment) = member.data_type.size_and_alignment();
+            let (member_size, member_alignment) = member.data_type.size_and_alignment(layouts);
 
             // Align the current size to the member's alignment
             size = (size + member_alignment - 1) & !(member_alignment - 1);
@@ -193,23 +201,83 @@ mod tests {
     }
 
     #[test]
-    fn test_class_with_inheritance() {
+    fn test_custom_type_layout() {
         let declarations = vec![
             LayoutDeclaration {
-                name: "Base".to_string(),
+                name: "Point".to_string(),
                 sections: vec![LayoutSection {
-                    members: vec![LayoutMember {
-                        name: "base_member".to_string(),
-                        data_type: LayoutType::Int,
-                    }],
+                    members: vec![
+                        LayoutMember {
+                            name: "x".to_string(),
+                            data_type: LayoutType::Float,
+                        },
+                        LayoutMember {
+                            name: "y".to_string(),
+                            data_type: LayoutType::Float,
+                        },
+                    ],
                 }],
             },
             LayoutDeclaration {
-                name: "Derived".to_string(),
+                name: "Line".to_string(),
+                sections: vec![LayoutSection {
+                    members: vec![
+                        LayoutMember {
+                            name: "start".to_string(),
+                            data_type: LayoutType::Custom("Point".to_string()),
+                        },
+                        LayoutMember {
+                            name: "end".to_string(),
+                            data_type: LayoutType::Custom("Point".to_string()),
+                        },
+                    ],
+                }],
+            },
+        ];
+
+        let layouts = compute_layouts(&declarations);
+
+        let point_layout = layouts.get("Point").unwrap();
+        assert_eq!(point_layout.size, 8);
+        assert_eq!(point_layout.alignment, 4);
+
+        let line_layout = layouts.get("Line").unwrap();
+        assert_eq!(line_layout.size, 16);
+        assert_eq!(line_layout.alignment, 4);
+
+        // Check member offsets
+        let offsets: HashMap<_, _> = line_layout.members.iter().cloned().collect();
+        assert_eq!(offsets.get("start"), Some(&0));
+        assert_eq!(offsets.get("end"), Some(&8));
+    }
+
+    #[test]
+    fn test_template_type_layout() {
+        let declarations = vec![
+            LayoutDeclaration {
+                name: "Vector".to_string(),
+                sections: vec![LayoutSection {
+                    members: vec![
+                        LayoutMember {
+                            name: "data".to_string(),
+                            data_type: LayoutType::Pointer(Box::new(LayoutType::Int)),
+                        },
+                        LayoutMember {
+                            name: "size".to_string(),
+                            data_type: LayoutType::Int,
+                        },
+                    ],
+                }],
+            },
+            LayoutDeclaration {
+                name: "Container".to_string(),
                 sections: vec![LayoutSection {
                     members: vec![LayoutMember {
-                        name: "derived_member".to_string(),
-                        data_type: LayoutType::Double,
+                        name: "vec".to_string(),
+                        data_type: LayoutType::Template(
+                            "Vector".to_string(),
+                            vec![LayoutType::Int],
+                        ),
                     }],
                 }],
             },
@@ -217,12 +285,12 @@ mod tests {
 
         let layouts = compute_layouts(&declarations);
 
-        let base_layout = layouts.get("Base").unwrap();
-        assert_eq!(base_layout.size, 4);
-        assert_eq!(base_layout.alignment, 4);
+        let vector_layout = layouts.get("Vector").unwrap();
+        assert_eq!(vector_layout.size, 16);
+        assert_eq!(vector_layout.alignment, 8);
 
-        let derived_layout = layouts.get("Derived").unwrap();
-        assert_eq!(derived_layout.size, 16);
-        assert_eq!(derived_layout.alignment, 8);
+        let container_layout = layouts.get("Container").unwrap();
+        assert_eq!(container_layout.size, 16);
+        assert_eq!(container_layout.alignment, 8);
     }
 }
