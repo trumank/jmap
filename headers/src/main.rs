@@ -251,10 +251,11 @@ enum Declaration<'src> {
     },
 }
 
-fn parser<'src, I>(
-) -> impl Parser<'src, I, Vec<Declaration<'src>>, extra::Err<Rich<'src, Token<'src>, Span>>> + Clone
+fn parser<'src, 'tokens, I>(
+) -> impl Parser<'tokens, I, Vec<Declaration<'src>>, extra::Err<Rich<'tokens, Token<'src>, Span>>> + Clone
 where
-    I: ValueInput<'src, Token = Token<'src>, Span = Span>,
+    I: ValueInput<'tokens, Token = Token<'src>, Span = Span>,
+    'src: 'tokens,
 {
     let ident = select! { Token::Ident(name) => name };
 
@@ -606,5 +607,143 @@ fn main() {
             .finish()
             .print(sources([(filename.clone(), src.clone())]))
             .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_str<'a>(src: &'a str) -> Vec<Declaration<'a>> {
+        let (tokens, _) = lexer().parse(src).into_output_errors();
+        let tokens = tokens.unwrap();
+        let (ast, _) = parser()
+            .parse(
+                tokens
+                    .as_slice()
+                    .map((src.len()..src.len()).into(), |(t, s)| (t, s)),
+            )
+            .into_output_errors();
+        ast.unwrap()
+    }
+
+    #[test]
+    fn test_simple_class() {
+        let input = r#"
+            class SimpleClass {
+                public:
+                    int x;
+                    void foo();
+                private:
+                    float y;
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Class { name, members, .. } = &declarations[0] {
+            assert_eq!(*name, "SimpleClass");
+            assert_eq!(members.len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_template_class() {
+        let input = r#"
+            template<typename T>
+            class TemplateClass {
+                public:
+                    T value;
+                    T getValue();
+                private:
+                    T* ptr;
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Class {
+            template_params,
+            name,
+            ..
+        } = &declarations[0]
+        {
+            assert_eq!(*name, "TemplateClass");
+            assert!(template_params.is_some());
+            assert_eq!(template_params.as_ref().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_inheritance() {
+        let input = r#"
+            class Base {
+                public:
+                    virtual void foo();
+            };
+            
+            class Derived : public Base {
+                public:
+                    void foo();
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 2);
+
+        if let Declaration::Class {
+            name, inheritance, ..
+        } = &declarations[1]
+        {
+            assert_eq!(*name, "Derived");
+            assert_eq!(inheritance.len(), 1);
+            assert_eq!(inheritance[0].base_class, "Base");
+        }
+    }
+
+    #[test]
+    fn test_complex_template() {
+        let input = r#"
+            template<typename T, typename U>
+            class ComplexTemplate {
+                public:
+                    T value1;
+                    U value2;
+                    vector<T> items;
+                    map<T, U> mapping;
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Class {
+            template_params,
+            name,
+            ..
+        } = &declarations[0]
+        {
+            assert_eq!(*name, "ComplexTemplate");
+            assert!(template_params.is_some());
+            assert_eq!(template_params.as_ref().unwrap().len(), 2);
+        }
+    }
+
+    #[test]
+    fn test_struct_with_methods() {
+        let input = r#"
+            struct Point {
+                public:
+                    float x;
+                    float y;
+                    float distance(Point& other);
+                    void move(float dx, float dy);
+            };
+        "#;
+        let declarations = parse_str(input);
+        assert_eq!(declarations.len(), 1);
+
+        if let Declaration::Struct { name, members, .. } = &declarations[0] {
+            assert_eq!(*name, "Point");
+            assert_eq!(members.len(), 1);
+        }
     }
 }
