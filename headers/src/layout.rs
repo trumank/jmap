@@ -1,5 +1,75 @@
 use crate::parser::{AccessSection, DataType, Declaration, Member};
+use std::backtrace::Backtrace;
 use std::collections::HashMap;
+use std::fmt;
+
+#[macro_export]
+macro_rules! layout_error {
+    ($variant:ident, $($arg:expr),*) => {{
+        let backtrace = Backtrace::capture();
+        $crate::layout::LayoutError {
+            kind: $crate::layout::LayoutErrorKind::$variant {
+                message: format!($($arg),*),
+            },
+            backtrace,
+        }
+    }};
+}
+
+pub enum LayoutErrorKind {
+    UndefinedType { message: String },
+    TemplateType { message: String },
+}
+
+pub struct LayoutError {
+    pub kind: LayoutErrorKind,
+    pub backtrace: Backtrace,
+}
+
+impl fmt::Debug for LayoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
+    }
+}
+
+impl fmt::Display for LayoutError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            LayoutErrorKind::UndefinedType { message } => {
+                write!(f, "Undefined type: {message}")?;
+            }
+            LayoutErrorKind::TemplateType { message } => {
+                write!(f, "Cannot compute layout for template type: {message}")?;
+            }
+        }
+        if self.backtrace.status() == std::backtrace::BacktraceStatus::Captured {
+            write!(f, "\nUndefined type: {}", self.backtrace)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for LayoutError {}
+
+impl LayoutError {
+    pub fn undefined_type(message: impl Into<String>) -> Self {
+        Self {
+            kind: LayoutErrorKind::UndefinedType {
+                message: message.into(),
+            },
+            backtrace: Backtrace::capture(),
+        }
+    }
+
+    pub fn template_type(message: impl Into<String>) -> Self {
+        Self {
+            kind: LayoutErrorKind::TemplateType {
+                message: message.into(),
+            },
+            backtrace: Backtrace::capture(),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct MemoryLayout {
@@ -41,71 +111,79 @@ pub struct LayoutDeclaration {
 }
 
 impl LayoutType {
-    fn from_parser_type(data_type: &DataType) -> Self {
+    fn from_parser_type(data_type: &DataType) -> Result<Self, LayoutError> {
         match data_type {
-            DataType::Int => LayoutType::Int,
-            DataType::Float => LayoutType::Float,
-            DataType::Double => LayoutType::Double,
-            DataType::Char => LayoutType::Char,
-            DataType::Bool => LayoutType::Bool,
-            DataType::Void => LayoutType::Void,
-            DataType::Custom(name) => LayoutType::Custom(name.to_string()),
+            DataType::Int => Ok(LayoutType::Int),
+            DataType::Float => Ok(LayoutType::Float),
+            DataType::Double => Ok(LayoutType::Double),
+            DataType::Char => Ok(LayoutType::Char),
+            DataType::Bool => Ok(LayoutType::Bool),
+            DataType::Void => Ok(LayoutType::Void),
+            DataType::Custom(name) => Ok(LayoutType::Custom(name.to_string())),
             DataType::Pointer(inner) => {
-                LayoutType::Pointer(Box::new(LayoutType::from_parser_type(inner)))
+                // For pointers, we don't need to validate the inner type
+                Ok(LayoutType::Pointer(Box::new(LayoutType::from_parser_type(
+                    inner,
+                )?)))
             }
             DataType::Reference(inner) => {
-                LayoutType::Reference(Box::new(LayoutType::from_parser_type(inner)))
+                // For references, we don't need to validate the inner type
+                Ok(LayoutType::Reference(Box::new(
+                    LayoutType::from_parser_type(inner)?,
+                )))
             }
-            DataType::Template(name, args) => LayoutType::Template(
-                name.to_string(),
-                args.iter().map(LayoutType::from_parser_type).collect(),
-            ),
-            DataType::Array(inner, size) => {
-                LayoutType::Array(Box::new(LayoutType::from_parser_type(inner)), *size)
-            }
+            DataType::Template(name, _) => Err(LayoutError::template_type(name.to_string())),
+            DataType::Array(inner, size) => Ok(LayoutType::Array(
+                Box::new(LayoutType::from_parser_type(inner)?),
+                *size,
+            )),
         }
     }
 
-    fn size_and_alignment(&self, layouts: &HashMap<String, MemoryLayout>) -> (usize, usize) {
+    fn size_and_alignment(
+        &self,
+        layouts: &HashMap<String, MemoryLayout>,
+    ) -> Result<(usize, usize), LayoutError> {
         match self {
-            LayoutType::Int => (4, 4),
-            LayoutType::Float => (4, 4),
-            LayoutType::Double => (8, 8),
-            LayoutType::Char => (1, 1),
-            LayoutType::Bool => (1, 1),
-            LayoutType::Void => (0, 1),
+            LayoutType::Int => Ok((4, 4)),
+            LayoutType::Float => Ok((4, 4)),
+            LayoutType::Double => Ok((8, 8)),
+            LayoutType::Char => Ok((1, 1)),
+            LayoutType::Bool => Ok((1, 1)),
+            LayoutType::Void => Ok((0, 1)),
             LayoutType::Custom(name) => layouts
                 .get(name)
-                .map_or((8, 8), |layout| (layout.size, layout.alignment)),
-            LayoutType::Pointer(_) => (8, 8),
-            LayoutType::Reference(_) => (8, 8),
-            LayoutType::Template(name, _) => layouts
-                .get(name)
-                .map_or((8, 8), |layout| (layout.size, layout.alignment)),
+                .map(|layout| Ok((layout.size, layout.alignment)))
+                .unwrap_or(Err(LayoutError::undefined_type(name.clone()))),
+            LayoutType::Pointer(_) => Ok((8, 8)),
+            LayoutType::Reference(_) => Ok((8, 8)),
+            LayoutType::Template(name, _) => Err(LayoutError::template_type(name.clone())),
             LayoutType::Array(inner, size) => {
-                let (element_size, element_alignment) = inner.size_and_alignment(layouts);
-                (element_size * size, element_alignment)
+                let (element_size, element_alignment) = inner.size_and_alignment(layouts)?;
+                Ok((element_size * size, element_alignment))
             }
         }
     }
 }
 
-pub fn compute_layouts(declarations: &[LayoutDeclaration]) -> HashMap<String, MemoryLayout> {
+pub fn compute_layouts(
+    declarations: &[LayoutDeclaration],
+) -> Result<HashMap<String, MemoryLayout>, LayoutError> {
     let mut layouts = HashMap::new();
 
     // First pass: compute sizes and alignments for all types
     for decl in declarations {
-        let layout = compute_type_layout(&decl.sections, &layouts);
+        let layout = compute_type_layout(&decl.sections, &layouts)?;
         layouts.insert(decl.name.clone(), layout);
     }
 
-    layouts
+    Ok(layouts)
 }
 
 fn compute_type_layout(
     sections: &[LayoutSection],
     layouts: &HashMap<String, MemoryLayout>,
-) -> MemoryLayout {
+) -> Result<MemoryLayout, LayoutError> {
     let mut size = 0;
     let mut alignment = 1;
     let mut member_offsets = Vec::new();
@@ -113,7 +191,7 @@ fn compute_type_layout(
     // Process each section
     for section in sections {
         for member in &section.members {
-            let (member_size, member_alignment) = member.data_type.size_and_alignment(layouts);
+            let (member_size, member_alignment) = member.data_type.size_and_alignment(layouts)?;
 
             // Align the current size to the member's alignment
             size = (size + member_alignment - 1) & !(member_alignment - 1);
@@ -130,37 +208,40 @@ fn compute_type_layout(
     // Align the final size to the type's alignment
     size = (size + alignment - 1) & !(alignment - 1);
 
-    MemoryLayout {
+    Ok(MemoryLayout {
         size,
         alignment,
         members: member_offsets,
-    }
+    })
 }
 
-pub fn from_parser_declarations(declarations: &[Declaration]) -> Vec<LayoutDeclaration> {
+pub fn from_parser_declarations(
+    declarations: &[Declaration],
+) -> Result<Vec<LayoutDeclaration>, LayoutError> {
     declarations
         .iter()
         .map(|decl| match decl {
             Declaration::Struct { name, members, .. }
-            | Declaration::Class { name, members, .. } => LayoutDeclaration {
-                name: name.to_string(),
-                sections: members
-                    .iter()
-                    .map(|section| LayoutSection {
-                        members: section
-                            .members
-                            .iter()
-                            .filter_map(|member| match member {
-                                Member::Data(data) => Some(LayoutMember {
-                                    name: data.name.to_string(),
-                                    data_type: LayoutType::from_parser_type(&data.data_type),
-                                }),
-                                Member::Function(_) => None,
-                            })
-                            .collect(),
-                    })
-                    .collect(),
-            },
+            | Declaration::Class { name, members, .. } => {
+                let mut sections = vec![];
+                for section in members {
+                    let mut members = vec![];
+                    for member in &section.members {
+                        match member {
+                            Member::Data(data) => members.push(LayoutMember {
+                                name: data.name.to_string(),
+                                data_type: LayoutType::from_parser_type(&data.data_type)?,
+                            }),
+                            Member::Function(_) => {}
+                        }
+                    }
+                    sections.push(LayoutSection { members });
+                }
+                Ok(LayoutDeclaration {
+                    name: name.to_string(),
+                    sections,
+                })
+            }
         })
         .collect()
 }
@@ -194,7 +275,7 @@ mod tests {
     #[test]
     fn test_simple_struct_layout() {
         let declarations = vec![create_test_declaration()];
-        let layouts = compute_layouts(&declarations);
+        let layouts = compute_layouts(&declarations).unwrap();
 
         let layout = layouts.get("SimpleStruct").unwrap();
         assert_eq!(layout.size, 16);
@@ -243,7 +324,7 @@ mod tests {
             },
         ];
 
-        let layouts = compute_layouts(&declarations);
+        let layouts = compute_layouts(&declarations).unwrap();
 
         let point_layout = layouts.get("Point").unwrap();
         assert_eq!(point_layout.size, 8);
@@ -257,49 +338,6 @@ mod tests {
         let offsets: HashMap<_, _> = line_layout.members.iter().cloned().collect();
         assert_eq!(offsets.get("start"), Some(&0));
         assert_eq!(offsets.get("end"), Some(&8));
-    }
-
-    #[test]
-    fn test_template_type_layout() {
-        let declarations = vec![
-            LayoutDeclaration {
-                name: "Vector".to_string(),
-                sections: vec![LayoutSection {
-                    members: vec![
-                        LayoutMember {
-                            name: "data".to_string(),
-                            data_type: LayoutType::Pointer(Box::new(LayoutType::Int)),
-                        },
-                        LayoutMember {
-                            name: "size".to_string(),
-                            data_type: LayoutType::Int,
-                        },
-                    ],
-                }],
-            },
-            LayoutDeclaration {
-                name: "Container".to_string(),
-                sections: vec![LayoutSection {
-                    members: vec![LayoutMember {
-                        name: "vec".to_string(),
-                        data_type: LayoutType::Template(
-                            "Vector".to_string(),
-                            vec![LayoutType::Int],
-                        ),
-                    }],
-                }],
-            },
-        ];
-
-        let layouts = compute_layouts(&declarations);
-
-        let vector_layout = layouts.get("Vector").unwrap();
-        assert_eq!(vector_layout.size, 16);
-        assert_eq!(vector_layout.alignment, 8);
-
-        let container_layout = layouts.get("Container").unwrap();
-        assert_eq!(container_layout.size, 16);
-        assert_eq!(container_layout.alignment, 8);
     }
 
     #[test]
@@ -320,7 +358,7 @@ mod tests {
             }],
         }];
 
-        let layouts = compute_layouts(&declarations);
+        let layouts = compute_layouts(&declarations).unwrap();
         let layout = layouts.get("ArrayStruct").unwrap();
 
         // Array of 5 ints (4 bytes each) = 20 bytes
@@ -333,5 +371,79 @@ mod tests {
         let offsets: HashMap<_, _> = layout.members.iter().cloned().collect();
         assert_eq!(offsets.get("ints"), Some(&0));
         assert_eq!(offsets.get("doubles"), Some(&24));
+    }
+
+    #[test]
+    fn test_error_backtrace() {
+        let declarations = vec![LayoutDeclaration {
+            name: "ErrorStruct".to_string(),
+            sections: vec![LayoutSection {
+                members: vec![LayoutMember {
+                    name: "value".to_string(),
+                    data_type: LayoutType::Custom("UndefinedType".to_string()),
+                }],
+            }],
+        }];
+
+        let result = compute_layouts(&declarations);
+        assert!(matches!(
+            result,
+            Err(LayoutError {
+                kind: LayoutErrorKind::UndefinedType { .. },
+                ..
+            })
+        ));
+
+        if let Err(LayoutError { backtrace, .. }) = result {
+            let backtrace_str = format!("{}", backtrace);
+            assert!(!backtrace_str.is_empty());
+            assert!(backtrace_str.contains("test_error_backtrace"));
+        }
+    }
+
+    #[test]
+    fn test_template_type_error() {
+        let declarations = vec![LayoutDeclaration {
+            name: "TemplateStruct".to_string(),
+            sections: vec![LayoutSection {
+                members: vec![LayoutMember {
+                    name: "value".to_string(),
+                    data_type: LayoutType::Template("Vector".to_string(), vec![LayoutType::Int]),
+                }],
+            }],
+        }];
+
+        let result = compute_layouts(&declarations);
+        assert!(matches!(
+            result,
+            Err(LayoutError {
+                kind: LayoutErrorKind::TemplateType { .. },
+                ..
+            })
+        ));
+
+        if let Err(LayoutError { backtrace, .. }) = result {
+            let backtrace_str = format!("{}", backtrace);
+            assert!(!backtrace_str.is_empty());
+            assert!(backtrace_str.contains("test_template_type_error"));
+        }
+    }
+
+    #[test]
+    fn test_pointer_to_undefined_type() {
+        let declarations = vec![LayoutDeclaration {
+            name: "PointerStruct".to_string(),
+            sections: vec![LayoutSection {
+                members: vec![LayoutMember {
+                    name: "ptr".to_string(),
+                    data_type: LayoutType::Pointer(Box::new(LayoutType::Custom(
+                        "UndefinedType".to_string(),
+                    ))),
+                }],
+            }],
+        }];
+
+        let result = compute_layouts(&declarations);
+        assert!(result.is_ok()); // Should succeed since pointers don't need to validate their pointee type
     }
 }
