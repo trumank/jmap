@@ -51,18 +51,36 @@ trait MemComplete: Mem + Clone + NameTrait + StructsTrait {}
 impl<T: Mem + Clone + NameTrait + StructsTrait> MemComplete for T {}
 
 fn read_path<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<String> {
-    let mut components = vec![];
-    let name = obj.name_private().read()?;
-    components.push(name);
+    let mut objects = vec![obj.clone()];
 
     let mut obj = obj.clone();
     while let Some(outer) = obj.outer_private().read()? {
-        let name = outer.name_private().read()?;
-        components.push(name);
+        objects.push(outer.clone());
         obj = outer;
     }
-    components.reverse();
-    Ok(components.join("."))
+
+    let mut path = String::new();
+    let mut prev: Option<&CtxPtr<UObject, M>> = None;
+    for obj in objects.iter().rev() {
+        if let Some(prev) = prev {
+            let sep = if prev
+                .class_private()
+                .read()?
+                .class_cast_flags()
+                .read()?
+                .contains(EClassCastFlags::CASTCLASS_UPackage)
+            {
+                '.'
+            } else {
+                ':'
+            };
+            path.push(sep);
+        }
+        path.push_str(&obj.name_private().read()?);
+        prev = Some(obj);
+    }
+
+    Ok(path)
 }
 
 fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
