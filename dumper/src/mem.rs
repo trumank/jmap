@@ -10,7 +10,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 use ue_reflection::{
-    EClassCastFlags, EClassFlags, EFunctionFlags, EObjectFlags, EPropertyFlags, EStructFlags,
+    EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
+    EPropertyFlags, EStructFlags,
 };
 
 #[repr(C)]
@@ -160,6 +161,8 @@ impl POD for EClassFlags {}
 impl POD for EFunctionFlags {}
 impl POD for EStructFlags {}
 impl POD for EPropertyFlags {}
+impl POD for EEnumFlags {}
+impl POD for ECppForm {}
 
 #[derive(Debug)]
 pub enum FlaggedPtr<T> {

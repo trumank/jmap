@@ -277,6 +277,13 @@ bitflags::bitflags! {
         const STRUCT_Inherit = 0x0014;
         const STRUCT_ComputedFlags = 0x007ffc42;
     }
+
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[repr(C)]
+    pub struct EEnumFlags : u8 {
+        const Flags = 0x00000001;
+        const NewerVersionExists = 0x00000002;
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,7 +347,16 @@ pub struct Enum {
     #[serde(flatten)]
     pub object: Object,
     pub cpp_type: String,
+    pub enum_flags: EEnumFlags,
+    pub cpp_form: ECppForm,
     pub names: Vec<(String, i64)>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[repr(u8)]
+pub enum ECppForm {
+    Regular,
+    Namespaced,
+    EnumClass,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

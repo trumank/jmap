@@ -373,6 +373,8 @@ fn dump_inner<M: Mem + Clone>(
             ObjectType::Enum(Enum {
                 object: read_object(&obj.cast())?,
                 cpp_type: full_obj.cpp_type().read()?,
+                cpp_form: full_obj.cpp_form().read()?,
+                enum_flags: full_obj.enum_flags().read()?,
                 names,
             })
         } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {

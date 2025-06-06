@@ -4,7 +4,8 @@ use crate::{
 };
 use anyhow::Result;
 use ue_reflection::{
-    EClassCastFlags, EClassFlags, EFunctionFlags, EObjectFlags, EPropertyFlags, EStructFlags,
+    EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
+    EPropertyFlags, EStructFlags,
 };
 
 #[derive(Clone, Copy)]
@@ -123,6 +124,14 @@ impl<C: Clone + StructsTrait> CtxPtr<UEnum, C> {
     }
     pub fn names(&self) -> CtxPtr<TArray<TTuple<FName, i64>>, C> {
         let offset = self.ctx().struct_member("UEnum", "Names");
+        self.byte_offset(offset).cast()
+    }
+    pub fn cpp_form(&self) -> CtxPtr<ECppForm, C> {
+        let offset = self.ctx().struct_member("UEnum", "CppForm");
+        self.byte_offset(offset).cast()
+    }
+    pub fn enum_flags(&self) -> CtxPtr<EEnumFlags, C> {
+        let offset = self.ctx().struct_member("UEnum", "EnumFlags");
         self.byte_offset(offset).cast()
     }
 }
