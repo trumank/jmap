@@ -61,7 +61,7 @@ fn main() -> Result<()> {
 
     match output_type {
         OutputType::Json => {
-            std::fs::write(cli.output, serde_json::to_vec(&reflection_data)?)?;
+            std::fs::write(cli.output, serde_json::to_vec_pretty(&reflection_data)?)?;
         }
         OutputType::Usmap => {
             let usmap = into_usmap(&reflection_data);
