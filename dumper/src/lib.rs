@@ -304,13 +304,15 @@ fn dump_inner<M: Mem + Clone>(
                 .read()?
                 .map(|s| read_path(&s))
                 .transpose()?;
-            let class = read_path(&obj.class_private().read()?.ustruct().ufield().uobject())?;
-            let object_flags = obj.object_flags().read()?;
+
+            let class = obj.class_private().read()?;
+            let class_name = read_path(&class.ustruct().ufield().uobject())?;
+
             Ok(Object {
                 vtable: obj.vtable().read()? as u64,
-                object_flags,
+                object_flags: obj.object_flags().read()?,
                 outer,
-                class,
+                class: class_name,
                 children: Default::default(),
             })
         }
@@ -349,11 +351,7 @@ fn dump_inner<M: Mem + Clone>(
             })
         }
 
-        if !path.starts_with("/Script/") {
-            continue;
-        }
-        let f = class.class_cast_flags().read()?;
-        let object = if f.contains(EClassCastFlags::CASTCLASS_UClass) {
+        fn read_class<M: MemComplete>(obj: &CtxPtr<UClass, M>) -> Result<Class> {
             let obj = obj.cast::<UClass>();
             let class_flags = obj.class_flags().read()?;
             let class_cast_flags = obj.class_cast_flags().read()?;
@@ -362,13 +360,21 @@ fn dump_inner<M: Mem + Clone>(
                 .read()?
                 .map(|s| read_path(&s))
                 .transpose()?;
-            ObjectType::Class(Class {
+            Ok(Class {
                 r#struct: read_struct(&obj.cast())?,
                 class_flags,
                 class_cast_flags,
                 class_default_object,
                 instance_vtable: None,
             })
+        }
+
+        if !path.starts_with("/Script/") {
+            continue;
+        }
+        let f = class.class_cast_flags().read()?;
+        let object = if f.contains(EClassCastFlags::CASTCLASS_UClass) {
+            ObjectType::Class(read_class(&obj.cast())?)
         } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
             let full_obj = obj.cast::<UFunction>();
             let function_flags = full_obj.function_flags().read()?;
