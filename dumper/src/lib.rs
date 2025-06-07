@@ -15,7 +15,6 @@ use objects::FOptionalProperty;
 use patternsleuth_image::image::Image;
 use patternsleuth_resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
-use serde::{Deserialize, Serialize};
 use ue_reflection::{
     Class, EClassCastFlags, Enum, Function, Object, ObjectType, Package, Property, PropertyType,
     ReflectionData, ScriptStruct, Struct,
@@ -23,7 +22,7 @@ use ue_reflection::{
 
 use crate::containers::PtrFNamePool;
 use crate::objects::{
-    FArrayProperty, FBoolProperty, FByteProperty, FEnumProperty, FField, FInterfaceProperty,
+    FArrayProperty, FBoolProperty, FByteProperty, FEnumProperty, FInterfaceProperty,
     FLazyObjectProperty, FMapProperty, FObjectProperty, FProperty, FSetProperty,
     FSoftObjectProperty, FStructProperty, FUObjectArray, FWeakObjectProperty, UClass, UEnum,
     UFunction, UObject, UScriptStruct, UStruct,

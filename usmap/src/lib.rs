@@ -58,7 +58,7 @@ impl<'c, S> SerCtx<'c, S> {
             names,
         }
     }
-    fn chain<I>(&mut self, inner: I) -> SerCtx<I> {
+    fn chain<I>(&mut self, inner: I) -> SerCtx<'_, I> {
         SerCtx {
             inner,
             header: self.header,
@@ -530,8 +530,8 @@ impl Header {
             let has_versioning = s.read_i32::<LE>()? > 0;
             if has_versioning {
                 // TODO import UE version enums
-                let file_version_ue4 = s.read_i32::<LE>()?;
-                let file_version_ue5 = s.read_i32::<LE>()?;
+                let _file_version_ue4 = s.read_i32::<LE>()?;
+                let _file_version_ue5 = s.read_i32::<LE>()?;
 
                 let mut custom_version_container = vec![];
                 for _ in 0..s.read_u32::<LE>()? {
@@ -540,7 +540,7 @@ impl Header {
                     let version_number = s.read_i32::<LE>()?;
                     custom_version_container.push((guid, version_number));
                 }
-                let net_cl = s.read_i32::<LE>()?;
+                let _net_cl = s.read_i32::<LE>()?;
             }
         }
 
