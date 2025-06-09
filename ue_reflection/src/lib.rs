@@ -195,15 +195,19 @@ bitflags::bitflags! {
         const CPF_ZeroConstructor = 0x0200;
         const CPF_ReturnParm = 0x0400;
         const CPF_DisableEditOnTemplate = 0x0800;
+        const CPF_NonNullable = 0x1000;
         const CPF_Transient = 0x2000;
         const CPF_Config = 0x4000;
+        const CPF_RequiredParm = 0x8000;
         const CPF_DisableEditOnInstance = 0x00010000;
         const CPF_EditConst = 0x00020000;
         const CPF_GlobalConfig = 0x00040000;
         const CPF_InstancedReference = 0x00080000;
+        const CPF_ExperimentalExternalObjects = 0x00100000;
         const CPF_DuplicateTransient = 0x00200000;
         const CPF_SaveGame = 0x01000000;
         const CPF_NoClear = 0x02000000;
+        const CPF_Virtual = 0x04000000;
         const CPF_ReferenceParm = 0x08000000;
         const CPF_BlueprintAssignable = 0x10000000;
         const CPF_Deprecated = 0x20000000;
@@ -232,6 +236,11 @@ bitflags::bitflags! {
         const CPF_NativeAccessSpecifierProtected = 0x20000000000000;
         const CPF_NativeAccessSpecifierPrivate = 0x40000000000000;
         const CPF_SkipSerialization = 0x80000000000000;
+        const CPF_TObjectPtr = 0x100000000000000;
+        const CPF_ExperimentalOverridableLogic = 0x200000000000000;
+        const CPF_ExperimentalAlwaysOverriden = 0x400000000000000;
+        const CPF_ExperimentalNeverOverriden = 0x800000000000000;
+        const CPF_AllowSelfReference = 0x1000000000000000;
     }
 
     #[derive(Debug, Clone, Copy)]
