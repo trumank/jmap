@@ -349,6 +349,17 @@
     "members": []
   },
   {
+    "name": "FDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FEnumProperty",
     "size": 136,
     "members": [
@@ -489,6 +500,17 @@
       {
         "name": "Func",
         "offset": 216,
+        "size": 8
+      }
+    ]
+  },
+  {
+    "name": "FMulticastDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
         "size": 8
       }
     ]

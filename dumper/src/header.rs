@@ -131,9 +131,13 @@ impl<'objects> Ctx<'objects, '_> {
             PropertyType::Name => CType::FName,
             PropertyType::Text => CType::FText,
             PropertyType::FieldPath => CType::FFieldPath,
-            PropertyType::MulticastInlineDelegate => CType::MulticastInlineDelegate, // TODO
-            PropertyType::MulticastSparseDelegate => CType::MulticastSparseDelegate, // TODO
-            PropertyType::Delegate => CType::Delegate,
+            PropertyType::MulticastInlineDelegate { signature_function } => {
+                CType::MulticastInlineDelegate
+            } // TODO
+            PropertyType::MulticastSparseDelegate { signature_function } => {
+                CType::MulticastSparseDelegate
+            } // TODO
+            PropertyType::Delegate { signature_function } => CType::Delegate,
             PropertyType::Bool {
                 field_size,
                 byte_offset,

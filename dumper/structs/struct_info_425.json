@@ -252,6 +252,28 @@
     ]
   },
   {
+    "name": "FDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
+        "size": 8
+      }
+    ]
+  },
+  {
+    "name": "FMulticastDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FEnumProperty",
     "size": 136,
     "members": [

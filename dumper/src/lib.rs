@@ -24,10 +24,11 @@ use ue_reflection::{
 
 use crate::containers::PtrFNamePool;
 use crate::objects::{
-    FArrayProperty, FBoolProperty, FByteProperty, FClassProperty, FEnumProperty,
-    FInterfaceProperty, FLazyObjectProperty, FMapProperty, FObjectProperty, FProperty,
-    FSetProperty, FSoftClassProperty, FSoftObjectProperty, FStructProperty, FUObjectArray,
-    FWeakObjectProperty, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct,
+    FArrayProperty, FBoolProperty, FByteProperty, FClassProperty, FDelegateProperty, FEnumProperty,
+    FInterfaceProperty, FLazyObjectProperty, FMapProperty, FMulticastDelegateProperty,
+    FObjectProperty, FProperty, FSetProperty, FSoftClassProperty, FSoftObjectProperty,
+    FStructProperty, FUObjectArray, FWeakObjectProperty, UClass, UEnum, UFunction, UObject,
+    UScriptStruct, UStruct,
 };
 use crate::structs::Structs;
 
@@ -100,14 +101,38 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FTextProperty) {
         PropertyType::Text
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
-        // TODO function signature
-        PropertyType::MulticastInlineDelegate
+        let prop = ptr.cast::<FMulticastDelegateProperty>();
+        let signature_function = read_path(
+            &prop
+                .signature_function()
+                .read()?
+                .ustruct()
+                .ufield()
+                .uobject(),
+        )?;
+        PropertyType::MulticastInlineDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
-        // TODO function signature
-        PropertyType::MulticastSparseDelegate
+        let prop = ptr.cast::<FMulticastDelegateProperty>();
+        let signature_function = read_path(
+            &prop
+                .signature_function()
+                .read()?
+                .ustruct()
+                .ufield()
+                .uobject(),
+        )?;
+        PropertyType::MulticastSparseDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
-        // TODO function signature
-        PropertyType::Delegate
+        let prop = ptr.cast::<FDelegateProperty>();
+        let signature_function = read_path(
+            &prop
+                .signature_function()
+                .read()?
+                .ustruct()
+                .ufield()
+                .uobject(),
+        )?;
+        PropertyType::Delegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
         let prop = ptr.cast::<FBoolProperty>();
         PropertyType::Bool {

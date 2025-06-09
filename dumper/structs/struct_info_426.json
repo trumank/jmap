@@ -565,6 +565,17 @@
     ]
   },
   {
+    "name": "FDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FObjectProperty",
     "size": 128,
     "members": []
@@ -658,6 +669,17 @@
     "name": "FSoftObjectProperty",
     "size": 128,
     "members": []
+  },
+  {
+    "name": "FMulticastDelegateProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "SignatureFunction",
+        "offset": 120,
+        "size": 8
+      }
+    ]
   },
   {
     "name": "FClassProperty",

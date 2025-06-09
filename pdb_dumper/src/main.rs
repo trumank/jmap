@@ -63,6 +63,8 @@ fn main() -> Result<()> {
         "FSetProperty",
         "FEnumProperty",
         "FByteProperty",
+        "FDelegateProperty",
+        "FMulticastDelegateProperty",
         "FOptionalPropertyLayout", // for FOptionalProperty
         "FObjectPropertyBase",     // for FObjectProperty
     ]);
@@ -90,7 +92,7 @@ fn main() -> Result<()> {
 
             let mut members = Vec::new();
 
-            dbg!(&class);
+            // dbg!(&class);
 
             if let Some(field) = class.fields {
                 let field = type_finder.find(field)?.parse()?;

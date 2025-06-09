@@ -149,9 +149,9 @@ fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyI
         PT::Name => PI::Name,
         PT::Text => PI::Text,
         // TODO distinguish between sparse/inline?
-        PT::MulticastInlineDelegate => PI::MulticastDelegate,
-        PT::MulticastSparseDelegate => PI::MulticastDelegate,
-        PT::Delegate => PI::Delegate,
+        PT::MulticastInlineDelegate { .. } => PI::MulticastDelegate,
+        PT::MulticastSparseDelegate { .. } => PI::MulticastDelegate,
+        PT::Delegate { .. } => PI::Delegate,
         PT::Bool {
             field_size: _,
             byte_offset: _,

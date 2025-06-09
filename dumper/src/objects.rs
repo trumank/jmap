@@ -350,6 +350,27 @@ impl<C: Clone + StructsTrait> CtxPtr<FUObjectItem, C> {
 }
 
 #[derive(Clone, Copy)]
+pub struct FDelegateProperty;
+impl<C: Clone + StructsTrait> CtxPtr<FDelegateProperty, C> {
+    pub fn signature_function(&self) -> CtxPtr<ExternalPtr<UFunction>, C> {
+        let offset = self
+            .ctx()
+            .struct_member("FDelegateProperty", "SignatureFunction");
+        self.byte_offset(offset).cast()
+    }
+}
+#[derive(Clone, Copy)]
+pub struct FMulticastDelegateProperty;
+impl<C: Clone + StructsTrait> CtxPtr<FMulticastDelegateProperty, C> {
+    pub fn signature_function(&self) -> CtxPtr<ExternalPtr<UFunction>, C> {
+        let offset = self
+            .ctx()
+            .struct_member("FMulticastDelegateProperty", "SignatureFunction");
+        self.byte_offset(offset).cast()
+    }
+}
+
+#[derive(Clone, Copy)]
 pub struct FChunkedFixedUObjectArray;
 impl<C: Clone + StructsTrait> CtxPtr<FChunkedFixedUObjectArray, C> {
     pub fn objects(&self) -> CtxPtr<ExternalPtr<ExternalPtr<FUObjectItem>>, C> {
