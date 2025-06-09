@@ -425,73 +425,73 @@ pub struct Property {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum PropertyType {
-    #[serde(rename(serialize = "StructProperty"))]
+    #[serde(rename = "StructProperty")]
     Struct { r#struct: String },
-    #[serde(rename(serialize = "StrProperty"))]
+    #[serde(rename = "StrProperty")]
     Str,
-    #[serde(rename(serialize = "NameProperty"))]
+    #[serde(rename = "NameProperty")]
     Name,
-    #[serde(rename(serialize = "TextProperty"))]
+    #[serde(rename = "TextProperty")]
     Text,
-    #[serde(rename(serialize = "MulticastInlineDelegateProperty"))]
+    #[serde(rename = "MulticastInlineDelegateProperty")]
     MulticastInlineDelegate,
-    #[serde(rename(serialize = "MulticastSparseDelegateProperty"))]
+    #[serde(rename = "MulticastSparseDelegateProperty")]
     MulticastSparseDelegate,
-    #[serde(rename(serialize = "DelegateProperty"))]
+    #[serde(rename = "DelegateProperty")]
     Delegate,
-    #[serde(rename(serialize = "BoolProperty"))]
+    #[serde(rename = "BoolProperty")]
     Bool {
         field_size: u8,
         byte_offset: u8,
         byte_mask: u8,
         field_mask: u8,
     },
-    #[serde(rename(serialize = "ArrayProperty"))]
+    #[serde(rename = "ArrayProperty")]
     Array { inner: Box<Property> },
-    #[serde(rename(serialize = "EnumProperty"))]
+    #[serde(rename = "EnumProperty")]
     Enum {
         container: Box<Property>,
         r#enum: Option<String>,
     },
-    #[serde(rename(serialize = "MapProperty"))]
+    #[serde(rename = "MapProperty")]
     Map {
         key_prop: Box<Property>,
         value_prop: Box<Property>,
     },
-    #[serde(rename(serialize = "SetProperty"))]
+    #[serde(rename = "SetProperty")]
     Set { key_prop: Box<Property> },
-    #[serde(rename(serialize = "FloatProperty"))]
+    #[serde(rename = "FloatProperty")]
     Float,
-    #[serde(rename(serialize = "DoubleProperty"))]
+    #[serde(rename = "DoubleProperty")]
     Double,
-    #[serde(rename(serialize = "ByteProperty"))]
+    #[serde(rename = "ByteProperty")]
     Byte { r#enum: Option<String> },
-    #[serde(rename(serialize = "UInt16Property"))]
+    #[serde(rename = "UInt16Property")]
     UInt16,
-    #[serde(rename(serialize = "UInt32Property"))]
+    #[serde(rename = "UInt32Property")]
     UInt32,
-    #[serde(rename(serialize = "UInt64Property"))]
+    #[serde(rename = "UInt64Property")]
     UInt64,
-    #[serde(rename(serialize = "Int8Property"))]
+    #[serde(rename = "Int8Property")]
     Int8,
-    #[serde(rename(serialize = "Int16Property"))]
+    #[serde(rename = "Int16Property")]
     Int16,
-    #[serde(rename(serialize = "IntProperty"))]
+    #[serde(rename = "IntProperty")]
     Int,
-    #[serde(rename(serialize = "Int64Property"))]
+    #[serde(rename = "Int64Property")]
     Int64,
-    #[serde(rename(serialize = "ObjectProperty"))]
+    #[serde(rename = "ObjectProperty")]
     Object { class: Option<String> },
-    #[serde(rename(serialize = "WeakObjectProperty"))]
+    #[serde(rename = "WeakObjectProperty")]
     WeakObject { class: String },
-    #[serde(rename(serialize = "SoftObjectProperty"))]
+    #[serde(rename = "SoftObjectProperty")]
     SoftObject { class: String },
-    #[serde(rename(serialize = "LazyObjectProperty"))]
+    #[serde(rename = "LazyObjectProperty")]
     LazyObject { class: String },
-    #[serde(rename(serialize = "InterfaceProperty"))]
+    #[serde(rename = "InterfaceProperty")]
     Interface { class: String },
-    #[serde(rename(serialize = "FieldPathProperty"))]
+    #[serde(rename = "FieldPathProperty")]
     FieldPath,
-    #[serde(rename(serialize = "OptionalProperty"))]
+    #[serde(rename = "OptionalProperty")]
     Optional { inner: Box<Property> },
 }
