@@ -509,6 +509,17 @@
     ]
   },
   {
+    "name": "FSoftClassProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 120,
+        "size": 0
+      }
+    ]
+  },
+  {
     "name": "FMapProperty",
     "size": 160,
     "members": [
@@ -538,6 +549,17 @@
     "name": "FSoftObjectProperty",
     "size": 120,
     "members": []
+  },
+  {
+    "name": "FClassProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 120,
+        "size": 0
+      }
+    ]
   },
   {
     "name": "UFunction",

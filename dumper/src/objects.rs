@@ -217,12 +217,28 @@ impl<C: Clone + StructsTrait> CtxPtr<FObjectProperty, C> {
     }
 }
 #[derive(Clone, Copy)]
+pub struct FClassProperty;
+impl<C: Clone + StructsTrait> CtxPtr<FClassProperty, C> {
+    pub fn meta_class(&self) -> CtxPtr<Option<ExternalPtr<UClass>>, C> {
+        let offset = self.ctx().struct_member("FClassProperty", "MetaClass");
+        self.byte_offset(offset).cast()
+    }
+}
+#[derive(Clone, Copy)]
 pub struct FSoftObjectProperty;
 impl<C: Clone + StructsTrait> CtxPtr<FSoftObjectProperty, C> {
     pub fn property_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
         let offset = self
             .ctx()
             .struct_member("FObjectPropertyBase", "PropertyClass");
+        self.byte_offset(offset).cast()
+    }
+}
+#[derive(Clone, Copy)]
+pub struct FSoftClassProperty;
+impl<C: Clone + StructsTrait> CtxPtr<FSoftClassProperty, C> {
+    pub fn meta_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
+        let offset = self.ctx().struct_member("FSoftClassProperty", "MetaClass");
         self.byte_offset(offset).cast()
     }
 }

@@ -618,6 +618,17 @@
     "members": []
   },
   {
+    "name": "FSoftClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FMapProperty",
     "size": 168,
     "members": [
@@ -647,6 +658,17 @@
     "name": "FSoftObjectProperty",
     "size": 128,
     "members": []
+  },
+  {
+    "name": "FClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
+        "size": 8
+      }
+    ]
   },
   {
     "name": "FWeakObjectProperty",

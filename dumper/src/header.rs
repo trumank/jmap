@@ -174,16 +174,24 @@ impl<'objects> Ctx<'objects, '_> {
             PropertyType::Int16 => CType::Int16,
             PropertyType::Int => CType::Int32,
             PropertyType::Int64 => CType::Int64,
-            PropertyType::Object { class } => {
-                let class = CType::UEClass(class.as_deref().expect("expected class name"));
+            PropertyType::Object { property_class } => {
+                let class = CType::UEClass(property_class.as_deref().expect("expected class name"));
+                CType::Ptr(self.store.insert(class))
+            }
+            PropertyType::Class { meta_class } => {
+                let class = CType::UEClass(meta_class.as_deref().expect("expected class name"));
                 CType::Ptr(self.store.insert(class))
             }
             PropertyType::WeakObject { class } => {
                 let class = CType::UEClass(class);
                 CType::TWeakObjectPtr(self.store.insert(class))
             }
-            PropertyType::SoftObject { class } => {
-                let class = CType::UEClass(class);
+            PropertyType::SoftObject { property_class } => {
+                let class = CType::UEClass(property_class);
+                CType::TSoftObjectPtr(self.store.insert(class))
+            }
+            PropertyType::SoftClass { meta_class } => {
+                let class = CType::UEClass(meta_class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }
             PropertyType::LazyObject { class } => {

@@ -249,6 +249,17 @@
     ]
   },
   {
+    "name": "FSoftClassProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 120,
+        "size": 0
+      }
+    ]
+  },
+  {
     "name": "FField",
     "size": 48,
     "members": [
@@ -634,6 +645,17 @@
         "name": "ValueProperty",
         "offset": 0,
         "size": 8
+      }
+    ]
+  },
+  {
+    "name": "FClassProperty",
+    "size": 128,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 120,
+        "size": 0
       }
     ]
   },

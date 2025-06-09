@@ -24,10 +24,10 @@ use ue_reflection::{
 
 use crate::containers::PtrFNamePool;
 use crate::objects::{
-    FArrayProperty, FBoolProperty, FByteProperty, FEnumProperty, FInterfaceProperty,
-    FLazyObjectProperty, FMapProperty, FObjectProperty, FProperty, FSetProperty,
-    FSoftObjectProperty, FStructProperty, FUObjectArray, FWeakObjectProperty, UClass, UEnum,
-    UFunction, UObject, UScriptStruct, UStruct,
+    FArrayProperty, FBoolProperty, FByteProperty, FClassProperty, FEnumProperty,
+    FInterfaceProperty, FLazyObjectProperty, FMapProperty, FObjectProperty, FProperty,
+    FSetProperty, FSoftClassProperty, FSoftObjectProperty, FStructProperty, FUObjectArray,
+    FWeakObjectProperty, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct,
 };
 use crate::structs::Structs;
 
@@ -169,26 +169,36 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Int
     } else if f.contains(EClassCastFlags::CASTCLASS_FInt64Property) {
         PropertyType::Int64
+    } else if f.contains(EClassCastFlags::CASTCLASS_FClassProperty) {
+        let prop = ptr.cast::<FClassProperty>();
+        let class = prop
+            .meta_class()
+            .read()?
+            .map(|c| read_path(&c.ustruct().ufield().uobject()))
+            .transpose()?;
+        PropertyType::Class { meta_class: class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
         let prop = ptr.cast::<FObjectProperty>();
-        //dbg!(&prop.property_class());
-        //dbg!(&prop.property_class().read()?);
         let class = prop
             .property_class()
             .read()?
             .map(|c| read_path(&c.ustruct().ufield().uobject()))
             .transpose()?;
-
-        //let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::Object { class }
+        PropertyType::Object {
+            property_class: class,
+        }
+    } else if f.contains(EClassCastFlags::CASTCLASS_FSoftClassProperty) {
+        let prop = ptr.cast::<FSoftClassProperty>();
+        let c = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::SoftClass { meta_class: c }
+    } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
+        let prop = ptr.cast::<FSoftObjectProperty>();
+        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::SoftObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
         let prop = ptr.cast::<FWeakObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
         PropertyType::WeakObject { class: c }
-    } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
-        let prop = ptr.cast::<FSoftObjectProperty>();
-        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::SoftObject { class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
         let prop = ptr.cast::<FLazyObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;

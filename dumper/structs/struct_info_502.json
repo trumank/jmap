@@ -370,6 +370,17 @@
     ]
   },
   {
+    "name": "FSoftClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FField",
     "size": 56,
     "members": [
@@ -622,6 +633,17 @@
       {
         "name": "CppStructOps",
         "offset": 184,
+        "size": 8
+      }
+    ]
+  },
+  {
+    "name": "FClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
         "size": 8
       }
     ]

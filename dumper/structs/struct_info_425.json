@@ -150,6 +150,28 @@
     "members": []
   },
   {
+    "name": "FClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
+        "size": 8
+      }
+    ]
+  },
+  {
+    "name": "FSoftClassProperty",
+    "size": 136,
+    "members": [
+      {
+        "name": "MetaClass",
+        "offset": 128,
+        "size": 8
+      }
+    ]
+  },
+  {
     "name": "FInterfaceProperty",
     "size": 128,
     "members": [
