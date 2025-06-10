@@ -352,8 +352,22 @@ fn dump_inner<M: Mem + Clone>(
         ) -> Result<OrderMap<String, PropertyValue>> {
             let mut properties = OrderMap::new();
             for_each_prop(&ustruct, |prop| {
-                if let Some(value) = read_prop(prop, &ptr)? {
-                    properties.insert(prop.ffield().name_private().read()?, value);
+                let array_dim = prop.array_dim().read()? as usize;
+                let name = prop.ffield().name_private().read()?;
+                if array_dim == 1 {
+                    if let Some(value) = read_prop(prop, &ptr, 0)? {
+                        properties.insert(name, value);
+                    }
+                } else {
+                    let mut elements = vec![];
+                    for i in 0..array_dim {
+                        if let Some(value) = read_prop(prop, &ptr, i)? {
+                            elements.push(value);
+                        } else {
+                            return Ok(());
+                        }
+                    }
+                    properties.insert(name, PropertyValue::Array(elements));
                 }
                 Ok(())
             })?;
@@ -362,8 +376,10 @@ fn dump_inner<M: Mem + Clone>(
         fn read_prop<M: MemComplete>(
             prop: &CtxPtr<FProperty, M>,
             ptr: &CtxPtr<(), M>,
+            index: usize,
         ) -> Result<Option<PropertyValue>> {
-            let ptr = ptr.byte_offset(prop.offset_internal().read()? as usize);
+            let size = prop.element_size().read()? as usize;
+            let ptr = ptr.byte_offset(prop.offset_internal().read()? as usize + index * size);
             let f = prop.ffield().class_private().read()?.cast_flags().read()?;
 
             let value = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
@@ -395,10 +411,9 @@ fn dump_inner<M: Mem + Clone>(
                 let mut data = Vec::with_capacity(num);
                 if let Some(data_ptr) = array.data().read()? {
                     let inner_prop = prop.inner().read()?;
-                    let size = inner_prop.element_size().read()? as usize;
                     for i in 0..num {
                         // TODO handle size != alignment
-                        let value = read_prop(&inner_prop, &data_ptr.byte_offset(i * size))?;
+                        let value = read_prop(&inner_prop, &data_ptr, i)?;
                         if let Some(value) = value {
                             data.push(value);
                         } else {
