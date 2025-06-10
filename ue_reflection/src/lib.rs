@@ -500,7 +500,7 @@ pub enum PropertyType {
         meta_class: String,
     },
     #[serde(rename = "WeakObjectProperty")]
-    WeakObject { class: String },
+    WeakObject { property_class: String },
     #[serde(rename = "SoftObjectProperty")]
     SoftObject { property_class: String },
     #[serde(rename = "SoftClassProperty")]
@@ -509,9 +509,9 @@ pub enum PropertyType {
         meta_class: String,
     },
     #[serde(rename = "LazyObjectProperty")]
-    LazyObject { class: String },
+    LazyObject { property_class: String },
     #[serde(rename = "InterfaceProperty")]
-    Interface { class: String },
+    Interface { property_class: String },
     #[serde(rename = "FieldPathProperty")]
     FieldPath,
     #[serde(rename = "OptionalProperty")]

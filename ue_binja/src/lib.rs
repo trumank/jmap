@@ -266,7 +266,9 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let class = CType::UEClass(class.as_deref().expect("expected class name"));
                 CType::Ptr(self.store.insert(class))
             }
-            PropertyType::WeakObject { class } => {
+            PropertyType::WeakObject {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TWeakObjectPtr(self.store.insert(class))
             }
@@ -274,11 +276,15 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let class = CType::UEClass(class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }
-            PropertyType::LazyObject { class } => {
+            PropertyType::LazyObject {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TLazyObjectPtr(self.store.insert(class))
             }
-            PropertyType::Interface { class } => {
+            PropertyType::Interface {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TScriptInterface(self.store.insert(class))
             }

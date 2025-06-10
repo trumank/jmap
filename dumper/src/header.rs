@@ -189,7 +189,9 @@ impl<'objects> Ctx<'objects, '_> {
                 let class = CType::UEClass(property_class);
                 CType::Ptr(self.store.insert(class))
             }
-            PropertyType::WeakObject { class } => {
+            PropertyType::WeakObject {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TWeakObjectPtr(self.store.insert(class))
             }
@@ -204,11 +206,15 @@ impl<'objects> Ctx<'objects, '_> {
                 let class = CType::UEClass(meta_class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }
-            PropertyType::LazyObject { class } => {
+            PropertyType::LazyObject {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TLazyObjectPtr(self.store.insert(class))
             }
-            PropertyType::Interface { class } => {
+            PropertyType::Interface {
+                property_class: class,
+            } => {
                 let class = CType::UEClass(class);
                 CType::TScriptInterface(self.store.insert(class))
             }

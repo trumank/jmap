@@ -239,15 +239,15 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
         let prop = ptr.cast::<FWeakObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::WeakObject { class: c }
+        PropertyType::WeakObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
         let prop = ptr.cast::<FLazyObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::LazyObject { class: c }
+        PropertyType::LazyObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
         let prop = ptr.cast::<FInterfaceProperty>();
         let c = read_path(&prop.interface_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::Interface { class: c }
+        PropertyType::Interface { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
         // TODO
         PropertyType::FieldPath
