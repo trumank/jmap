@@ -92,7 +92,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
 
     let t = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
         let prop = ptr.cast::<FStructProperty>();
-        let s = read_path(&prop.struct_().read()?.ustruct().ufield().uobject())?;
+        let s = prop.struct_().read()?.path()?;
         PropertyType::Struct { r#struct: s }
     } else if f.contains(EClassCastFlags::CASTCLASS_FStrProperty) {
         PropertyType::Str
@@ -102,36 +102,15 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Text
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
         let prop = ptr.cast::<FMulticastDelegateProperty>();
-        let signature_function = read_path(
-            &prop
-                .signature_function()
-                .read()?
-                .ustruct()
-                .ufield()
-                .uobject(),
-        )?;
+        let signature_function = prop.signature_function().read()?.path()?;
         PropertyType::MulticastInlineDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
         let prop = ptr.cast::<FMulticastDelegateProperty>();
-        let signature_function = read_path(
-            &prop
-                .signature_function()
-                .read()?
-                .ustruct()
-                .ufield()
-                .uobject(),
-        )?;
+        let signature_function = prop.signature_function().read()?.path()?;
         PropertyType::MulticastSparseDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
         let prop = ptr.cast::<FDelegateProperty>();
-        let signature_function = read_path(
-            &prop
-                .signature_function()
-                .read()?
-                .ustruct()
-                .ufield()
-                .uobject(),
-        )?;
+        let signature_function = prop.signature_function().read()?.path()?;
         PropertyType::Delegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
         let prop = ptr.cast::<FBoolProperty>();
@@ -150,11 +129,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         let prop = ptr.cast::<FEnumProperty>();
         PropertyType::Enum {
             container: map_prop(&prop.underlying_prop().read()?.cast())?.into(),
-            r#enum: prop
-                .enum_()
-                .read()?
-                .map(|e| read_path(&e.ufield().uobject()))
-                .transpose()?,
+            r#enum: prop.enum_().read()?.map(|e| e.path()).transpose()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
         let prop = ptr.cast::<FMapProperty>();
@@ -174,11 +149,7 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FByteProperty) {
         let prop = ptr.cast::<FByteProperty>();
         PropertyType::Byte {
-            r#enum: prop
-                .enum_()
-                .read()?
-                .map(|e| read_path(&e.ufield().uobject()))
-                .transpose()?,
+            r#enum: prop.enum_().read()?.map(|e| e.path()).transpose()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FUInt16Property) {
         PropertyType::UInt16
@@ -196,57 +167,43 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Int64
     } else if f.contains(EClassCastFlags::CASTCLASS_FClassProperty) {
         let prop = ptr.cast::<FClassProperty>();
-        let property_class = read_path(
-            &prop
-                .fobject_property()
-                .property_class()
-                .read()?
-                .ustruct()
-                .ufield()
-                .uobject(),
-        )?;
-        let meta_class = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
+        let property_class = prop.fobject_property().property_class().read()?.path()?;
+        let meta_class = prop.meta_class().read()?.path()?;
         PropertyType::Class {
             property_class,
             meta_class,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
         let prop = ptr.cast::<FObjectProperty>();
-        let property_class =
-            read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        let property_class = prop.property_class().read()?.path()?;
         PropertyType::Object { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSoftClassProperty) {
         let prop = ptr.cast::<FSoftClassProperty>();
-        let property_class = read_path(
-            &prop
-                .fsoft_object_property()
-                .property_class()
-                .read()?
-                .ustruct()
-                .ufield()
-                .uobject(),
-        )?;
-        let meta_class = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
+        let property_class = prop
+            .fsoft_object_property()
+            .property_class()
+            .read()?
+            .path()?;
+        let meta_class = prop.meta_class().read()?.path()?;
         PropertyType::SoftClass {
             property_class,
             meta_class,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
         let prop = ptr.cast::<FSoftObjectProperty>();
-        let property_class =
-            read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        let property_class = prop.property_class().read()?.path()?;
         PropertyType::SoftObject { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
         let prop = ptr.cast::<FWeakObjectProperty>();
-        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        let c = prop.property_class().read()?.path()?;
         PropertyType::WeakObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
         let prop = ptr.cast::<FLazyObjectProperty>();
-        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        let c = prop.property_class().read()?.path()?;
         PropertyType::LazyObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
         let prop = ptr.cast::<FInterfaceProperty>();
-        let c = read_path(&prop.interface_class().read()?.ustruct().ufield().uobject())?;
+        let c = prop.interface_class().read()?.path()?;
         PropertyType::Interface { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
         // TODO
@@ -365,7 +322,7 @@ fn dump_inner<M: Mem + Clone>(
         };
         let class = obj.class_private().read()?;
 
-        let path = read_path(&obj)?;
+        let path = obj.path()?;
 
         fn for_each_prop<F, C: MemComplete>(ustruct: &CtxPtr<UStruct, C>, mut f: F) -> Result<()>
         where
@@ -499,7 +456,7 @@ fn dump_inner<M: Mem + Clone>(
                 let obj = ptr
                     .cast::<Option<ExternalPtr<UObject>>>()
                     .read()?
-                    .map(|e| read_path(&e))
+                    .map(|e| e.path())
                     .transpose()?;
                 PropertyValue::Object(obj)
             } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
@@ -521,14 +478,10 @@ fn dump_inner<M: Mem + Clone>(
         }
 
         fn read_object<M: MemComplete>(obj: &CtxPtr<UObject, M>) -> Result<Object> {
-            let outer = obj
-                .outer_private()
-                .read()?
-                .map(|s| read_path(&s))
-                .transpose()?;
+            let outer = obj.outer_private().read()?.map(|s| s.path()).transpose()?;
 
             let class = obj.class_private().read()?;
-            let class_name = read_path(&class.ustruct().ufield().uobject())?;
+            let class_name = class.path()?;
 
             Ok(Object {
                 vtable: obj.vtable().read()? as u64,
@@ -551,11 +504,7 @@ fn dump_inner<M: Mem + Clone>(
 
                 field = next.next();
             }
-            let super_struct = obj
-                .super_struct()
-                .read()?
-                .map(|s| read_path(&s.ufield().uobject()))
-                .transpose()?;
+            let super_struct = obj.super_struct().read()?.map(|s| s.path()).transpose()?;
             Ok(Struct {
                 object: read_object(&obj.cast())?,
                 super_struct,
@@ -581,7 +530,7 @@ fn dump_inner<M: Mem + Clone>(
             let class_default_object = obj
                 .class_default_object()
                 .read()?
-                .map(|s| read_path(&s))
+                .map(|s| s.path())
                 .transpose()?;
             Ok(Class {
                 r#struct: read_struct(&obj.cast())?,
@@ -624,7 +573,6 @@ fn dump_inner<M: Mem + Clone>(
                 names,
             })
         } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
-            let obj = obj.cast::<UObject>();
             ObjectType::Package(Package {
                 object: read_object(&obj)?,
             })
