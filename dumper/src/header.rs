@@ -179,11 +179,14 @@ impl<'objects> Ctx<'objects, '_> {
             PropertyType::Int => CType::Int32,
             PropertyType::Int64 => CType::Int64,
             PropertyType::Object { property_class } => {
-                let class = CType::UEClass(property_class.as_deref().expect("expected class name"));
+                let class = CType::UEClass(property_class);
                 CType::Ptr(self.store.insert(class))
             }
-            PropertyType::Class { meta_class } => {
-                let class = CType::UEClass(meta_class.as_deref().expect("expected class name"));
+            PropertyType::Class {
+                property_class,
+                meta_class,
+            } => {
+                let class = CType::UEClass(property_class);
                 CType::Ptr(self.store.insert(class))
             }
             PropertyType::WeakObject { class } => {
@@ -194,7 +197,10 @@ impl<'objects> Ctx<'objects, '_> {
                 let class = CType::UEClass(property_class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }
-            PropertyType::SoftClass { meta_class } => {
+            PropertyType::SoftClass {
+                property_class,
+                meta_class,
+            } => {
                 let class = CType::UEClass(meta_class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }

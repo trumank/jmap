@@ -493,15 +493,21 @@ pub enum PropertyType {
     #[serde(rename = "Int64Property")]
     Int64,
     #[serde(rename = "ObjectProperty")]
-    Object { property_class: Option<String> },
+    Object { property_class: String },
     #[serde(rename = "ClassProperty")]
-    Class { meta_class: Option<String> },
+    Class {
+        property_class: String,
+        meta_class: String,
+    },
     #[serde(rename = "WeakObjectProperty")]
     WeakObject { class: String },
     #[serde(rename = "SoftObjectProperty")]
     SoftObject { property_class: String },
     #[serde(rename = "SoftClassProperty")]
-    SoftClass { meta_class: String },
+    SoftClass {
+        property_class: String,
+        meta_class: String,
+    },
     #[serde(rename = "LazyObjectProperty")]
     LazyObject { class: String },
     #[serde(rename = "InterfaceProperty")]

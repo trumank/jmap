@@ -196,30 +196,46 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Int64
     } else if f.contains(EClassCastFlags::CASTCLASS_FClassProperty) {
         let prop = ptr.cast::<FClassProperty>();
-        let class = prop
-            .meta_class()
-            .read()?
-            .map(|c| read_path(&c.ustruct().ufield().uobject()))
-            .transpose()?;
-        PropertyType::Class { meta_class: class }
+        let property_class = read_path(
+            &prop
+                .fobject_property()
+                .property_class()
+                .read()?
+                .ustruct()
+                .ufield()
+                .uobject(),
+        )?;
+        let meta_class = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::Class {
+            property_class,
+            meta_class,
+        }
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
         let prop = ptr.cast::<FObjectProperty>();
-        let class = prop
-            .property_class()
-            .read()?
-            .map(|c| read_path(&c.ustruct().ufield().uobject()))
-            .transpose()?;
-        PropertyType::Object {
-            property_class: class,
-        }
+        let property_class =
+            read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::Object { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSoftClassProperty) {
         let prop = ptr.cast::<FSoftClassProperty>();
-        let c = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::SoftClass { meta_class: c }
+        let property_class = read_path(
+            &prop
+                .fsoft_object_property()
+                .property_class()
+                .read()?
+                .ustruct()
+                .ufield()
+                .uobject(),
+        )?;
+        let meta_class = read_path(&prop.meta_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::SoftClass {
+            property_class,
+            meta_class,
+        }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
         let prop = ptr.cast::<FSoftObjectProperty>();
-        let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
-        PropertyType::SoftObject { property_class: c }
+        let property_class =
+            read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
+        PropertyType::SoftObject { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
         let prop = ptr.cast::<FWeakObjectProperty>();
         let c = read_path(&prop.property_class().read()?.ustruct().ufield().uobject())?;
