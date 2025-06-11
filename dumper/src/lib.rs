@@ -328,21 +328,18 @@ fn dump_inner<M: Mem + Clone>(
         where
             F: FnMut(&CtxPtr<FProperty, C>) -> Result<()>,
         {
-            let mut field = ustruct.child_properties();
-            while let Some(next) = field.read()? {
-                let flags = next.class_private().read()?.cast_flags().read()?;
-                if flags.contains(EClassCastFlags::CASTCLASS_FProperty) {
-                    f(&next.cast::<FProperty>())?;
+            let mut str = Some(ustruct.clone());
+            while let Some(next_struct) = str {
+                let mut field = next_struct.child_properties();
+                while let Some(next) = field.read()? {
+                    let flags = next.class_private().read()?.cast_flags().read()?;
+                    if flags.contains(EClassCastFlags::CASTCLASS_FProperty) {
+                        f(&next.cast::<FProperty>())?;
+                    }
+                    field = next.next();
                 }
-
-                field = next.next();
+                str = next_struct.super_struct().read()?;
             }
-            // TODO super
-            //let super_struct = obj
-            //    .super_struct()
-            //    .read()?
-            //    .map(|s| read_path(&s.ufield().uobject()))
-            //    .transpose()?;
             Ok(())
         }
 
