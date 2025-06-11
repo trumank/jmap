@@ -529,12 +529,12 @@ pub enum PropertyValue {
     Delegate,
     Bool(bool),
     Array(Vec<PropertyValue>),
-    Enum(String), // String or index?
+    Enum(EnumPropertyValue),
     Map(BTreeMap<PropertyValue, PropertyValue>),
     Set(BTreeSet<PropertyValue>),
     Float(OrderedFloat<f32>),
     Double(OrderedFloat<f64>),
-    Byte(u8),
+    Byte(BytePropertyValue),
     UInt16(u16),
     UInt32(u32),
     UInt64(u64),
@@ -549,6 +549,20 @@ pub enum PropertyValue {
     Interface(String),
     FieldPath, // TODO
     Optional(Option<Box<PropertyValue>>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(untagged)]
+pub enum EnumPropertyValue {
+    Value(i64),
+    Name(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[serde(untagged)]
+pub enum BytePropertyValue {
+    Value(u8),
+    Name(String),
 }
 
 /// Wrapper for PropertyValues which require external context to properly deserialize

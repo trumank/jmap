@@ -18,8 +18,9 @@ use patternsleuth_image::image::Image;
 use patternsleuth_resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
-    Class, EClassCastFlags, Enum, Function, Object, ObjectType, Package, Property, PropertyType,
-    PropertyValue, ReflectionData, ScriptStruct, Struct,
+    BytePropertyValue, Class, EClassCastFlags, Enum, EnumPropertyValue, Function, Object,
+    ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData, ScriptStruct,
+    Struct,
 };
 
 use crate::containers::PtrFNamePool;
@@ -421,7 +422,27 @@ fn dump_inner<M: Mem + Clone>(
 
                 PropertyValue::Array(data)
             } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
-                return Ok(None);
+                let prop = prop.cast::<FEnumProperty>();
+                let underlying = read_prop(&prop.underlying_prop().read()?, &ptr, 0)?
+                    .expect("valid underlying prop");
+                let value = match underlying {
+                    PropertyValue::Byte(BytePropertyValue::Value(v)) => v as i64,
+                    PropertyValue::Int8(v) => v as i64,
+                    PropertyValue::Int(v) => v as i64,
+                    PropertyValue::UInt16(v) => v as i64,
+                    PropertyValue::UInt32(v) => v as i64,
+                    e => unimplemented!("underlying enum prop {e:#?}"),
+                };
+                let names = read_enum(&prop.enum_().read()?.expect("valid enum"))?.names;
+                let name = names
+                    .into_iter()
+                    .find_map(|(name, v)| (v == value).then_some(name));
+
+                PropertyValue::Enum(if let Some(name) = name {
+                    EnumPropertyValue::Name(name)
+                } else {
+                    EnumPropertyValue::Value(value)
+                })
             } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
                 // /* offset 0x000 */ Data: TScriptArray<TSizedDefaultAllocator<32> >,
                 // /* offset 0x010 */ AllocationFlags: TScriptBitArray<FDefaultBitArrayAllocator,void>,
@@ -449,7 +470,25 @@ fn dump_inner<M: Mem + Clone>(
             } else if f.contains(EClassCastFlags::CASTCLASS_FDoubleProperty) {
                 PropertyValue::Double(ptr.cast::<f64>().read()?.into())
             } else if f.contains(EClassCastFlags::CASTCLASS_FByteProperty) {
-                PropertyValue::Byte(ptr.cast::<u8>().read()?.into())
+                let prop = prop.cast::<FByteProperty>();
+                let value = ptr.cast::<u8>().read()?;
+                PropertyValue::Byte(
+                    if let Some(name) = prop
+                        .enum_()
+                        .read()?
+                        .map(|e| read_enum(&e))
+                        .transpose()?
+                        .and_then(|e| {
+                            e.names
+                                .into_iter()
+                                .find_map(|(name, v)| (v == value as i64).then_some(name))
+                        })
+                    {
+                        BytePropertyValue::Name(name)
+                    } else {
+                        BytePropertyValue::Value(value)
+                    },
+                )
             } else if f.contains(EClassCastFlags::CASTCLASS_FUInt16Property) {
                 PropertyValue::UInt16(ptr.cast::<u16>().read()?.into())
             } else if f.contains(EClassCastFlags::CASTCLASS_FUInt32Property) {
@@ -536,7 +575,6 @@ fn dump_inner<M: Mem + Clone>(
         }
 
         fn read_class<M: MemComplete>(obj: &CtxPtr<UClass, M>) -> Result<Class> {
-            let obj = obj.cast::<UClass>();
             let class_flags = obj.class_flags().read()?;
             let class_cast_flags = obj.class_cast_flags().read()?;
             let class_default_object = obj
@@ -550,6 +588,22 @@ fn dump_inner<M: Mem + Clone>(
                 class_cast_flags,
                 class_default_object,
                 instance_vtable: None,
+            })
+        }
+
+        fn read_enum<M: MemComplete>(obj: &CtxPtr<UEnum, M>) -> Result<Enum> {
+            let mut names = vec![];
+            for item in obj.names().iter()? {
+                let key = item.a().read()?;
+                let value = item.b().read()?;
+                names.push((key, value));
+            }
+            Ok(Enum {
+                object: read_object(&obj.cast())?,
+                cpp_type: obj.cpp_type().read()?,
+                cpp_form: obj.cpp_form().read()?,
+                enum_flags: obj.enum_flags().read()?,
+                names,
             })
         }
 
@@ -570,20 +624,7 @@ fn dump_inner<M: Mem + Clone>(
         } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
             ObjectType::ScriptStruct(read_script_struct(&obj.cast())?)
         } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
-            let full_obj = obj.cast::<UEnum>();
-            let mut names = vec![];
-            for item in full_obj.names().iter()? {
-                let key = item.a().read()?;
-                let value = item.b().read()?;
-                names.push((key, value));
-            }
-            ObjectType::Enum(Enum {
-                object: read_object(&obj.cast())?,
-                cpp_type: full_obj.cpp_type().read()?,
-                cpp_form: full_obj.cpp_form().read()?,
-                enum_flags: full_obj.enum_flags().read()?,
-                names,
-            })
+            ObjectType::Enum(read_enum(&obj.cast())?)
         } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
             ObjectType::Package(Package {
                 object: read_object(&obj)?,
