@@ -1,7 +1,7 @@
 use anyhow::{bail, Result};
 use clap::{ArgGroup, Parser};
 use dumper::{structs::Structs, Input};
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use ue_reflection::ReflectionData;
 
 #[derive(Parser, Debug)]
@@ -34,12 +34,14 @@ fn main() -> Result<()> {
 
     enum OutputType {
         Json,
+        JsonGz,
         Usmap,
     }
 
-    let output_type = match cli.output.extension().and_then(|e| e.to_str()) {
-        Some("json") => OutputType::Json,
-        Some("usmap") => OutputType::Usmap,
+    let output_type = match cli.output.file_name().and_then(|e| e.to_str()) {
+        Some(n) if n.ends_with(".json") => OutputType::Json,
+        Some(n) if n.ends_with(".json.gz") => OutputType::JsonGz,
+        Some(n) if n.ends_with(".usmap") => OutputType::Usmap,
         _ => bail!("Error: Expected .json or .usmap output type"),
     };
 
@@ -61,7 +63,14 @@ fn main() -> Result<()> {
 
     match output_type {
         OutputType::Json => {
-            std::fs::write(cli.output, serde_json::to_vec_pretty(&reflection_data)?)?;
+            let mut file = BufWriter::new(File::create(cli.output)?);
+            serde_json::to_writer_pretty(&mut file, &reflection_data)?;
+        }
+        OutputType::JsonGz => {
+            let mut file = BufWriter::new(File::create(cli.output)?);
+            let mut e = flate2::write::GzEncoder::new(&mut file, flate2::Compression::default());
+            serde_json::to_writer_pretty(&mut e, &reflection_data)?;
+            e.finish()?;
         }
         OutputType::Usmap => {
             let usmap = into_usmap(&reflection_data);

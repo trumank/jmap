@@ -15,6 +15,7 @@ bitflags = { workspace = true, features = ["serde"] }
 bytemuck.workspace = true
 clap.workspace = true
 derive-where.workspace = true
+flate2 = "1.1.2"
 memmap2 = "0.9.5"
 ordered-float = "5.0.0"
 ordermap = "0.5.5"
