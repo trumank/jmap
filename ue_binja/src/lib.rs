@@ -218,9 +218,9 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             PropertyType::Name => CType::FName,
             PropertyType::Text => CType::FText,
             PropertyType::FieldPath => CType::FFieldPath,
-            PropertyType::MulticastInlineDelegate => CType::MulticastInlineDelegate, // TODO
-            PropertyType::MulticastSparseDelegate => CType::MulticastSparseDelegate, // TODO
-            PropertyType::Delegate => CType::Delegate,
+            PropertyType::MulticastInlineDelegate { .. } => CType::MulticastInlineDelegate, // TODO
+            PropertyType::MulticastSparseDelegate { .. } => CType::MulticastSparseDelegate, // TODO
+            PropertyType::Delegate { .. } => CType::Delegate,
             PropertyType::Bool {
                 field_size,
                 byte_offset,
@@ -262,8 +262,15 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             PropertyType::Int16 => CType::Int16,
             PropertyType::Int => CType::Int32,
             PropertyType::Int64 => CType::Int64,
-            PropertyType::Object { class } => {
-                let class = CType::UEClass(class.as_deref().expect("expected class name"));
+            PropertyType::Object { property_class } => {
+                let class = CType::UEClass(property_class);
+                CType::Ptr(self.store.insert(class))
+            }
+            PropertyType::Class {
+                property_class,
+                meta_class: _,
+            } => {
+                let class = CType::UEClass(property_class);
                 CType::Ptr(self.store.insert(class))
             }
             PropertyType::WeakObject {
@@ -272,8 +279,15 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 let class = CType::UEClass(class);
                 CType::TWeakObjectPtr(self.store.insert(class))
             }
-            PropertyType::SoftObject { class } => {
-                let class = CType::UEClass(class);
+            PropertyType::SoftObject { property_class } => {
+                let class = CType::UEClass(property_class);
+                CType::TSoftObjectPtr(self.store.insert(class))
+            }
+            PropertyType::SoftClass {
+                property_class,
+                meta_class: _,
+            } => {
+                let class = CType::UEClass(property_class);
                 CType::TSoftObjectPtr(self.store.insert(class))
             }
             PropertyType::LazyObject {
