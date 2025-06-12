@@ -297,7 +297,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 CType::TLazyObjectPtr(self.store.insert(class))
             }
             PropertyType::Interface {
-                property_class: class,
+                interface_class: class,
             } => {
                 let class = CType::UEClass(class);
                 CType::TScriptInterface(self.store.insert(class))

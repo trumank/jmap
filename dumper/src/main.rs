@@ -205,7 +205,7 @@ fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyI
         PT::SoftObject { property_class: _ } => PI::SoftObject,
         PT::SoftClass { .. } => PI::SoftObject,
         PT::LazyObject { property_class: _ } => PI::LazyObject,
-        PT::Interface { property_class: _ } => PI::Interface,
+        PT::Interface { interface_class: _ } => PI::Interface,
         PT::FieldPath => PI::FieldPath,
         PT::Optional { inner } => PI::Optional {
             inner: into_usmap_prop_inner(&inner.r#type).into(),

@@ -204,8 +204,8 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::LazyObject { property_class: c }
     } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
         let prop = ptr.cast::<FInterfaceProperty>();
-        let c = prop.interface_class().read()?.path()?;
-        PropertyType::Interface { property_class: c }
+        let interface_class = prop.interface_class().read()?.path()?;
+        PropertyType::Interface { interface_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
         // TODO
         PropertyType::FieldPath
@@ -428,6 +428,7 @@ fn dump_inner<M: Mem + Clone>(
                 let value = match underlying {
                     PropertyValue::Byte(BytePropertyValue::Value(v)) => v as i64,
                     PropertyValue::Int8(v) => v as i64,
+                    PropertyValue::Int16(v) => v as i64,
                     PropertyValue::Int(v) => v as i64,
                     PropertyValue::UInt16(v) => v as i64,
                     PropertyValue::UInt32(v) => v as i64,

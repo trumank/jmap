@@ -309,7 +309,7 @@ impl<C: Clone + StructsTrait> CtxPtr<FInterfaceProperty, C> {
     pub fn interface_class(&self) -> CtxPtr<ExternalPtr<UClass>, C> {
         let offset = self
             .ctx()
-            .struct_member("FObjectPropertyBase", "PropertyClass");
+            .struct_member("FInterfaceProperty", "InterfaceClass");
         self.byte_offset(offset).cast()
     }
 }

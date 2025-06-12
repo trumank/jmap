@@ -511,7 +511,7 @@ pub enum PropertyType {
     #[serde(rename = "LazyObjectProperty")]
     LazyObject { property_class: String },
     #[serde(rename = "InterfaceProperty")]
-    Interface { property_class: String },
+    Interface { interface_class: String },
     #[serde(rename = "FieldPathProperty")]
     FieldPath,
     #[serde(rename = "OptionalProperty")]
