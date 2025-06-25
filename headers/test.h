@@ -1,18 +1,18 @@
-// template<typename T>
-// struct TArray {
-//     public:
-//     T* Data;
-//     int Num;
-//     int Max;
-// };
-
-
-template<typename S>
-struct Aasdf {
-    private:
-    T asdf;
-    
+template<typename T>
+struct TArray {
+    public:
+    T* Data;
+    int Num;
+    int Max;
 };
+
+
+// template<typename S>
+// struct Aasdf {
+//     private:
+//     T asdf;
+    
+// };
 
 // class Container {
 // public:
