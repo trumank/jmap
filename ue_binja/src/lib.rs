@@ -48,7 +48,7 @@ impl Command for ImportCommand {
 
         into_header(&ref_data, bv, |_path, _obj| true);
 
-        bv.file().commit_undo_actions(action);
+        bv.file().commit_undo_actions(&action);
     }
 
     fn valid(&self, _view: &binaryninja::binary_view::BinaryView) -> bool {
@@ -917,7 +917,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             bn_struct.insert(
                 &self.bn_type(ctype),
-                prop.name.clone(),
+                &prop.name,
                 prop.offset as u64,
                 false,
                 MemberAccess::PublicAccess,
@@ -1027,7 +1027,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                         //self.bv.define_user_symbol(&sym);
                         builder.insert(
                             &func_ptr,
-                            format!("vfunc_0x{offset:x}"),
+                            &format!("vfunc_0x{offset:x}"),
                             offset,
                             false,
                             MemberAccess::PublicAccess,
@@ -1199,27 +1199,19 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 }
 
 trait StructureBuilderExt {
-    fn m<
-        'a,
-        S: binaryninja::string::BnStrCompatible,
-        T: Into<binaryninja::confidence::Conf<&'a Type>>,
-    >(
+    fn m<'a, T: Into<binaryninja::confidence::Conf<&'a Type>>>(
         &mut self,
         ty: T,
-        name: S,
+        name: &str,
         offset: u64,
     ) -> &mut Self;
 }
 
 impl StructureBuilderExt for StructureBuilder {
-    fn m<
-        'a,
-        S: binaryninja::string::BnStrCompatible,
-        T: Into<binaryninja::confidence::Conf<&'a Type>>,
-    >(
+    fn m<'a, T: Into<binaryninja::confidence::Conf<&'a Type>>>(
         &mut self,
         ty: T,
-        name: S,
+        name: &str,
         offset: u64,
     ) -> &mut Self {
         self.insert(

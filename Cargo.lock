@@ -103,17 +103,20 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 [[package]]
 name = "binaryninja"
 version = "0.1.0"
-source = "git+https://github.com/Vector35/binaryninja-api.git?branch=dev#67e5ac0aa51db4fd52da786a6227c8bc649814e5"
+source = "git+https://github.com/Vector35/binaryninja-api.git?branch=dev#27a249c7938fe091d77d633129255327c8c6708e"
 dependencies = [
  "binaryninjacore-sys",
  "log",
+ "serde",
+ "serde_derive",
+ "serde_json",
  "thiserror",
 ]
 
 [[package]]
 name = "binaryninjacore-sys"
 version = "0.1.0"
-source = "git+https://github.com/Vector35/binaryninja-api.git?branch=dev#67e5ac0aa51db4fd52da786a6227c8bc649814e5"
+source = "git+https://github.com/Vector35/binaryninja-api.git?branch=dev#27a249c7938fe091d77d633129255327c8c6708e"
 dependencies = [
  "bindgen",
  "proc-macro2",
