@@ -446,11 +446,11 @@ pub enum PropertyType {
     #[serde(rename = "TextProperty")]
     Text,
     #[serde(rename = "MulticastInlineDelegateProperty")]
-    MulticastInlineDelegate { signature_function: String },
+    MulticastInlineDelegate { signature_function: Option<String> },
     #[serde(rename = "MulticastSparseDelegateProperty")]
-    MulticastSparseDelegate { signature_function: String },
+    MulticastSparseDelegate { signature_function: Option<String> },
     #[serde(rename = "DelegateProperty")]
-    Delegate { signature_function: String },
+    Delegate { signature_function: Option<String> },
     #[serde(rename = "BoolProperty")]
     Bool {
         field_size: u8,

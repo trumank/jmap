@@ -103,15 +103,27 @@ fn map_prop<M: MemComplete>(ptr: &CtxPtr<FProperty, M>) -> Result<Property> {
         PropertyType::Text
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
         let prop = ptr.cast::<FMulticastDelegateProperty>();
-        let signature_function = prop.signature_function().read()?.path()?;
+        let signature_function = prop
+            .signature_function()
+            .read()?
+            .map(|e| e.path())
+            .transpose()?;
         PropertyType::MulticastInlineDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
         let prop = ptr.cast::<FMulticastDelegateProperty>();
-        let signature_function = prop.signature_function().read()?.path()?;
+        let signature_function = prop
+            .signature_function()
+            .read()?
+            .map(|e| e.path())
+            .transpose()?;
         PropertyType::MulticastSparseDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
         let prop = ptr.cast::<FDelegateProperty>();
-        let signature_function = prop.signature_function().read()?.path()?;
+        let signature_function = prop
+            .signature_function()
+            .read()?
+            .map(|e| e.path())
+            .transpose()?;
         PropertyType::Delegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
         let prop = ptr.cast::<FBoolProperty>();
