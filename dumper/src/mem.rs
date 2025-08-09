@@ -37,6 +37,12 @@ impl<T> ExternalPtr<T> {
             _type: Default::default(),
         }
     }
+    pub fn try_new(address: usize) -> Result<Self> {
+        Ok(Self {
+            address: address.try_into().context("null ptr")?,
+            _type: Default::default(),
+        })
+    }
     pub fn new_non_zero(address: NonZero<usize>) -> Self {
         Self {
             address,
@@ -125,13 +131,8 @@ impl<T: POD, C: Mem> CtxPtr<T, C> {
 }
 impl<T, C: Mem + Clone> CtxPtr<ExternalPtr<T>, C> {
     pub fn read(&self) -> Result<CtxPtr<T, C>> {
-        //Ok(self
-        //    .ctx
-        //    .read::<ExternalPtr<T>>(self.address.into())?
-        //    .ctx(self.ctx.clone()))
-
-        // checked
-        Ok(ExternalPtr::new(self.ctx.read::<usize>(self.address.into())?).ctx(self.ctx.clone()))
+        let ptr = ExternalPtr::try_new(self.ctx.read::<usize>(self.address.into())?)?;
+        Ok(ptr.ctx(self.ctx.clone()))
     }
 }
 impl<T, C: Mem + Clone> CtxPtr<Option<ExternalPtr<T>>, C> {

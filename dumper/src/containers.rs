@@ -300,7 +300,7 @@ impl<C: Mem + Clone + NameTrait> CtxPtr<FName, C> {
         let number = self.byte_offset(4).cast::<u32>().read()?;
         let mem = self.ctx();
 
-        let blocks = ExternalPtr::<ExternalPtr<u8>>::new(mem.fnamepool().0 + 0x10);
+        let blocks = ExternalPtr::<ExternalPtr<u8>>::try_new(mem.fnamepool().0 + 0x10)?;
 
         let block_index = (value >> 16) as usize;
         let offset = (value & 0xffff) as usize * 2;
