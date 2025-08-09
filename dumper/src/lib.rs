@@ -442,6 +442,7 @@ fn dump_inner<M: Mem + Clone>(
                     PropertyValue::Int8(v) => v as i64,
                     PropertyValue::Int16(v) => v as i64,
                     PropertyValue::Int(v) => v as i64,
+                    PropertyValue::Int64(v) => v as i64,
                     PropertyValue::UInt16(v) => v as i64,
                     PropertyValue::UInt32(v) => v as i64,
                     e => unimplemented!("underlying enum prop {e:#?}"),
