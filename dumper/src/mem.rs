@@ -102,6 +102,9 @@ impl<T, C> CtxPtr<T, C> {
     }
 }
 impl<T, C: Clone> CtxPtr<T, C> {
+    pub fn map(&self, map: impl FnOnce(usize) -> usize) -> Self {
+        Self::new(map(self.address.into()), self.ctx.clone())
+    }
     pub fn cast<O>(&self) -> CtxPtr<O, C> {
         CtxPtr::new_non_zero(self.address, self.ctx.clone())
     }
