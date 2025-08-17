@@ -1,6 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
-use dumper::{structs::Structs, Input};
+use dumper::{Input, structs::Structs};
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use ue_reflection::ReflectionData;
 
@@ -160,6 +160,7 @@ fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyI
         // TODO distinguish between sparse/inline?
         PT::MulticastInlineDelegate { .. } => PI::MulticastDelegate,
         PT::MulticastSparseDelegate { .. } => PI::MulticastDelegate,
+        PT::MulticastDelegate { .. } => PI::MulticastDelegate,
         PT::Delegate { .. } => PI::Delegate,
         PT::Bool {
             field_size: _,

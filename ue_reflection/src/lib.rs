@@ -359,7 +359,7 @@ pub struct Enum {
     #[serde(flatten)]
     pub object: Object,
     pub cpp_type: String,
-    pub enum_flags: EEnumFlags,
+    pub enum_flags: Option<EEnumFlags>,
     pub cpp_form: ECppForm,
     pub names: Vec<(String, i64)>,
 }
@@ -449,6 +449,8 @@ pub enum PropertyType {
     MulticastInlineDelegate { signature_function: Option<String> },
     #[serde(rename = "MulticastSparseDelegateProperty")]
     MulticastSparseDelegate { signature_function: Option<String> },
+    #[serde(rename = "MulticastDelegateProperty")]
+    MulticastDelegate { signature_function: Option<String> },
     #[serde(rename = "DelegateProperty")]
     Delegate { signature_function: Option<String> },
     #[serde(rename = "BoolProperty")]

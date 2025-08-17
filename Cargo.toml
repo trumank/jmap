@@ -5,7 +5,7 @@ default-members = ["dumper", "ue_reflection", "pdb_dumper", "usmap"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 authors = ["trumank"]
 repository = "https://github.com/trumank/ue-containers"
 homepage = "https://github.com/trumank/ue-containers"

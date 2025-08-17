@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use patternsleuth_image::{image::Image, MemoryAccessError};
+use patternsleuth_image::{MemoryAccessError, image::Image};
 use ue_reflection::ObjectType;
 
 pub fn analyze_vtables(

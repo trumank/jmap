@@ -6,7 +6,6 @@ use std::{
     marker::PhantomData,
     mem::MaybeUninit,
     num::NonZero,
-    ptr::NonNull,
     sync::{Arc, Mutex},
 };
 use ue_reflection::{
@@ -14,78 +13,23 @@ use ue_reflection::{
     EPropertyFlags, EStructFlags,
 };
 
-#[repr(C)]
-pub struct ExternalPtr<T> {
-    address: NonZero<usize>,
-    _type: PhantomData<T>,
-}
-impl<T> Copy for ExternalPtr<T> {}
-impl<T> Clone for ExternalPtr<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-impl<T> std::fmt::Debug for ExternalPtr<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ExternalPtr(0x{:x})", self.address)
-    }
-}
-impl<T> ExternalPtr<T> {
-    pub fn new(address: usize) -> Self {
-        Self {
-            address: address.try_into().unwrap(),
-            _type: Default::default(),
-        }
-    }
-    pub fn try_new(address: usize) -> Result<Self> {
-        Ok(Self {
-            address: address.try_into().context("null ptr")?,
-            _type: Default::default(),
-        })
-    }
-    pub fn new_non_zero(address: NonZero<usize>) -> Self {
-        Self {
-            address,
-            _type: Default::default(),
-        }
-    }
-    pub fn cast<O>(self) -> ExternalPtr<O> {
-        ExternalPtr::new_non_zero(self.address)
-    }
-    pub fn byte_offset(&self, n: usize) -> Self {
-        Self::new_non_zero(self.address.checked_add(n).unwrap())
-    }
-    pub fn offset(&self, n: usize) -> Self {
-        self.byte_offset(n * std::mem::size_of::<T>())
-    }
-    pub fn read(&self, mem: &impl Mem) -> Result<T> {
-        mem.read(self.address.into())
-    }
-    pub fn read_vec(&self, mem: &impl Mem, count: usize) -> Result<Vec<T>> {
-        mem.read_vec(self.address.into(), count)
-    }
-    pub fn ctx<C>(self, ctx: C) -> CtxPtr<T, C> {
-        CtxPtr {
-            address: self.address,
-            ctx,
-            _type: Default::default(),
-        }
-    }
+pub trait VirtSize {
+    fn size() -> usize;
 }
 
 #[derive(Clone)]
 #[repr(C)]
-pub struct CtxPtr<T, C> {
+pub struct Ptr<T, C> {
     address: NonZero<usize>,
     ctx: C,
     _type: PhantomData<T>,
 }
-impl<T, C> std::fmt::Debug for CtxPtr<T, C> {
+impl<T, C> std::fmt::Debug for Ptr<T, C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "CtxPtr(0x{:x})", self.address)
+        write!(f, "Ptr(0x{:x})", self.address)
     }
 }
-impl<T, C> CtxPtr<T, C> {
+impl<T, C> Ptr<T, C> {
     pub fn new(address: usize, ctx: C) -> Self {
         Self {
             address: address.try_into().unwrap(),
@@ -100,28 +44,27 @@ impl<T, C> CtxPtr<T, C> {
             _type: Default::default(),
         }
     }
-    //pub fn is_null(&self) -> bool {
-    //    self.address == 0
-    //}
     pub fn ctx(&self) -> &C {
         &self.ctx
     }
 }
-impl<T, C: Clone> CtxPtr<T, C> {
+impl<T, C: Clone> Ptr<T, C> {
     pub fn map(&self, map: impl FnOnce(usize) -> usize) -> Self {
         Self::new(map(self.address.into()), self.ctx.clone())
     }
-    pub fn cast<O>(&self) -> CtxPtr<O, C> {
-        CtxPtr::new_non_zero(self.address, self.ctx.clone())
+    pub fn cast<O>(&self) -> Ptr<O, C> {
+        Ptr::new_non_zero(self.address, self.ctx.clone())
     }
     pub fn byte_offset(&self, n: usize) -> Self {
         Self::new_non_zero(self.address.checked_add(n).unwrap(), self.ctx.clone())
     }
+}
+impl<T: VirtSize, C: Clone> Ptr<T, C> {
     pub fn offset(&self, n: usize) -> Self {
-        self.byte_offset(n * std::mem::size_of::<T>())
+        self.byte_offset(n * T::size())
     }
 }
-impl<T: POD, C: Mem> CtxPtr<T, C> {
+impl<T: Pod, C: Mem> Ptr<T, C> {
     pub fn read(&self) -> Result<T> {
         self.ctx.read(self.address.into())
     }
@@ -129,80 +72,53 @@ impl<T: POD, C: Mem> CtxPtr<T, C> {
         self.ctx.read_vec(self.address.into(), count)
     }
 }
-impl<T, C: Mem + Clone> CtxPtr<ExternalPtr<T>, C> {
-    pub fn read(&self) -> Result<CtxPtr<T, C>> {
-        let ptr = ExternalPtr::try_new(self.ctx.read::<usize>(self.address.into())?)?;
-        Ok(ptr.ctx(self.ctx.clone()))
+impl<T, C: Mem + Clone> Ptr<Option<Ptr<T, C>>, C> {
+    pub fn read(&self) -> Result<Option<Ptr<T, C>>> {
+        let addr = self.ctx.read::<usize>(self.address.into())?;
+        Ok(if addr != 0 {
+            Some(self.map(|_| addr).cast())
+        } else {
+            None
+        })
     }
 }
-impl<T, C: Mem + Clone> CtxPtr<Option<ExternalPtr<T>>, C> {
-    pub fn read(&self) -> Result<Option<CtxPtr<T, C>>> {
-        Ok(self
-            .ctx
-            .read::<Option<ExternalPtr<T>>>(self.address.into())?
-            .map(|p| p.ctx(self.ctx.clone())))
+impl<T, C: Mem + Clone> Ptr<Ptr<T, C>, C> {
+    pub fn read(&self) -> Result<Ptr<T, C>> {
+        let addr = self.ctx.read::<usize>(self.address.into())?;
+        Ok(self.map(|_| addr).cast())
     }
 }
-//impl<T, C: Mem + Clone> CtxPtr<Option<ExternalPtr<T>>, C> {
-//    pub fn read_ptr_opt(&self) -> Result<Option<CtxPtr<T, C>>> {
-//        let ptr = self.read()?;
-//        Ok(if ptr.is_null() { None } else { Some(ptr) })
-//    }
-//}
-pub trait POD {}
-impl POD for i8 {}
-impl POD for u8 {}
-impl POD for i16 {}
-impl POD for u16 {}
-impl POD for i32 {}
-impl POD for u32 {}
-impl POD for i64 {}
-impl POD for u64 {}
-impl POD for usize {}
-impl POD for f32 {}
-impl POD for f64 {}
-impl POD for EObjectFlags {}
-impl POD for EClassCastFlags {}
-impl POD for EClassFlags {}
-impl POD for EFunctionFlags {}
-impl POD for EStructFlags {}
-impl POD for EPropertyFlags {}
-impl POD for EEnumFlags {}
-impl POD for ECppForm {}
 
-#[derive(Debug)]
-pub enum FlaggedPtr<T> {
-    Local(NonNull<T>),
-    Remote(ExternalPtr<T>),
-}
-impl<T> Copy for FlaggedPtr<T> {}
-impl<T> Clone for FlaggedPtr<T> {
-    fn clone(&self) -> Self {
-        *self
+pub trait Pod {}
+impl Pod for i8 {}
+impl Pod for u8 {}
+impl Pod for i16 {}
+impl Pod for u16 {}
+impl Pod for i32 {}
+impl Pod for u32 {}
+impl Pod for i64 {}
+impl Pod for u64 {}
+impl Pod for usize {}
+impl Pod for f32 {}
+impl Pod for f64 {}
+impl Pod for EObjectFlags {}
+impl Pod for EClassCastFlags {}
+impl Pod for EClassFlags {}
+impl Pod for EFunctionFlags {}
+impl Pod for EStructFlags {}
+impl Pod for EPropertyFlags {}
+impl Pod for EEnumFlags {}
+impl Pod for ECppForm {}
+
+impl<T: Pod> VirtSize for T {
+    fn size() -> usize {
+        std::mem::size_of::<Self>()
     }
 }
-impl<T> FlaggedPtr<T> {
-    //pub fn is_null(self) -> bool {
-    //    match self {
-    //        FlaggedPtr::Local(ptr) => ptr.is_null(),
-    //        FlaggedPtr::Remote(ptr) => ptr.is_null(),
-    //    }
-    //}
-}
-impl<T: Clone> FlaggedPtr<T> {
-    pub fn read(self, mem: &impl Mem) -> Result<T> {
-        Ok(match self {
-            FlaggedPtr::Local(ptr) => unsafe { ptr.read() },
-            FlaggedPtr::Remote(ptr) => ptr.read(mem)?,
-        })
-    }
-    pub fn read_vec(self, mem: &impl Mem, count: usize) -> Result<Vec<T>> {
-        Ok(match self {
-            FlaggedPtr::Local(ptr) => unsafe {
-                std::slice::from_raw_parts(ptr.as_ptr(), count).to_vec()
-            },
-            FlaggedPtr::Remote(ptr) => ptr.read_vec(mem, count)?,
-        })
+
+impl<T, C> VirtSize for Ptr<T, C> {
+    fn size() -> usize {
+        8
     }
 }
 
@@ -292,6 +208,8 @@ pub struct Ctx<M: Mem> {
     pub mem: M,
     pub fnamepool: PtrFNamePool,
     pub structs: Arc<HashMap<String, StructInfo>>,
+    pub version: (u16, u16),
+    pub case_preserving: bool,
 }
 impl<M: Mem> Mem for Ctx<M> {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
@@ -322,6 +240,14 @@ impl<M: Mem> StructsTrait for Ctx<M> {
         member.offset as usize
     }
 }
+impl<M: Mem> VersionTrait for Ctx<M> {
+    fn ue_version(&self) -> (u16, u16) {
+        self.version
+    }
+    fn case_preserving(&self) -> bool {
+        self.case_preserving
+    }
+}
 
 pub trait NameTrait {
     fn fnamepool(&self) -> PtrFNamePool;
@@ -329,4 +255,8 @@ pub trait NameTrait {
 pub trait StructsTrait {
     fn get_struct(&self, struct_name: &str) -> &StructInfo;
     fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
+}
+pub trait VersionTrait {
+    fn ue_version(&self) -> (u16, u16);
+    fn case_preserving(&self) -> bool;
 }

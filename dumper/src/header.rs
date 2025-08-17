@@ -137,6 +137,7 @@ impl<'objects> Ctx<'objects, '_> {
             PropertyType::MulticastSparseDelegate { signature_function } => {
                 CType::MulticastSparseDelegate
             } // TODO
+            PropertyType::MulticastDelegate { signature_function } => CType::MulticastDelegate, // TODO
             PropertyType::Delegate { signature_function } => CType::Delegate,
             PropertyType::Bool {
                 field_size,
@@ -256,6 +257,7 @@ impl<'objects> Ctx<'objects, '_> {
             CType::FFieldPath => TypeName::new("FFieldPath"),
             CType::MulticastInlineDelegate => TypeName::new("MulticastInlineDelegate"),
             CType::MulticastSparseDelegate => TypeName::new("MulticastSparseDelegate"),
+            CType::MulticastDelegate => TypeName::new("MulticastDelegate"),
             CType::Delegate => TypeName::new("Delegate"),
 
             CType::TArray(type_id) => {
@@ -351,6 +353,7 @@ impl<'objects> Ctx<'objects, '_> {
             CType::FFieldPath => {}
             CType::MulticastInlineDelegate => {}
             CType::MulticastSparseDelegate => {}
+            CType::MulticastDelegate => {}
             CType::Delegate => {}
             CType::TArray(type_id) => {
                 let ptr_id = self.store.insert(CType::Ptr(type_id));
@@ -434,6 +437,7 @@ impl<'objects> Ctx<'objects, '_> {
             CType::FFieldPath => (32, 8), // TODO
             CType::MulticastInlineDelegate => (16, 8), // TODO
             CType::MulticastSparseDelegate => (1, 1), // TODO
+            CType::MulticastDelegate => (1, 1), // TODO
             CType::Delegate => (1, 1),    // TODO
             CType::TArray(_) => (16, 8),
             CType::TMap(k, v) => (1, 1), // TODO
@@ -539,6 +543,9 @@ impl<'objects> Ctx<'objects, '_> {
                 .unwrap();
             }
             CType::MulticastSparseDelegate => {
+                writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+            }
+            CType::MulticastDelegate => {
                 writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
             }
             CType::Delegate => {
@@ -944,6 +951,7 @@ enum CType<'a> {
     FFieldPath,
     MulticastInlineDelegate,
     MulticastSparseDelegate,
+    MulticastDelegate,
     Delegate,
 
     TArray(TypeId),
