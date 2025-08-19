@@ -342,8 +342,8 @@ fn dump_inner<M: Mem + Clone>(
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
 
-    for i in 0..uobjectarray.obj_object().num_elements().read()? {
-        let obj_item = uobjectarray.obj_object().read_item_ptr(i as usize)?;
+    for i in 0..uobjectarray.num_elements()? {
+        let obj_item = uobjectarray.read_item_ptr(i as usize)?;
         let Some(obj) = obj_item.object().read()? else {
             continue;
         };

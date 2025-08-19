@@ -29,7 +29,7 @@ pub struct TArray<T, A: TAlloc = TSizedHeapAllocator<32>> {
     pub num: u32,
     pub max: u32,
 }
-impl<C: Mem + Clone, T: Clone + VirtSize, A: TAlloc> Ptr<TArray<T, A>, C> {
+impl<C: Mem + Clone + StructsTrait, T: Clone + VirtSize<C>, A: TAlloc> Ptr<TArray<T, A>, C> {
     pub fn iter(&self) -> Result<impl Iterator<Item = Ptr<T, C>> + '_> {
         let data = self.data()?;
         Ok((0..self.len()?).map(move |i| data.as_ref().unwrap().offset(i)))

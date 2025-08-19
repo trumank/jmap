@@ -59,6 +59,8 @@ pub fn get_struct_info_for_version(
     let struct_names = vec![
         "FUObjectArray",
         "FUObjectItem",
+        "FFixedUObjectArray",
+        "FChunkedFixedUObjectArray",
         "UObject",
         "UField",
         "UStruct",

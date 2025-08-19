@@ -1,7 +1,7 @@
 use crate::{
     MemComplete,
     containers::{FName, FString, TArray},
-    mem::{Mem, Ptr, StructsTrait},
+    mem::{Mem, Ptr, StructsTrait, VirtSize},
     read_path,
 };
 use anyhow::Result;
@@ -496,15 +496,46 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectItem, C> {
         self.byte_offset(0).cast()
     }
 }
+impl<C: StructsTrait> VirtSize<C> for FUObjectItem {
+    fn size(ctx: &C) -> usize {
+        ctx.get_struct("FUObjectItem").size as usize
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct FFixedUObjectArray;
+impl<C: Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
+    pub fn objects(&self) -> Ptr<Ptr<FUObjectItem, C>, C> {
+        let offset = self.ctx().struct_member("FFixedUObjectArray", "Objects");
+        self.byte_offset(offset).cast()
+    }
+    pub fn num_elements(&self) -> Ptr<i32, C> {
+        let offset = self
+            .ctx()
+            .struct_member("FFixedUObjectArray", "NumElements");
+        self.byte_offset(offset).cast()
+    }
+}
+impl<C: Mem + Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
+    pub fn read_item_ptr(&self, item: usize) -> Result<Ptr<FUObjectItem, C>> {
+        Ok(self.objects().read()?.offset(item))
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct FChunkedFixedUObjectArray;
 impl<C: Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
     pub fn objects(&self) -> Ptr<Ptr<Ptr<FUObjectItem, C>, C>, C> {
-        self.byte_offset(0).cast()
+        let offset = self
+            .ctx()
+            .struct_member("FChunkedFixedUObjectArray", "Objects");
+        self.byte_offset(offset).cast()
     }
     pub fn num_elements(&self) -> Ptr<i32, C> {
-        self.byte_offset(20).cast()
+        let offset = self
+            .ctx()
+            .struct_member("FChunkedFixedUObjectArray", "NumElements");
+        self.byte_offset(offset).cast()
     }
 }
 impl<C: Mem + Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
@@ -517,15 +548,41 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
             .read()?
             .offset(chunk_index)
             .read()?
-            .byte_offset(24 * (item % max_per_chunk))) // TODO dynamic struct size
+            .offset(item % max_per_chunk))
     }
 }
 
 #[derive(Clone, Copy)]
 pub struct FUObjectArray;
 impl<C: Clone + StructsTrait> Ptr<FUObjectArray, C> {
-    pub fn obj_object(&self) -> Ptr<FChunkedFixedUObjectArray, C> {
-        self.byte_offset(16).cast()
+    fn obj_objects(&self) -> Ptr<(), C> {
+        let offset = self.ctx().struct_member("FUObjectArray", "ObjObjects");
+        self.byte_offset(offset).cast()
+    }
+}
+impl<C: MemComplete> Ptr<FUObjectArray, C> {
+    pub fn read_item_ptr(&self, item: usize) -> Result<Ptr<FUObjectItem, C>> {
+        if self.ctx().ue_version() < (4, 20) {
+            self.obj_objects()
+                .cast::<FFixedUObjectArray>()
+                .read_item_ptr(item)
+        } else {
+            self.obj_objects()
+                .cast::<FChunkedFixedUObjectArray>()
+                .read_item_ptr(item)
+        }
+    }
+    pub fn num_elements(&self) -> Result<i32> {
+        if self.ctx().ue_version() < (4, 20) {
+            self.obj_objects()
+                .cast::<FFixedUObjectArray>()
+                .num_elements()
+        } else {
+            self.obj_objects()
+                .cast::<FChunkedFixedUObjectArray>()
+                .num_elements()
+        }
+        .read()
     }
 }
 

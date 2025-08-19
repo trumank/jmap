@@ -13,8 +13,8 @@ use ue_reflection::{
     EPropertyFlags, EStructFlags,
 };
 
-pub trait VirtSize {
-    fn size() -> usize;
+pub trait VirtSize<C: StructsTrait> {
+    fn size(ctx: &C) -> usize;
 }
 
 #[derive(Clone)]
@@ -59,9 +59,9 @@ impl<T, C: Clone> Ptr<T, C> {
         Self::new_non_zero(self.address.checked_add(n).unwrap(), self.ctx.clone())
     }
 }
-impl<T: VirtSize, C: Clone> Ptr<T, C> {
+impl<T: VirtSize<C>, C: Clone + StructsTrait> Ptr<T, C> {
     pub fn offset(&self, n: usize) -> Self {
-        self.byte_offset(n * T::size())
+        self.byte_offset(n * T::size(self.ctx()))
     }
 }
 impl<T: Pod, C: Mem> Ptr<T, C> {
@@ -110,14 +110,14 @@ impl Pod for EPropertyFlags {}
 impl Pod for EEnumFlags {}
 impl Pod for ECppForm {}
 
-impl<T: Pod> VirtSize for T {
-    fn size() -> usize {
+impl<T: Pod, C: StructsTrait> VirtSize<C> for T {
+    fn size(_ctx: &C) -> usize {
         std::mem::size_of::<Self>()
     }
 }
 
-impl<T, C> VirtSize for Ptr<T, C> {
-    fn size() -> usize {
+impl<T, C: StructsTrait> VirtSize<C> for Ptr<T, C> {
+    fn size(_ctx: &C) -> usize {
         8
     }
 }
