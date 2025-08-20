@@ -121,6 +121,11 @@ impl<T, C: StructsTrait> VirtSize<C> for Ptr<T, C> {
         8
     }
 }
+impl<T, C: StructsTrait> VirtSize<C> for Option<Ptr<T, C>> {
+    fn size(_ctx: &C) -> usize {
+        8
+    }
+}
 
 pub trait Mem {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()>;

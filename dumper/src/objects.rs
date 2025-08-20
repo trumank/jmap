@@ -551,6 +551,31 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
             .offset(item % max_per_chunk))
     }
 }
+#[derive(Clone, Copy)]
+pub struct FUObjectArrayOld;
+impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
+    pub fn chunks(&self) -> Ptr<Ptr<Option<Ptr<UObject, C>>, C>, C> {
+        let offset = self.ctx().struct_member("FUObjectArrayOld", "Chunks");
+        self.byte_offset(offset).cast()
+    }
+    pub fn num_elements(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FUObjectArrayOld", "NumElements");
+        self.byte_offset(offset).cast()
+    }
+}
+impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
+    pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
+        let max_per_chunk = 16 * 1024;
+        let chunk_index = item / max_per_chunk;
+
+        Ok(self
+            .chunks()
+            .offset(chunk_index)
+            .read()?
+            .offset(item % max_per_chunk)
+            .read()?)
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct FUObjectArray;
@@ -561,19 +586,29 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectArray, C> {
     }
 }
 impl<C: MemComplete> Ptr<FUObjectArray, C> {
-    pub fn read_item_ptr(&self, item: usize) -> Result<Ptr<FUObjectItem, C>> {
-        if self.ctx().ue_version() < (4, 20) {
+    pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
+        if self.ctx().ue_version() < (4, 11) {
+            self.obj_objects()
+                .cast::<FUObjectArrayOld>()
+                .read_item_ptr(item)
+        } else if self.ctx().ue_version() < (4, 20) {
             self.obj_objects()
                 .cast::<FFixedUObjectArray>()
-                .read_item_ptr(item)
+                .read_item_ptr(item)?
+                .object()
+                .read()
         } else {
             self.obj_objects()
                 .cast::<FChunkedFixedUObjectArray>()
-                .read_item_ptr(item)
+                .read_item_ptr(item)?
+                .object()
+                .read()
         }
     }
     pub fn num_elements(&self) -> Result<i32> {
-        if self.ctx().ue_version() < (4, 20) {
+        if self.ctx().ue_version() < (4, 11) {
+            self.obj_objects().cast::<FUObjectArrayOld>().num_elements()
+        } else if self.ctx().ue_version() < (4, 20) {
             self.obj_objects()
                 .cast::<FFixedUObjectArray>()
                 .num_elements()
