@@ -500,8 +500,8 @@ class UFunction : UStruct {
     uint16_t RPCId;
     uint16_t RPCResponseId;
     ZProperty* FirstPropertyToInit;
-    UFunction* EventGraphFunction;
-    int32_t EventGraphCallOffset;
+    if (UE_VERSION >= 408) UFunction* EventGraphFunction;
+    if (UE_VERSION >= 408) int32_t EventGraphCallOffset;
     void* Func;
 };
 
@@ -537,7 +537,7 @@ struct UEnumNameTuple {
     type ValueType = if (UE_VERSION < 415) uint8_t else int64_t;
 
     FName Name;
-    ValueType Value;
+    if (UE_VERSION >= 409) ValueType Value;
 };
 
 class UEnum : UField {
@@ -567,6 +567,7 @@ class TStaticIndirectArrayThreadSafeRead  {
 };
 
 type FUObjectArrayOld = TStaticIndirectArrayThreadSafeRead<UObject, 8 * 1024 * 1024, 16 * 1024>;
+type FUObjectArrayOlder = TArray<UObject*>;
 
 // FUObjectArray listener interface placeholders
 class FUObjectCreateListener {
@@ -585,16 +586,19 @@ struct FUObjectArray {
     if (UE_VERSION < 411) int32_t OpenForDisregardForGC;
     else bool OpenForDisregardForGC;
     
-    // Object storage evolved from fixed to chunked arrays
-    if (UE_VERSION < 411)      FUObjectArrayOld ObjObjects;
+    if (UE_VERSION == 407)     FUObjectArrayOlder ObjObjects;
+    else if (UE_VERSION < 411) FUObjectArrayOld ObjObjects;
     else if (UE_VERSION < 420) FFixedUObjectArray ObjObjects;
     else                       FChunkedFixedUObjectArray ObjObjects;
     
-    FWindowsCriticalSection ObjObjectsCritical;
-    
-    if (UE_VERSION < 422)      TLockFreePointerListUnordered<int, 128> ObjAvailableList;
-    else if (UE_VERSION < 427) TLockFreePointerListUnordered<int, 64> ObjAvailableList;
-    else                       TArray<int> ObjAvailableList;
+    if (UE_VERSION == 407) TArray<int> ObjAvailable;
+    else {
+        if (UE_VERSION >= 408) FWindowsCriticalSection ObjObjectsCritical;
+        
+        if (UE_VERSION < 422)      TLockFreePointerListUnordered<int, 128> ObjAvailableList;
+        else if (UE_VERSION < 427) TLockFreePointerListUnordered<int, 64> ObjAvailableList;
+        else                       TArray<int> ObjAvailableList;
+    }
     
     TArray<FUObjectCreateListener*> UObjectCreateListeners;
     TArray<FUObjectDeleteListener*> UObjectDeleteListeners;
@@ -634,8 +638,13 @@ class UStruct : UField {
     UField* Children;
     if (UE_VERSION >= 425) FField* ChildProperties;
     int32_t PropertiesSize;
-    int32_t MinAlignment;
-    TArray<uint8_t> Script;
+    if (UE_VERSION >= 408) {
+        int32_t MinAlignment;
+        TArray<uint8_t> Script;
+    } else {
+        TArray<uint8_t> Script;
+        int32_t MinAlignment;
+    }
     
     ZProperty* PropertyLink;
     ZProperty* RefLink;
@@ -655,72 +664,85 @@ class UStruct : UField {
         else STUB* UnversionedGameSchema;
     }
 };
-class UClass : UStruct {
-    if (UE_VERSION < 414) FFastIndexingClassTreeRegistrar FastIndexingRegistrar;
-    else if (UE_VERSION < 422) FClassBaseChain ClassBaseChain;
+class UClass : UStruct,
+    FFastIndexingClassTreeRegistrar if (UE_VERSION >= 408 && UE_VERSION < 414),
+    FClassBaseChain if (UE_VERSION >= 414 && UE_VERSION < 422) {
 
     STUB* ClassConstructor;
-    STUB* ClassVTableHelperCtorCaller;
+    if (UE_VERSION >= 408) STUB* ClassVTableHelperCtorCaller;
     
     if (UE_VERSION == 500 || UE_VERSION == 502) STUB* ClassAddReferencedObjects;
     else if (UE_VERSION >= 501) STUB* CppClassStaticFunctions;
     else STUB* ClassAddReferencedObjects;
     
-    // ClassUnique format varies
-    if (UE_VERSION == 500 || UE_VERSION == 502) {
+    if (UE_VERSION == 407) {
+        // UE 4.7: Different field order - ClassFlags and ClassCastFlags come before ClassUnique
+        EClassFlags ClassFlags;
+        EClassCastFlags ClassCastFlags;
+        int32_t ClassUnique;
+    } else if (UE_VERSION == 500 || UE_VERSION == 502) {
         // UE 5.0 & 5.2: ClassUnique and bCooked are packed bitfields
         uint32_t ClassUnique : 1;
         uint32_t bCooked : 1;
-    } else if (UE_VERSION >= 500) {
-        // UE 5.1, 5.3+
+        EClassFlags ClassFlags;
+        EClassCastFlags ClassCastFlags;
+    } else if (UE_VERSION >= 501) {
+        // UE 5.1, 5.3+: Full ClassUnique with additional fields
         int32_t ClassUnique;
         int32_t FirstOwnedClassRep;
         bool bCooked;
         bool bLayoutChanging;
+        EClassFlags ClassFlags;
+        EClassCastFlags ClassCastFlags;
     } else if (UE_VERSION >= 418) {
+        // UE 4.18-4.27: ClassUnique and bCooked bitfields
         uint32_t ClassUnique : 1;
         uint32_t bCooked : 1;
-    } else int32_t ClassUnique;
+        EClassFlags ClassFlags;
+        EClassCastFlags ClassCastFlags;
+    } else {
+        // UE 4.8-4.17: Simple int32_t ClassUnique
+        int32_t ClassUnique;
+        EClassFlags ClassFlags;
+        EClassCastFlags ClassCastFlags;
+    }
     
-    EClassFlags ClassFlags;
-    EClassCastFlags ClassCastFlags;
     UClass* ClassWithin;
     
-    if (UE_VERSION < 500 || UE_VERSION == 500 || UE_VERSION == 502) UObject* ClassGeneratedBy;
+    if (UE_VERSION != 501 && UE_VERSION < 503) UObject* ClassGeneratedBy;
     if (UE_VERSION == 421) UStructProperty* UberGraphFramePointerProperty;
     FName ClassConfigName;
-    if (UE_VERSION < 418) bool bCooked;
+    if (UE_VERSION >= 408 && UE_VERSION < 418) bool bCooked;
     TArray<FRepRecord> ClassReps;
     TArray<UField*> NetFields;
     if (UE_VERSION >= 425 && UE_VERSION < 500) int32_t FirstOwnedClassRep;
     if (UE_VERSION == 500 || UE_VERSION == 502) int32_t FirstOwnedClassRep;
     UObject* ClassDefaultObject;
+    if (UE_VERSION == 407) bool bCooked;
     if (UE_VERSION >= 416 && UE_VERSION < 418) ICppClassTypeInfo* CppTypeInfo;
     if (UE_VERSION >= 424) {
         STUB* SparseClassData;
         UScriptStruct* SparseClassDataStruct;
     }
     TMap<FName, UFunction*> FuncMap;
-    if (UE_VERSION >= 411 && UE_VERSION < 418) TMap<FName, UFunction*> ParentFuncMap;
-    if (UE_VERSION >= 411 && UE_VERSION < 418) TMap<FName, UFunction*> InterfaceFuncMap;
+    if (UE_VERSION >= 411 && UE_VERSION < 418) {
+        TMap<FName, UFunction*> ParentFuncMap;
+        TMap<FName, UFunction*> InterfaceFuncMap;
+    }
     if (UE_VERSION >= 503) {
         FWindowsRWLock FuncMapLock;
         TMap<FName, UFunction*> AllFunctionsCache;
         FWindowsRWLock AllFunctionsCacheLock;
     } else if (UE_VERSION >= 418) {
         TMap<FName, UFunction*> SuperFuncMap;
-        if (UE_VERSION >= 421) {
-            FWindowsRWLock SuperFuncMapLock;
-        }
+        if (UE_VERSION >= 421) FWindowsRWLock SuperFuncMapLock;
     }
     TArray<FImplementedInterface> Interfaces;
-    if (UE_VERSION >= 503) STUB* ReferenceSchema; // UE::GC::FSchemaOwner
-    else {
+    if (UE_VERSION >= 503) {
+        STUB* ReferenceSchema; // UE::GC::FSchemaOwner
+    } else {
         FGCReferenceTokenStream ReferenceTokenStream;
-        if (UE_VERSION >= 415) {
-            FWindowsCriticalSection ReferenceTokenStreamCritical;
-        }
+        if (UE_VERSION >= 415) FWindowsCriticalSection ReferenceTokenStreamCritical;
     }
-    
     TArray<FNativeFunctionLookup> NativeFunctionLookupTable;
 };

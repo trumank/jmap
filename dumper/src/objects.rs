@@ -234,10 +234,13 @@ impl<C: MemComplete> Ptr<UEnum, C> {
         if len > 0 {
             let data: Ptr<UEnumNameTuple, _> = self.names().data()?.unwrap().cast();
             let size = self.ctx().get_struct("UEnumNameTuple").size;
+            let version = self.ctx().ue_version();
             for i in (0..len).step_by(size as usize) {
                 let elm = data.byte_offset(i);
                 let name = elm.name().read()?;
-                let value = if self.ctx().ue_version() < (4, 15) {
+                let value = if version < (4, 9) {
+                    i as i64
+                } else if version < (4, 15) {
                     elm.value().cast::<u8>().read()? as i64
                 } else {
                     elm.value().cast::<i64>().read()?
@@ -576,6 +579,22 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
             .read()?)
     }
 }
+#[derive(Clone, Copy)]
+pub struct FUObjectArrayOlder;
+impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
+    pub fn data(&self) -> Ptr<Ptr<Option<Ptr<UObject, C>>, C>, C> {
+        self.cast()
+    }
+    pub fn num_elements(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FUObjectArrayOlder", "ArrayNum");
+        self.byte_offset(offset).cast()
+    }
+}
+impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
+    pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
+        Ok(self.data().read()?.offset(item).read()?)
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct FUObjectArray;
@@ -587,7 +606,11 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectArray, C> {
 }
 impl<C: MemComplete> Ptr<FUObjectArray, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
-        if self.ctx().ue_version() < (4, 11) {
+        if self.ctx().ue_version() < (4, 8) {
+            self.obj_objects()
+                .cast::<FUObjectArrayOlder>()
+                .read_item_ptr(item)
+        } else if self.ctx().ue_version() < (4, 11) {
             self.obj_objects()
                 .cast::<FUObjectArrayOld>()
                 .read_item_ptr(item)
@@ -606,7 +629,11 @@ impl<C: MemComplete> Ptr<FUObjectArray, C> {
         }
     }
     pub fn num_elements(&self) -> Result<i32> {
-        if self.ctx().ue_version() < (4, 11) {
+        if self.ctx().ue_version() < (4, 8) {
+            self.obj_objects()
+                .cast::<FUObjectArrayOlder>()
+                .num_elements()
+        } else if self.ctx().ue_version() < (4, 11) {
             self.obj_objects().cast::<FUObjectArrayOld>().num_elements()
         } else if self.ctx().ue_version() < (4, 20) {
             self.obj_objects()
