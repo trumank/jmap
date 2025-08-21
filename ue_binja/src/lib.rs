@@ -62,7 +62,7 @@ fn load(path: std::path::PathBuf) -> Result<ReflectionData> {
     ))?)
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn CorePluginInit() -> bool {
     Logger::new("ue_binja").init();
 
@@ -220,6 +220,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             PropertyType::FieldPath => CType::FFieldPath,
             PropertyType::MulticastInlineDelegate { .. } => CType::MulticastInlineDelegate, // TODO
             PropertyType::MulticastSparseDelegate { .. } => CType::MulticastSparseDelegate, // TODO
+            PropertyType::MulticastDelegate { .. } => CType::MulticastDelegate, // TODO
             PropertyType::Delegate { .. } => CType::Delegate,
             PropertyType::Bool {
                 field_size,
@@ -341,6 +342,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::FFieldPath => TypeName::new("FFieldPath"),
             CType::MulticastInlineDelegate => TypeName::new("MulticastInlineDelegate"),
             CType::MulticastSparseDelegate => TypeName::new("MulticastSparseDelegate"),
+            CType::MulticastDelegate => TypeName::new("MulticastDelegate"),
             CType::Delegate => TypeName::new("Delegate"),
 
             CType::TArray(type_id) => {
@@ -428,6 +430,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::FFieldPath => struct_("FFieldPath"),
             CType::MulticastInlineDelegate => struct_("MulticastInlineDelegate"),
             CType::MulticastSparseDelegate => struct_("MulticastSparseDelegate"),
+            CType::MulticastDelegate => struct_("MulticastDelegate"),
             CType::Delegate => struct_("Delegate"),
 
             CType::TArray(type_id) => {
@@ -525,6 +528,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::FFieldPath => {}
             CType::MulticastInlineDelegate => {}
             CType::MulticastSparseDelegate => {}
+            CType::MulticastDelegate => {}
             CType::Delegate => {}
             CType::TArray(type_id) => {
                 let ptr_id = self.store.insert(CType::Ptr(type_id));
@@ -612,6 +616,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::FFieldPath => (32, 8), // TODO
             CType::MulticastInlineDelegate => (16, 8), // TODO
             CType::MulticastSparseDelegate => (1, 1), // TODO
+            CType::MulticastDelegate => (1, 1), // TODO
             CType::Delegate => (1, 1),    // TODO
             CType::TArray(_) => (16, 8),
             CType::TMap(k, v) => (1, 1), // TODO
@@ -725,6 +730,9 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 .unwrap();
             }
             CType::MulticastSparseDelegate => {
+                writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
+            }
+            CType::MulticastDelegate => {
                 writeln!(buffer, r#"struct {this} {{ /* TODO */ }};"#).unwrap();
             }
             CType::Delegate => {
@@ -1257,6 +1265,7 @@ enum CType<'a, T = TypeId> {
     FFieldPath,
     MulticastInlineDelegate,
     MulticastSparseDelegate,
+    MulticastDelegate,
     Delegate,
 
     TArray(T),
