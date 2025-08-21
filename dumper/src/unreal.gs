@@ -674,38 +674,19 @@ class UClass : UStruct,
     if (UE_VERSION == 500 || UE_VERSION == 502) STUB* ClassAddReferencedObjects;
     else if (UE_VERSION >= 501) STUB* CppClassStaticFunctions;
     else STUB* ClassAddReferencedObjects;
-    
-    if (UE_VERSION == 407) {
-        // UE 4.7: Different field order - ClassFlags and ClassCastFlags come before ClassUnique
-        EClassFlags ClassFlags;
-        EClassCastFlags ClassCastFlags;
-        int32_t ClassUnique;
-    } else if (UE_VERSION == 500 || UE_VERSION == 502) {
-        // UE 5.0 & 5.2: ClassUnique and bCooked are packed bitfields
-        uint32_t ClassUnique : 1;
-        uint32_t bCooked : 1;
-        EClassFlags ClassFlags;
-        EClassCastFlags ClassCastFlags;
-    } else if (UE_VERSION >= 501) {
-        // UE 5.1, 5.3+: Full ClassUnique with additional fields
-        int32_t ClassUnique;
+
+    if (UE_VERSION >= 408 && UE_VERSION < 418 || UE_VERSION == 501 || UE_VERSION >= 503) uint32_t ClassUnique;
+    if (UE_VERSION >= 501 && UE_VERSION != 502) {
         int32_t FirstOwnedClassRep;
         bool bCooked;
         bool bLayoutChanging;
-        EClassFlags ClassFlags;
-        EClassCastFlags ClassCastFlags;
     } else if (UE_VERSION >= 418) {
-        // UE 4.18-4.27: ClassUnique and bCooked bitfields
         uint32_t ClassUnique : 1;
         uint32_t bCooked : 1;
-        EClassFlags ClassFlags;
-        EClassCastFlags ClassCastFlags;
-    } else {
-        // UE 4.8-4.17: Simple int32_t ClassUnique
-        int32_t ClassUnique;
-        EClassFlags ClassFlags;
-        EClassCastFlags ClassCastFlags;
     }
+    EClassFlags ClassFlags;
+    EClassCastFlags ClassCastFlags;
+     if (UE_VERSION < 408) int32_t ClassUnique;
     
     UClass* ClassWithin;
     
