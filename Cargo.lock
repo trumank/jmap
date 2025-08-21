@@ -199,6 +199,7 @@ version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c8214115b7bf84099f1309324e63141d4c5d7cc26862f97a0a857dbefe165bd"
 dependencies = [
+ "bytemuck",
  "serde",
 ]
 
@@ -213,6 +214,20 @@ name = "bytemuck"
 version = "1.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6b1fc10dbac614ebc03540c9dbd60e83887fda27794998c6528f1782047d540"
+dependencies = [
+ "bytemuck_derive",
+]
+
+[[package]]
+name = "bytemuck_derive"
+version = "1.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f154e572231cb6ba2bd1176980827e3d5dc04cc183a75dea38109fbdd672d29"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "byteorder"
@@ -459,7 +474,6 @@ name = "dumper"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bitflags",
  "bytemuck",
  "clap",
  "derive-where",
@@ -1709,10 +1723,12 @@ name = "ue_reflection"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "bytemuck",
  "ordered-float",
  "ordermap",
  "serde",
  "serde_json",
+ "strum",
 ]
 
 [[package]]

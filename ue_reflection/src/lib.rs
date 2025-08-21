@@ -1,11 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use bytemuck::{Pod, Zeroable};
 use ordered_float::OrderedFloat;
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 
 bitflags::bitflags! {
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EObjectFlags: u32 {
         const RF_NoFlags = 0x0000;
@@ -39,7 +40,7 @@ bitflags::bitflags! {
         const RF_WillBeLoaded = 0x08000000;
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EFunctionFlags: u32 {
         const FUNC_None = 0x0000;
@@ -76,7 +77,7 @@ bitflags::bitflags! {
         const FUNC_AllFlags = 0xffffffff;
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EClassFlags: i32 {
         const CLASS_None = 0x0000;
@@ -115,7 +116,7 @@ bitflags::bitflags! {
     }
 
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EClassCastFlags : u64 {
         const CASTCLASS_None = 0x0000000000000000;
@@ -179,7 +180,7 @@ bitflags::bitflags! {
         const CASTCLASS_UVerseVMClass = 0x0400000000000000;
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct  EPropertyFlags: u64 {
         const CPF_None = 0x0000;
@@ -243,7 +244,7 @@ bitflags::bitflags! {
         const CPF_AllowSelfReference = 0x1000000000000000;
     }
 
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EInternalObjectFlags: u32 {
         const None = 0x0;
@@ -259,7 +260,7 @@ bitflags::bitflags! {
         const AllFlags = 0x7f800000;
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EStructFlags: i32 {
         const STRUCT_NoFlags = 0x0000;
@@ -289,7 +290,7 @@ bitflags::bitflags! {
         const STRUCT_ComputedFlags = 0x007ffc42;
     }
 
-    #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EEnumFlags : u8 {
         const Flags = 0x00000001;
@@ -363,7 +364,7 @@ pub struct Enum {
     pub cpp_form: ECppForm,
     pub names: Vec<(String, i64)>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, strum::FromRepr)]
 #[repr(u8)]
 pub enum ECppForm {
     Regular,

@@ -11,7 +11,6 @@ license.workspace = true
 
 [dependencies]
 anyhow.workspace = true
-bitflags = { workspace = true, features = ["serde"] }
 bytemuck.workspace = true
 clap.workspace = true
 derive-where.workspace = true

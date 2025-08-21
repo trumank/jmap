@@ -4,7 +4,6 @@ use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
     collections::HashMap,
     marker::PhantomData,
-    mem::MaybeUninit,
     num::NonZero,
     sync::{Arc, Mutex},
 };
@@ -89,7 +88,58 @@ impl<T, C: Mem + Clone> Ptr<Ptr<T, C>, C> {
     }
 }
 
-pub trait Pod {}
+pub trait TryFromBytes: Sized {
+    fn try_from_bytes(bytes: &[u8]) -> Result<Self>;
+}
+
+pub trait Pod: TryFromBytes {}
+
+macro_rules! impl_try_from_bytes_pod {
+    ($($t:ty),* $(,)?) => {
+        $(
+            impl TryFromBytes for $t {
+                fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
+                    Ok(bytemuck::pod_read_unaligned(bytes))
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_try_from_bytes_bitflags {
+    ($(($t:ty, $bits_ty:ty)),* $(,)?) => {
+        $(
+            impl TryFromBytes for $t {
+                fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
+                    let bits: $bits_ty = bytemuck::pod_read_unaligned(bytes);
+                    Self::from_bits(bits)
+                        .ok_or_else(|| anyhow::anyhow!("Invalid {} bits: 0x{:x}", stringify!($t), bits))
+                }
+            }
+        )*
+    };
+}
+
+impl_try_from_bytes_pod!(i8, u8, i16, u16, i32, u32, i64, u64, usize, f32, f64);
+
+impl_try_from_bytes_bitflags!(
+    (EObjectFlags, u32),
+    (EClassCastFlags, u64),
+    (EClassFlags, i32),
+    (EFunctionFlags, u32),
+    (EStructFlags, i32),
+    (EPropertyFlags, u64),
+    (EEnumFlags, u8),
+);
+
+impl TryFromBytes for ECppForm {
+    fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
+        let discriminant: u8 = bytemuck::pod_read_unaligned(bytes);
+        Self::from_repr(discriminant)
+            .ok_or_else(|| anyhow::anyhow!("Invalid ECppForm discriminant: {}", discriminant))
+    }
+}
+
 impl Pod for i8 {}
 impl Pod for u8 {}
 impl Pod for i16 {}
@@ -129,31 +179,23 @@ impl<T, C: StructsTrait> VirtSize<C> for Option<Ptr<T, C>> {
 
 pub trait Mem {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()>;
-    fn read<T>(&self, address: usize) -> Result<T> {
-        let mut buf = MaybeUninit::<T>::uninit();
-        let bytes = unsafe {
-            std::slice::from_raw_parts_mut(
-                buf.as_mut_ptr().cast::<u8>() as _,
-                std::mem::size_of::<T>(),
-            )
-        };
-        self.read_buf(address, bytes)?;
-        Ok(unsafe { std::mem::transmute_copy(&buf) })
+    fn read<T: Pod>(&self, address: usize) -> Result<T> {
+        let mut buf = vec![0u8; std::mem::size_of::<T>()];
+        self.read_buf(address, &mut buf)?;
+        T::try_from_bytes(&buf)
     }
 
-    fn read_vec<T: Sized>(&self, address: usize, count: usize) -> Result<Vec<T>> {
+    fn read_vec<T: Pod>(&self, address: usize, count: usize) -> Result<Vec<T>> {
         let size = std::mem::size_of::<T>();
-
         let mut buf = vec![0u8; count * size];
         self.read_buf(address, &mut buf)?;
-
-        let length = buf.len() / size;
-        let capacity = buf.capacity() / size;
-        let ptr = buf.as_mut_ptr() as *mut T;
-
-        std::mem::forget(buf);
-
-        Ok(unsafe { Vec::from_raw_parts(ptr, length, capacity) })
+        let mut result = Vec::with_capacity(count);
+        for i in 0..count {
+            let start = i * size;
+            let end = start + size;
+            result.push(T::try_from_bytes(&buf[start..end])?);
+        }
+        Ok(result)
     }
 }
 const PAGE_SIZE: usize = 0x1000;
