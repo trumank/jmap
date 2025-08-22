@@ -220,7 +220,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             PropertyType::FieldPath => CType::FFieldPath,
             PropertyType::MulticastInlineDelegate { .. } => CType::MulticastInlineDelegate, // TODO
             PropertyType::MulticastSparseDelegate { .. } => CType::MulticastSparseDelegate, // TODO
-            PropertyType::MulticastDelegate { .. } => CType::MulticastDelegate, // TODO
+            PropertyType::MulticastDelegate { .. } => CType::MulticastDelegate,             // TODO
             PropertyType::Delegate { .. } => CType::Delegate,
             PropertyType::Bool {
                 field_size,

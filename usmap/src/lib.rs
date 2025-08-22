@@ -5,11 +5,11 @@ use std::{
     io::{Read, Seek, Write},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 
-use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use serde::Serialize;
-use serde_with::{serde_as, KeyValueMap};
+use serde_with::{KeyValueMap, serde_as};
 use tracing::instrument;
 
 trait Ser {
