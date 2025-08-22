@@ -39,10 +39,7 @@ struct TVector {
     T Z;
 };
 
-/*
- * Test multi-line block comment
- */
-type FVector = TVector<double>;
+type FVector = if (UE_VERSION >= 501) TVector<double> else TVector<float>;
 
 public struct FScriptElement {};
 
@@ -351,6 +348,11 @@ struct STUB {};
 template<typename KeyType, typename ValueType>
 struct TMap {
     uint64_t Data[10];
+};
+
+template<typename ElementType>
+struct TSet {
+    uint64_t Data[8];
 };
 
 struct FRepRecord {
@@ -717,24 +719,218 @@ class UClass : UStruct,
     TArray<FNativeFunctionLookup> NativeFunctionLookupTable;
 };
 
-// Placeholder types for FStaticConstructObjectParameters
 type EInternalObjectFlags = int32_t;
 
-struct UPackage {
+struct FGuid {
+    uint32_t A;
+    uint32_t B;
+    uint32_t C;
+    uint32_t D;
+};
+
+struct FLinkerLoad {
     uint64_t Placeholder[50];
 };
 
-struct FObjectInstancingGraph {
+struct FCustomVersionContainer {
+    if (UE_VERSION >= 410 && UE_VERSION < 419) uint64_t Placeholder[10];
+    else if (UE_VERSION >= 419) uint64_t Placeholder[2];
+    else uint64_t Placeholder[2];
+};
+
+struct FObjectThumbnail {
     uint64_t Placeholder[10];
 };
 
+template<typename T>
+struct TScopedPointer {
+    T* Ptr;
+};
+
+template<typename T>
+struct TUniquePtr {
+    T* Ptr;
+};
+
+struct FIntPoint {
+    int32_t X;
+    int32_t Y;
+};
+
+struct FIntVector {
+    int32_t X;
+    int32_t Y;
+    int32_t Z;
+};
+
+struct FBox {
+    FVector Min;
+    FVector Max;
+    uint8_t IsValid;
+};
+
+struct FWorldTileLODInfo {
+    int32_t RelativeStreamingDistance;
+    float Reserved0;
+    float Reserved1;
+    int32_t Reserved2;
+    int32_t Reserved3;
+};
+
+struct FWorldTileLayer {
+    FString Name;
+    int32_t Reserved0;
+    FIntPoint Reserved1;
+    int32_t StreamingDistance;
+    bool DistanceStreamingEnabled;
+};
+
+struct FWorldTileInfo {
+    if (UE_VERSION >= 420) {
+        FIntVector Position;
+        FIntVector AbsolutePosition;
+    } else {
+        FIntPoint Position;
+        FIntPoint AbsolutePosition;
+    }
+    
+    FBox Bounds;
+    
+    FWorldTileLayer Layer;
+    
+    if (UE_VERSION >= 408) bool bHideInTileView;
+    else bool Reserved0;
+    
+    FString ParentTilePackageName;
+    TArray<FWorldTileLODInfo> LODList;
+    int32_t ZOrder;
+};
+
+struct UMetaData {
+    uint64_t Placeholder[10];
+};
+
+struct FPackageId {
+    uint64_t Value;
+};
+
+struct FPackagePath {
+    if (UE_VERSION >= 501) {
+        FName PackageName;
+        uint32_t HeaderExtension; // EPackageExtension (assuming uint32_t enum)
+    } else {
+        uint64_t StringData; // TUniquePtr placeholder  
+        uint16_t PathDataLen;
+        uint16_t PackageNameRootLen;
+        uint16_t FilePathRootLen;
+        uint16_t ExtensionLen;
+        uint8_t IdType; // FPackagePath::EPackageIdType
+        uint8_t HeaderExtension; // EPackageExtension
+    }
+};
+
+struct FPackageFileVersion {
+    int32_t FileVersionUE4;
+    int32_t FileVersionUE5;
+};
+
+struct FObjectInstancingGraph {
+    UObject* SourceRoot;
+    UObject* DestinationRoot;
+    
+    if (UE_VERSION >= 503) {
+        uint32_t InstancingOptions; // EObjectInstancingGraphOptions
+        bool bCreatingArchetype;
+        bool bLoadingObject;
+        if (UE_VERSION >= 506) bool bCanUseDynamicInstancing;
+    } else {
+        bool bCreatingArchetype;
+        if (UE_VERSION < 503) bool bEnableSubobjectInstancing;
+        bool bLoadingObject;
+    }
+    
+    TMap<UObject*, UObject*> SourceToDestinationMap;
+    
+    if (UE_VERSION >= 417 && UE_VERSION < 427 || UE_VERSION == 500) {
+        TMap<UObject*, UObject*> ReplaceMap;
+    } else if (UE_VERSION >= 501) {
+        TSet<FProperty*> SubobjectInstantiationExclusionList;
+    }
+};
+
 struct TFunction {
-    if (UE_VERSION >= 506) uint64_t Placeholder[6]; // 48 bytes in UE 5.6+
-    else uint64_t Placeholder[8]; // 64 bytes in UE 5.1-5.5
+    if (UE_VERSION >= 506) uint64_t Placeholder[6];
+    else uint64_t Placeholder[8];
 };
 
 struct FObjectInitializerOverrides {
     TArray<STUB> Overrides; // TArray<FObjectInitializer::FOverrides::FOverride, VariousAllocators>
+};
+
+class UPackage : UObject {
+    if (UE_VERSION >= 419) {
+        bool bDirty : 1;
+        bool bHasBeenFullyLoaded : 1;
+        if (UE_VERSION >= 425) bool bCanBeImported : 1;
+    } else {
+        bool bDirty;
+        bool bHasBeenFullyLoaded;
+        if (UE_VERSION < 418) bool bShouldFindExportsInMemoryFirst;
+    }
+    
+    if (UE_VERSION >= 505) {
+        uint32_t PackageFlagsPrivate;
+        FPackageId PackageId;
+        FPackagePath LoadedPath;
+        TUniquePtr<STUB> AdditionalInfo; // UPackage::FAdditionalInfo
+    } else if (UE_VERSION >= 501) {
+        if (UE_VERSION < 504) FGuid Guid;
+        uint32_t PackageFlagsPrivate;
+        FPackageId PackageId;
+        FPackagePath LoadedPath;
+        FPackageFileVersion LinkerPackageVersion;
+        int32_t LinkerLicenseeVersion;
+        FCustomVersionContainer LinkerCustomVersion;
+        FLinkerLoad* LinkerLoad;
+        uint64_t FileSize;
+        FName FileName;
+        TUniquePtr<FWorldTileInfo> WorldTileInfo;
+    } else {
+        if (UE_VERSION < 419) FName FolderName;
+        float LoadTime;
+        FGuid Guid;
+        TArray<int> ChunkIDs;
+        if (UE_VERSION <= 418) FName ForcedExportBasePackageName;
+        if (UE_VERSION >= 410 && UE_VERSION < 419) uint32_t* PackageFlagsPrivate;
+        
+        if (UE_VERSION < 419) uint32_t PackageFlags;
+        else uint32_t PackageFlagsPrivate;
+
+        if (UE_VERSION >= 425) FPackageId PackageId;
+        if (UE_VERSION >= 500) FPackagePath LoadedPath;
+        if (UE_VERSION >= 419) int32_t PIEInstanceID;
+        FName FileName;
+        
+        if (UE_VERSION >= 408) {
+            FLinkerLoad* LinkerLoad;
+            int32_t LinkerPackageVersion;
+            int32_t LinkerLicenseeVersion;
+            FCustomVersionContainer LinkerCustomVersion;
+        }
+        
+        uint64_t FileSize;
+        
+        if (UE_VERSION >= 407 && UE_VERSION < 415) TScopedPointer<TMap<FName, FObjectThumbnail>> ThumbnailMap;
+        else if (UE_VERSION < 419) TUniquePtr<TMap<FName, FObjectThumbnail>> ThumbnailMap;
+        
+        if (UE_VERSION >= 407 && UE_VERSION < 419) UMetaData* MetaData;
+        
+        if (UE_VERSION >= 407 && UE_VERSION < 415) TScopedPointer<FWorldTileInfo> WorldTileInfo;
+        else TUniquePtr<FWorldTileInfo> WorldTileInfo;
+        
+        if (UE_VERSION >= 412 && UE_VERSION < 420) TMap<FName, int> ClassUniqueNameIndexMap;
+        if (UE_VERSION >= 414 && UE_VERSION < 419) int32_t PIEInstanceID;
+    }
 };
 
 struct FStaticConstructObjectParameters {
