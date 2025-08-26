@@ -9,6 +9,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EObjectFlags: u32 {
+        const _ = !0;
+
         const RF_NoFlags = 0x0000;
         const RF_Public = 0x0001;
         const RF_Standalone = 0x0002;
@@ -43,6 +45,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EFunctionFlags: u32 {
+        const _ = !0;
+
         const FUNC_None = 0x0000;
         const FUNC_Final = 0x0001;
         const FUNC_RequiredAPI = 0x0002;
@@ -80,6 +84,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EClassFlags: i32 {
+        const _ = !0;
+
         const CLASS_None = 0x0000;
         const CLASS_Abstract = 0x0001;
         const CLASS_DefaultConfig = 0x0002;
@@ -119,8 +125,9 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EClassCastFlags : u64 {
-        const CASTCLASS_None = 0x0000000000000000;
+        const _ = !0;
 
+        const CASTCLASS_None = 0x0000000000000000;
         const CASTCLASS_UField = 0x0000000000000001;
         const CASTCLASS_FInt8Property = 0x0000000000000002;
         const CASTCLASS_UEnum = 0x0000000000000004;
@@ -183,6 +190,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct  EPropertyFlags: u64 {
+        const _ = !0;
+
         const CPF_None = 0x0000;
         const CPF_Edit = 0x0001;
         const CPF_ConstParm = 0x0002;
@@ -247,6 +256,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EInternalObjectFlags: u32 {
+        const _ = !0;
+
         const None = 0x0;
         const ReachableInCluster = 0x800000;
         const ClusterRoot = 0x1000000;
@@ -263,6 +274,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EStructFlags: i32 {
+        const _ = !0;
+
         const STRUCT_NoFlags = 0x0000;
         const STRUCT_Native = 0x0001;
         const STRUCT_IdenticalNative = 0x0002;
