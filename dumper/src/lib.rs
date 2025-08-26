@@ -1,17 +1,20 @@
 mod containers;
+pub mod emulation;
 mod header;
 mod mem;
 mod objects;
 pub mod structs;
 mod vtable;
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use containers::{FName, FString};
-use mem::{Ctx, Mem, MemCache, NameTrait, Ptr, StructsTrait};
+use mem::{Ctx, FNameStrategyTrait, Mem, MemCache, NameTrait, Ptr, StructsTrait};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth_image::image::Image;
@@ -51,8 +54,11 @@ impl_try_collector! {
 // [ ] dynamic structs
 // [ ] ue version info
 
-trait MemComplete: Mem + Clone + NameTrait + StructsTrait + VersionTrait {}
-impl<T: Mem + Clone + NameTrait + StructsTrait + VersionTrait> MemComplete for T {}
+trait MemComplete: Mem + Clone + NameTrait + StructsTrait + VersionTrait + FNameStrategyTrait {}
+impl<T: Mem + Clone + NameTrait + StructsTrait + VersionTrait + FNameStrategyTrait> MemComplete
+    for T
+{
+}
 
 fn read_path<M: MemComplete>(obj: &Ptr<UObject, M>) -> Result<String> {
     let mut objects = vec![obj.clone()];
@@ -264,13 +270,52 @@ pub enum Input {
     Dump(PathBuf),
 }
 
+#[derive(Clone)]
+pub enum FNameStrategy {
+    NamePool,
+    Emulated {
+        fname_tostring_address: u64,
+        cache: Rc<RefCell<HashMap<Vec<u8>, String>>>,
+    },
+}
+
+impl std::fmt::Debug for FNameStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NamePool => write!(f, "NamePool"),
+            Self::Emulated {
+                fname_tostring_address,
+                ..
+            } => f
+                .debug_struct("Emulated")
+                .field("fname_tostring_address", fname_tostring_address)
+                .finish(),
+        }
+    }
+}
+
 pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
+    dump_with_strategy(
+        input,
+        struct_info,
+        FNameStrategy::Emulated {
+            fname_tostring_address: 0x7ff70fb37f20,
+            cache: Default::default(),
+        },
+    )
+}
+
+pub fn dump_with_strategy(
+    input: Input,
+    struct_info: Option<Structs>,
+    fname_strategy: FNameStrategy,
+) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth_image::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image, struct_info)
+            dump_inner(mem, &image, struct_info, fname_strategy)
         }
         Input::Dump(path) => {
             let file = std::fs::File::open(path)?;
@@ -278,7 +323,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData
 
             let image = patternsleuth_image::image::Image::read::<&str>(None, &mmap, None, false)?;
             let mem = ImgMem(&image);
-            dump_inner(mem, &image, struct_info)
+            dump_inner(mem, &image, struct_info, fname_strategy)
         }
     }
 }
@@ -303,6 +348,7 @@ fn dump_inner<M: Mem + Clone>(
     mem: M,
     image: &Image<'_>,
     struct_info: Option<Structs>,
+    fname_strategy: FNameStrategy,
 ) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
@@ -335,6 +381,7 @@ fn dump_inner<M: Mem + Clone>(
         ),
         version: (results.engine_version.major, results.engine_version.minor),
         case_preserving,
+        fname_strategy,
     };
 
     let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem);

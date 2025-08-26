@@ -257,6 +257,7 @@ pub struct Ctx<M: Mem> {
     pub structs: Arc<HashMap<String, StructInfo>>,
     pub version: (u16, u16),
     pub case_preserving: bool,
+    pub fname_strategy: crate::FNameStrategy,
 }
 impl<M: Mem> Mem for Ctx<M> {
     fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
@@ -295,6 +296,11 @@ impl<M: Mem> VersionTrait for Ctx<M> {
         self.case_preserving
     }
 }
+impl<M: Mem> FNameStrategyTrait for Ctx<M> {
+    fn fname_strategy(&self) -> &crate::FNameStrategy {
+        &self.fname_strategy
+    }
+}
 
 pub trait NameTrait {
     fn fnamepool(&self) -> PtrFNamePool;
@@ -306,4 +312,8 @@ pub trait StructsTrait {
 pub trait VersionTrait {
     fn ue_version(&self) -> (u16, u16);
     fn case_preserving(&self) -> bool;
+}
+
+pub trait FNameStrategyTrait {
+    fn fname_strategy(&self) -> &crate::FNameStrategy;
 }

@@ -122,7 +122,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -332,6 +332,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
+name = "colored"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
+dependencies = [
+ "lazy_static",
+ "windows-sys",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -487,7 +497,9 @@ dependencies = [
  "patternsleuth_image",
  "patternsleuth_resolvers",
  "pretty-hex",
+ "rdex",
  "read-process-memory",
+ "remu64",
  "serde",
  "serde_json",
  "ue_reflection",
@@ -941,6 +953,26 @@ dependencies = [
 
 [[package]]
 name = "minidump"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d385b740c6b991e6eff48f26e2c6978c9e9e9e2e935f4967bcdf4c2d1d18828"
+dependencies = [
+ "debugid",
+ "encoding_rs",
+ "memmap2",
+ "minidump-common 0.21.2",
+ "num-traits",
+ "procfs-core 0.16.0",
+ "range-map",
+ "scroll",
+ "thiserror 1.0.69",
+ "time",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "minidump"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a30545aa9eded3d58064b370aa0efc43be2e5a3fdb14e46fe7d7f1043280090"
@@ -948,15 +980,30 @@ dependencies = [
  "debugid",
  "encoding_rs",
  "memmap2",
- "minidump-common",
+ "minidump-common 0.24.1",
  "num-traits",
- "procfs-core",
+ "procfs-core 0.17.0",
  "range-map",
  "scroll",
- "thiserror",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "minidump-common"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c4d14bcca0fd3ed165a03000480aaa364c6860c34e900cb2dafdf3b95340e77"
+dependencies = [
+ "bitflags",
+ "debugid",
+ "num-derive",
+ "num-traits",
+ "range-map",
+ "scroll",
+ "smart-default",
 ]
 
 [[package]]
@@ -1100,7 +1147,7 @@ dependencies = [
  "anyhow",
  "itertools 0.12.1",
  "libc",
- "minidump",
+ "minidump 0.24.1",
  "object",
  "patternsleuth_scanner",
  "windows",
@@ -1202,6 +1249,16 @@ dependencies = [
 
 [[package]]
 name = "procfs-core"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+dependencies = [
+ "bitflags",
+ "hex",
+]
+
+[[package]]
+name = "procfs-core"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
@@ -1268,6 +1325,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdex"
+version = "0.1.0"
+source = "git+https://github.com/trumank/remu64#44b67ebfe0f472faf872f3bdb1f6a6882102c772"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colored",
+ "iced-x86",
+ "memmap2",
+ "minidump 0.21.2",
+ "remu64",
+]
+
+[[package]]
 name = "read-process-memory"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1316,6 +1387,15 @@ name = "regex-syntax"
 version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
+
+[[package]]
+name = "remu64"
+version = "0.1.0"
+source = "git+https://github.com/trumank/remu64#44b67ebfe0f472faf872f3bdb1f6a6882102c772"
+dependencies = [
+ "bitflags",
+ "iced-x86",
+]
 
 [[package]]
 name = "rustc-hash"
@@ -1536,11 +1616,31 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+dependencies = [
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
 version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 2.0.12",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
