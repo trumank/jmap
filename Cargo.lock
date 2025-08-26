@@ -122,7 +122,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -338,6 +338,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
+name = "colored"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "117725a109d387c937a1533ce01b450cbde6b88abceea8473c4d7a85853cda3c"
+dependencies = [
+ "lazy_static",
+ "windows-sys",
+]
+
+[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -488,12 +498,14 @@ dependencies = [
  "gospel-typelib",
  "gospel-vm",
  "memmap2",
- "minidump",
+ "minidump 0.26.0",
  "ordered-float",
  "ordermap",
  "patternsleuth",
  "pretty-hex",
+ "rdex",
  "read-process-memory",
+ "remu64",
  "serde",
  "serde_json",
  "ue_reflection",
@@ -520,6 +532,12 @@ name = "equivalent"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+
+[[package]]
+name = "fallible-iterator"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 
 [[package]]
 name = "fancy-regex"
@@ -955,6 +973,26 @@ dependencies = [
 
 [[package]]
 name = "minidump"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d385b740c6b991e6eff48f26e2c6978c9e9e9e2e935f4967bcdf4c2d1d18828"
+dependencies = [
+ "debugid",
+ "encoding_rs",
+ "memmap2",
+ "minidump-common 0.21.2",
+ "num-traits",
+ "procfs-core 0.16.0",
+ "range-map",
+ "scroll 0.12.0",
+ "thiserror 1.0.69",
+ "time",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "minidump"
 version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ee9ea21482e519a57bfc5df90b736f25465ef349a31c18ff2c6332a2f18474de"
@@ -962,16 +1000,31 @@ dependencies = [
  "debugid",
  "encoding_rs",
  "memmap2",
- "minidump-common",
+ "minidump-common 0.26.0",
  "num-traits",
- "procfs-core",
+ "procfs-core 0.17.0",
  "prost",
  "range-map",
- "scroll",
- "thiserror",
+ "scroll 0.12.0",
+ "thiserror 2.0.12",
  "time",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "minidump-common"
+version = "0.21.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c4d14bcca0fd3ed165a03000480aaa364c6860c34e900cb2dafdf3b95340e77"
+dependencies = [
+ "bitflags",
+ "debugid",
+ "num-derive",
+ "num-traits",
+ "range-map",
+ "scroll 0.12.0",
+ "smart-default",
 ]
 
 [[package]]
@@ -985,7 +1038,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "smart-default",
 ]
 
@@ -1126,7 +1179,7 @@ dependencies = [
  "itertools 0.12.1",
  "libc",
  "memchr",
- "minidump",
+ "minidump 0.26.0",
  "object",
  "paste",
  "patternsleuth_scanner",
@@ -1144,6 +1197,16 @@ dependencies = [
  "anyhow",
  "memchr",
  "rayon",
+]
+
+[[package]]
+name = "pdb"
+version = "0.8.0"
+source = "git+https://github.com/trumank/pdb#7053e702967a70f87c7a1d6598ad9a1edf6f62d1"
+dependencies = [
+ "fallible-iterator",
+ "scroll 0.11.0",
+ "uuid",
 ]
 
 [[package]]
@@ -1213,6 +1276,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31971752e70b8b2686d7e46ec17fb38dad4051d94024c88df49b667caea9c84"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "procfs-core"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d3554923a69f4ce04c4a754260c338f505ce22642d3830e049a399fc2059a29"
+dependencies = [
+ "bitflags",
+ "hex",
 ]
 
 [[package]]
@@ -1306,6 +1379,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdex"
+version = "0.1.0"
+source = "git+https://github.com/trumank/remu64#c8d1d62767c9a4d26591c9e51f593a08db6dbb90"
+dependencies = [
+ "anyhow",
+ "clap",
+ "colored",
+ "iced-x86",
+ "memmap2",
+ "minidump 0.21.2",
+ "pdb",
+ "remu64",
+]
+
+[[package]]
 name = "read-process-memory"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1356,6 +1444,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
+name = "remu64"
+version = "0.1.0"
+source = "git+https://github.com/trumank/remu64#c8d1d62767c9a4d26591c9e51f593a08db6dbb90"
+dependencies = [
+ "bitflags",
+ "iced-x86",
+]
+
+[[package]]
 name = "rustc-hash"
 version = "2.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1398,6 +1495,12 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "scroll"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04c565b551bafbef4157586fa379538366e4385d42082f255bfd96e4fe8519da"
 
 [[package]]
 name = "scroll"
@@ -1620,11 +1723,31 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+dependencies = [
+ "thiserror-impl 1.0.69",
+]
+
+[[package]]
+name = "thiserror"
 version = "2.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "567b8a2dae586314f7be2a752ec7474332959c6460e02bde30d702a66d488708"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 2.0.12",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "1.0.69"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

@@ -110,8 +110,49 @@ impl<C: Clone + Ctx> Ptr<FName, C> {
         self.byte_offset(offset).cast()
     }
 }
+impl<C: Ctx> VirtSize<C> for FName {
+    fn size(ctx: &C) -> usize {
+        ctx.get_struct("FName").size as usize
+    }
+}
 impl<C: Ctx> Ptr<FName, C> {
     pub fn read(&self) -> Result<String> {
+        match self.ctx().fname_strategy() {
+            crate::FNameStrategy::NamePool => self.read_from_pool(),
+            crate::FNameStrategy::Emulated {
+                fname_tostring_address,
+                cache,
+            } => self.read_with_emulation(*fname_tostring_address, cache.clone()),
+        }
+    }
+
+    fn read_with_emulation(
+        &self,
+        fname_tostring_address: u64,
+        cache: std::rc::Rc<std::cell::RefCell<std::collections::HashMap<Vec<u8>, String>>>,
+    ) -> Result<String> {
+        let fname_size = FName::size(self.ctx());
+        let fname_bytes = self.cast::<u8>().read_vec(fname_size)?;
+
+        if let Some(cached_result) = cache.borrow().get(&fname_bytes) {
+            return Ok(cached_result.clone());
+        }
+
+        let mem_process = crate::emulation::MemProcess::new(self.ctx().clone());
+
+        let mut emulator =
+            crate::emulation::FNameConverter::new(mem_process, fname_tostring_address)
+                .map_err(|e| anyhow::anyhow!("Failed to create FName emulator: {}", e))?;
+
+        let result = emulator
+            .convert_fname_from_bytes(&fname_bytes)
+            .map_err(|e| anyhow::anyhow!("FName emulation failed: {}", e))?;
+
+        cache.borrow_mut().insert(fname_bytes, result.clone());
+
+        Ok(result)
+    }
+    fn read_from_pool(&self) -> Result<String> {
         let number = self.number().read()?;
         let value = self.comparison_index().value().read()?;
         let mem = self.ctx();

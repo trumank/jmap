@@ -1,4 +1,5 @@
 mod containers;
+pub mod emulation;
 mod header;
 mod mem;
 mod objects;
@@ -7,8 +8,10 @@ mod vtable;
 
 pub use header::into_header;
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -349,13 +352,52 @@ pub enum Input {
     Dump(PathBuf),
 }
 
+#[derive(Clone)]
+pub enum FNameStrategy {
+    NamePool,
+    Emulated {
+        fname_tostring_address: u64,
+        cache: Rc<RefCell<HashMap<Vec<u8>, String>>>,
+    },
+}
+
+impl std::fmt::Debug for FNameStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NamePool => write!(f, "NamePool"),
+            Self::Emulated {
+                fname_tostring_address,
+                ..
+            } => f
+                .debug_struct("Emulated")
+                .field("fname_tostring_address", fname_tostring_address)
+                .finish(),
+        }
+    }
+}
+
 pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
+    dump_with_strategy(
+        input,
+        struct_info,
+        FNameStrategy::Emulated {
+            fname_tostring_address: 0x7ff70fb37f20,
+            cache: Default::default(),
+        },
+    )
+}
+
+pub fn dump_with_strategy(
+    input: Input,
+    struct_info: Option<Structs>,
+    fname_strategy: FNameStrategy,
+) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image, struct_info)
+            dump_inner(mem, &image, struct_info, fname_strategy)
         }
         Input::Dump(path) => {
             let file = std::fs::File::open(path)?;
@@ -364,7 +406,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData
             let minidump = minidump::Minidump::read(&*mmap)?;
             let mem = MinidumpMem::new(&minidump)?;
             let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
-            dump_inner(mem, &img, struct_info)
+            dump_inner(mem, &img, struct_info, fname_strategy)
         }
     }
 }
@@ -389,6 +431,7 @@ fn dump_inner<M: Mem>(
     mem: M,
     image: &Image<'_>,
     struct_info: Option<Structs>,
+    fname_strategy: FNameStrategy,
 ) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
@@ -421,6 +464,7 @@ fn dump_inner<M: Mem>(
         ),
         version: (results.engine_version.major, results.engine_version.minor),
         case_preserving,
+        fname_strategy,
     };
 
     let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem.clone());
