@@ -3,8 +3,10 @@ use std::collections::HashMap;
 use anyhow::{Context, Result, anyhow, bail};
 use gospel_compiler::backend::{CompilerInstance, CompilerModuleBuilder, CompilerResultTrait};
 use gospel_compiler::parser::parse_source_file;
-use gospel_typelib::type_model::{ResolvedUDTMemberLayout, TargetTriplet, Type, TypeGraphLike};
-use gospel_vm::vm::{GospelVMRunContext, GospelVMState, GospelVMValue};
+use gospel_typelib::type_model::{
+    ResolvedUDTMemberLayout, TargetTriplet, Type, TypeGraphLike, TypeLayoutCache,
+};
+use gospel_vm::vm::{GospelVMOptions, GospelVMRunContext, GospelVMState, GospelVMValue};
 use patternsleuth_resolvers::unreal::engine_version::EngineVersion;
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +39,7 @@ pub fn get_struct_info_for_version(
         env: gospel_typelib::type_model::TargetEnvironment::MSVC,
     };
 
-    let compiler_instance = CompilerInstance::create();
+    let compiler_instance = CompilerInstance::create(Default::default());
     let module_writer = compiler_instance
         .define_module("unreal")
         .to_simple_result()?;
@@ -52,9 +54,6 @@ pub fn get_struct_info_for_version(
 
     let ue_version = (version.major as i32) * 100 + (version.minor as i32);
     let case_preserving_flag = if case_preserving { 1 } else { 0 };
-
-    vm_state.set_global_value("UE_VERSION", ue_version)?;
-    vm_state.set_global_value("WITH_CASE_PRESERVING_NAME", case_preserving_flag)?;
 
     let struct_names = vec![
         "FUObjectArray",
@@ -98,7 +97,11 @@ pub fn get_struct_info_for_version(
     let mounted_container = vm_state.mount_container(container)?;
 
     let mut structs = Vec::new();
-    let mut execution_context = GospelVMRunContext::create(&target_triplet);
+    let vm_options = GospelVMOptions::default()
+        .target_triplet(target_triplet.clone())
+        .with_global("UE_VERSION", ue_version)
+        .with_global("WITH_CASE_PRESERVING_NAME", case_preserving_flag);
+    let mut execution_context = GospelVMRunContext::create(vm_options);
 
     for struct_name in struct_names {
         if let Some(struct_info) = eval_struct_layout(
@@ -131,12 +134,13 @@ fn eval_struct_layout(
             let type_tree = execution_context.type_tree(type_index);
 
             let mut members = HashMap::new();
+            let mut layout_cache = TypeLayoutCache::create(target_triplet.clone());
 
             let mut add_members = |type_index: usize, base: usize| -> Result<Vec<(usize, usize)>> {
                 let Type::UDT(udt) = &type_tree.types[type_index] else {
                     bail!("Expected UserDefinedType");
                 };
-                let layout = udt.layout(&type_tree, target_triplet);
+                let layout = udt.layout(&type_tree, &mut layout_cache)?;
 
                 for (member, member_layout) in udt.members.iter().zip(&layout.member_layouts) {
                     if let Some(name) = member.name()
@@ -158,7 +162,7 @@ fn eval_struct_layout(
                     .base_class_indices
                     .iter()
                     .copied()
-                    .zip(layout.base_class_offsets)
+                    .zip(layout.base_class_offsets.iter().copied())
                     .collect())
             };
 
@@ -171,7 +175,7 @@ fn eval_struct_layout(
                 Type::UDT(udt) => udt,
                 _ => unreachable!(),
             }
-            .layout(&type_tree, target_triplet);
+            .layout(&type_tree, &mut layout_cache)?;
 
             let mut members = members.into_values().collect::<Vec<_>>();
             members.sort_by_key(|m| m.offset);
