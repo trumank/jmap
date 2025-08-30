@@ -15,9 +15,18 @@ bytemuck.workspace = true
 clap.workspace = true
 derive-where.workspace = true
 flate2 = "1.1.2"
-gospel-compiler = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
-gospel-typelib = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
-gospel-vm = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
+# gospel-bindings-gen.git = "https://github.com/trumank/gospel"
+# gospel-compiler.git = "https://github.com/trumank/gospel"
+# gospel-runtime.git = "https://github.com/trumank/gospel"
+# gospel-typelib.git = "https://github.com/trumank/gospel"
+# gospel-vm.git = "https://github.com/trumank/gospel"
+
+gospel-bindings-gen.path = "../../gospel/gospel-bindings-gen"
+gospel-compiler.path = "../../gospel/gospel-compiler"
+gospel-runtime.path = "../../gospel/gospel-runtime"
+gospel-typelib.path = "../../gospel/gospel-typelib"
+gospel-vm.path = "../../gospel/gospel-vm"
+
 memmap2 = "0.9.5"
 minidump = "0.26.0"
 ordered-float = "5.0.0"
@@ -29,3 +38,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
 usmap = { version = "0.1.0", path = "../usmap" }
+
+[build-dependencies]
+# gospel-bindings-gen.git = "https://github.com/trumank/gospel"
+gospel-bindings-gen.path = "../../gospel/gospel-bindings-gen"

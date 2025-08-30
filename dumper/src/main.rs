@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
-use dumper::{Input, into_header, structs::Structs};
+use dumper::{Input, into_header};
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use ue_reflection::ReflectionData;
 
@@ -19,10 +19,6 @@ struct Cli {
     /// Use existing .json dump
     #[arg(long, short, group = "input")]
     json: Option<PathBuf>,
-
-    /// Struct layout info .json (from pdb_dumper)
-    #[arg(long, short)]
-    struct_info: Option<PathBuf>,
 
     /// Output dump .json path
     #[arg(index = 1)]
@@ -47,18 +43,12 @@ fn main() -> Result<()> {
         _ => bail!("Error: Expected .json .usmap or .hpp output type"),
     };
 
-    let struct_info: Option<Structs> = if let Some(path) = cli.struct_info {
-        Some(serde_json::from_slice(&std::fs::read(path)?)?)
-    } else {
-        None
-    };
-
     let reflection_data: ReflectionData = if let Some(path) = cli.json {
         serde_json::from_slice(&std::fs::read(path)?)?
     } else if let Some(pid) = cli.pid {
-        dumper::dump(Input::Process(pid), struct_info)?
+        dumper::dump(Input::Process(pid))?
     } else if let Some(path) = cli.minidump {
-        dumper::dump(Input::Dump(path), struct_info)?
+        dumper::dump(Input::Dump(path))?
     } else {
         unreachable!();
     };

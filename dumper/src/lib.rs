@@ -1,40 +1,40 @@
+#![feature(arbitrary_self_types)]
+
+include!(concat!(env!("OUT_DIR"), "/", "gospel_bindings.rs"));
+
 mod containers;
+mod gospel;
 mod header;
 mod mem;
-mod objects;
-pub mod structs;
 mod vtable;
 
+use gospel_runtime::static_type_wrappers::Ref;
 pub use header::into_header;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use anyhow::{Context, Result, bail};
-use containers::{FName, FString};
+use gospel_runtime::memory_access::{DataEndianness, OpaquePtr};
+use gospel_runtime::runtime_type_model::TypePtrNamespace;
+use gospel_runtime::vm_integration::GospelVMTypeGraphBackend;
+use gospel_typelib::type_model::{TargetTriplet, TypeLayoutCache};
+use gospel_vm::vm::GospelVMOptions;
 use mem::{CtxPtr, Mem, MemCache, Ptr};
-use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth::image::Image;
 use patternsleuth::resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
-    BytePropertyValue, Class, EClassCastFlags, Enum, EnumPropertyValue, Function, Object,
-    ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData, ScriptStruct,
-    Struct,
+    BytePropertyValue, Class, EClassCastFlags, EClassFlags, EFunctionFlags, EObjectFlags,
+    EPropertyFlags, EStructFlags, Enum, EnumPropertyValue, Function, Object, ObjectType, Package,
+    Property, PropertyType, PropertyValue, ReflectionData, ScriptStruct, Struct,
 };
 
 use crate::containers::PtrFNamePool;
+use crate::gospel_bindings::*;
 use crate::mem::Ctx;
-use crate::objects::{
-    FUObjectArray, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct, ZArrayProperty,
-    ZBoolProperty, ZByteProperty, ZClassProperty, ZDelegateProperty, ZEnumProperty,
-    ZInterfaceProperty, ZLazyObjectProperty, ZMapProperty, ZMulticastDelegateProperty,
-    ZObjectProperty, ZProperty, ZSetProperty, ZSoftClassProperty, ZSoftObjectProperty,
-    ZStructProperty, ZWeakObjectProperty,
-};
-use crate::structs::Structs;
 
 impl_try_collector! {
     #[derive(Debug, PartialEq, Clone)]
@@ -45,46 +45,19 @@ impl_try_collector! {
     }
 }
 
-fn read_path<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<String> {
-    let mut objects = vec![obj.clone()];
-
-    let mut obj = obj.clone();
-    while let Some(outer) = obj.outer_private().read()? {
-        objects.push(outer.clone());
-        obj = outer;
-    }
-
-    let mut path = String::new();
-    let mut prev: Option<&Ptr<UObject, C>> = None;
-    for obj in objects.iter().rev() {
-        if let Some(prev) = prev {
-            let sep = if prev
-                .class_private()
-                .read()?
-                .class_cast_flags()
-                .read()?
-                .contains(EClassCastFlags::CASTCLASS_UPackage)
-            {
-                '.'
-            } else {
-                ':'
-            };
-            path.push(sep);
-        }
-        path.push_str(&obj.name_private().read()?);
-        prev = Some(obj);
-    }
-
-    Ok(path)
-}
-
-fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
-    let name = ptr.zfield().name_private().read()?;
-    let f = ptr.zfield().cast_flags()?;
+fn map_prop<C: Ctx>(ptr: &Ref<C, ZProperty>) -> Result<Property> {
+    let field = ptr.cast_checked::<ZField>();
+    let name = field.name()?;
+    let f = field.cast_flags()?;
 
     let t = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
-        let prop = ptr.cast::<ZStructProperty>();
-        let s = prop.struct_().read()?.path()?;
+        let prop = ptr.cast_checked::<ZStructProperty>();
+        let s = prop
+            .r_struct()
+            .read()?
+            .cast_checked::<UObject>()
+            .to_ref_checked()
+            .path()?;
         PropertyType::Struct { r#struct: s }
     } else if f.contains(EClassCastFlags::CASTCLASS_FStrProperty) {
         PropertyType::Str
@@ -93,75 +66,96 @@ fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FTextProperty) {
         PropertyType::Text
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
-        let prop = ptr.cast::<ZMulticastDelegateProperty>();
+        let prop = ptr.cast_checked::<ZMulticastDelegateProperty>();
         let signature_function = prop
             .signature_function()
             .read()?
-            .map(|e| e.path())
+            .to_ref()
+            .map(|e| e.cast_checked::<UObject>().path())
             .transpose()?;
         PropertyType::MulticastInlineDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
-        let prop = ptr.cast::<ZMulticastDelegateProperty>();
+        let prop = ptr.cast_checked::<ZMulticastDelegateProperty>();
         let signature_function = prop
             .signature_function()
             .read()?
-            .map(|e| e.path())
+            .to_ref()
+            .map(|e| e.cast_checked::<UObject>().path())
             .transpose()?;
         PropertyType::MulticastSparseDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastDelegateProperty) {
-        let prop = ptr.cast::<ZMulticastDelegateProperty>();
+        let prop = ptr.cast_checked::<ZMulticastDelegateProperty>();
         let signature_function = prop
             .signature_function()
             .read()?
-            .map(|e| e.path())
+            .to_ref()
+            .map(|e| e.cast_checked::<UObject>().path())
             .transpose()?;
         PropertyType::MulticastDelegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
-        let prop = ptr.cast::<ZDelegateProperty>();
+        let prop = ptr.cast_checked::<ZDelegateProperty>();
         let signature_function = prop
             .signature_function()
             .read()?
-            .map(|e| e.path())
+            .to_ref()
+            .map(|e| e.cast_checked::<UObject>().path())
             .transpose()?;
         PropertyType::Delegate { signature_function }
     } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
-        let prop = ptr.cast::<ZBoolProperty>();
+        let prop = ptr.cast_checked::<ZBoolProperty>();
         PropertyType::Bool {
             field_size: prop.field_size().read()?,
-            byte_offset: prop.byte_offset_().read()?,
+            byte_offset: prop.byte_offset().read()?,
             byte_mask: prop.byte_mask().read()?,
             field_mask: prop.field_mask().read()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FArrayProperty) {
-        let prop = ptr.cast::<ZArrayProperty>();
+        let prop = ptr.cast_checked::<ZArrayProperty>();
         PropertyType::Array {
-            inner: map_prop(&prop.inner().read()?.cast())?.into(),
+            inner: map_prop(&prop.inner().unwrap().read()?.to_ref_checked())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
-        let prop = ptr.cast::<ZEnumProperty>();
+        let prop = ptr.cast_checked::<ZEnumProperty>();
         PropertyType::Enum {
-            container: map_prop(&prop.underlying_prop().read()?.cast())?.into(),
-            r#enum: prop.enum_().read()?.map(|e| e.path()).transpose()?,
+            container: map_prop(
+                &prop
+                    .underlying_prop()
+                    .read()?
+                    .to_ref_checked()
+                    .cast_checked::<ZProperty>(),
+            )?
+            .into(),
+            r#enum: prop
+                .r_enum()
+                .read()?
+                .to_ref()
+                .map(|e| e.cast_checked::<UObject>().path())
+                .transpose()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
-        let prop = ptr.cast::<ZMapProperty>();
+        let prop = ptr.cast_checked::<ZMapProperty>();
         PropertyType::Map {
-            key_prop: map_prop(&prop.key_prop().read()?.cast())?.into(),
-            value_prop: map_prop(&prop.value_prop().read()?.cast())?.into(),
+            key_prop: map_prop(&prop.key_prop().read()?.to_ref_checked())?.into(),
+            value_prop: map_prop(&prop.value_prop().read()?.to_ref_checked())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
-        let prop = ptr.cast::<ZSetProperty>();
+        let prop = ptr.cast_checked::<ZSetProperty>();
         PropertyType::Set {
-            key_prop: map_prop(&prop.element_prop().read()?.cast())?.into(),
+            key_prop: map_prop(&prop.element_prop().read()?.to_ref_checked())?.into(),
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
         PropertyType::Float
     } else if f.contains(EClassCastFlags::CASTCLASS_FDoubleProperty) {
         PropertyType::Double
     } else if f.contains(EClassCastFlags::CASTCLASS_FByteProperty) {
-        let prop = ptr.cast::<ZByteProperty>();
+        let prop = ptr.cast_checked::<ZByteProperty>();
         PropertyType::Byte {
-            r#enum: prop.enum_().read()?.map(|e| e.path()).transpose()?,
+            r#enum: prop
+                .r_enum()
+                .read()?
+                .to_ref()
+                .map(|e| e.cast_checked::<UObject>().path())
+                .transpose()?,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FUInt16Property) {
         PropertyType::UInt16
@@ -178,64 +172,107 @@ fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
     } else if f.contains(EClassCastFlags::CASTCLASS_FInt64Property) {
         PropertyType::Int64
     } else if f.contains(EClassCastFlags::CASTCLASS_FClassProperty) {
-        let prop = ptr.cast::<ZClassProperty>();
-        let property_class = prop.fobject_property().property_class().read()?.path()?;
-        let meta_class = prop.meta_class().read()?.path()?;
+        let prop = ptr.cast_checked::<ZClassProperty>();
+        let property_class = prop
+            .cast_checked::<ZObjectPropertyBase>()
+            .property_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
+        let meta_class = prop
+            .meta_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
         PropertyType::Class {
             property_class,
             meta_class,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
-        let prop = ptr.cast::<ZObjectProperty>();
-        let property_class = prop.property_class().read()?.path()?;
-        PropertyType::Object { property_class }
-    } else if f.contains(EClassCastFlags::CASTCLASS_FSoftClassProperty) {
-        let prop = ptr.cast::<ZSoftClassProperty>();
+        let prop = ptr.cast_checked::<ZObjectPropertyBase>();
         let property_class = prop
-            .fsoft_object_property()
             .property_class()
             .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
             .path()?;
-        let meta_class = prop.meta_class().read()?.path()?;
+        PropertyType::Object { property_class }
+    } else if f.contains(EClassCastFlags::CASTCLASS_FSoftClassProperty) {
+        let prop = ptr.cast_checked::<ZSoftClassProperty>();
+        let property_class = prop
+            .cast_checked::<ZObjectPropertyBase>()
+            .property_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
+        let meta_class = prop
+            .meta_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
         PropertyType::SoftClass {
             property_class,
             meta_class,
         }
     } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
-        let prop = ptr.cast::<ZSoftObjectProperty>();
-        let property_class = prop.property_class().read()?.path()?;
+        let prop = ptr.cast_checked::<ZObjectPropertyBase>();
+        let property_class = prop
+            .property_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
         PropertyType::SoftObject { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
-        let prop = ptr.cast::<ZWeakObjectProperty>();
-        let c = prop.property_class().read()?.path()?;
-        PropertyType::WeakObject { property_class: c }
+        let prop = ptr.cast_checked::<ZObjectPropertyBase>();
+        let property_class = prop
+            .property_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
+        PropertyType::WeakObject { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
-        let prop = ptr.cast::<ZLazyObjectProperty>();
-        let c = prop.property_class().read()?.path()?;
-        PropertyType::LazyObject { property_class: c }
+        let prop = ptr.cast_checked::<ZObjectPropertyBase>();
+        let property_class = prop
+            .property_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
+        PropertyType::LazyObject { property_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
-        let prop = ptr.cast::<ZInterfaceProperty>();
-        let interface_class = prop.interface_class().read()?.path()?;
+        let prop = ptr.cast_checked::<ZInterfaceProperty>();
+        let interface_class = prop
+            .interface_class()
+            .read()?
+            .to_ref_checked()
+            .cast_checked::<UObject>()
+            .path()?;
         PropertyType::Interface { interface_class }
     } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
         // TODO
         PropertyType::FieldPath
     } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
-        let prop = ptr.cast::<FOptionalProperty>();
+        let prop = ptr.cast_checked::<FOptionalPropertyLayout>();
         PropertyType::Optional {
-            inner: map_prop(&prop.value_property().read()?.cast())?.into(),
+            inner: map_prop(&prop.value_property().read()?.to_ref_checked())?.into(),
         }
     } else {
         unimplemented!("{f:?}");
     };
 
-    let prop = ptr.cast::<ZProperty>();
+    let prop = ptr;
     Ok(Property {
         name,
         offset: prop.offset_internal().read()? as usize,
         array_dim: prop.array_dim().read()? as usize,
         size: prop.element_size().read()? as usize,
-        flags: prop.property_flags().read()?,
+        flags: EPropertyFlags::from_bits(prop.property_flags().unwrap().read()?).unwrap(),
         r#type: t,
     })
 }
@@ -349,13 +386,13 @@ pub enum Input {
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
+pub fn dump(input: Input) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image, struct_info)
+            dump_inner(mem, &image)
         }
         Input::Dump(path) => {
             let file = std::fs::File::open(path)?;
@@ -364,7 +401,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData
             let minidump = minidump::Minidump::read(&*mmap)?;
             let mem = MinidumpMem::new(&minidump)?;
             let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
-            dump_inner(mem, &img, struct_info)
+            dump_inner(mem, &img)
         }
     }
 }
@@ -385,11 +422,7 @@ mod script_containers {
     }
 }
 
-fn dump_inner<M: Mem>(
-    mem: M,
-    image: &Image<'_>,
-    struct_info: Option<Structs>,
-) -> Result<ReflectionData> {
+fn dump_inner<M: Mem>(mem: M, image: &Image<'_>) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
 
@@ -397,33 +430,48 @@ fn dump_inner<M: Mem>(
 
     let case_preserving = false;
 
-    let struct_info = if let Some(provided_info) = struct_info {
-        provided_info
-    } else {
-        structs::get_struct_info_for_version(&results.engine_version, case_preserving)
-            .with_context(|| {
-                format!(
-                    "Failed to compute struct offsets via Gospel for {:?}",
-                    results.engine_version
-                )
-            })?
+    let target_triplet = TargetTriplet {
+        arch: gospel_typelib::type_model::TargetArchitecture::X86_64,
+        sys: gospel_typelib::type_model::TargetOperatingSystem::Win32,
+        env: gospel_typelib::type_model::TargetEnvironment::MSVC,
+    };
+
+    let ue_version =
+        (results.engine_version.major as u64) * 100 + (results.engine_version.minor as u64);
+    let case_preserving_flag = if case_preserving { 1 } else { 0 };
+    let vm_options = GospelVMOptions::default()
+        .target_triplet(target_triplet.clone())
+        .with_global("UE_VERSION", ue_version)
+        .with_global("WITH_CASE_PRESERVING_NAME", case_preserving_flag);
+
+    let module_tree = GospelVMTypeGraphBackend::create_from_module_tree(
+        &PathBuf::from("res/gospel/unreal/"),
+        &Vec::new(),
+        vm_options,
+    )?;
+
+    let namespace = TypePtrNamespace {
+        type_graph: Arc::new(RwLock::new(module_tree)),
+        layout_cache: Arc::new(RwLock::new(TypeLayoutCache::create(target_triplet))),
     };
 
     let mem = CtxPtr {
         mem,
         fnamepool,
-        structs: Arc::new(
-            struct_info
-                .0
-                .into_iter()
-                .map(|s| (s.name.clone(), s))
-                .collect(),
-        ),
         version: (results.engine_version.major, results.engine_version.minor),
         case_preserving,
     };
 
-    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem.clone());
+    let uobjectarray = <gospel_runtime::static_type_wrappers::Ptr<
+        _,
+        gospel_bindings::FUObjectArray,
+    >>::from_raw_ptr(
+        OpaquePtr {
+            memory: Arc::new(mem.clone()),
+            address: results.guobject_array.0,
+        },
+        &namespace,
+    ).to_ref_checked();
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
@@ -435,6 +483,7 @@ fn dump_inner<M: Mem>(
         };
 
         let path = obj.path()?;
+        // dbg!(&path);
 
         let obj = read_object(obj, &path);
         // let obj = match obj {
@@ -482,27 +531,27 @@ fn dump_inner<M: Mem>(
     })
 }
 
-fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<ObjectType>> {
-    let class = obj.class_private().read()?;
+fn read_object<C: Ctx>(obj: Ref<C, UObject>, path: &str) -> Result<Option<ObjectType>> {
+    let class = obj.class_private().read()?.to_ref_checked();
 
     fn read_props<C: Ctx>(
-        ustruct: &Ptr<UStruct, C>,
-        ptr: &Ptr<(), C>,
+        ustruct: &Ref<C, UStruct>,
+        ptr: &OpaquePtr<C>,
     ) -> Result<OrderMap<String, PropertyValue>> {
         let mut properties = OrderMap::new();
         for prop in ustruct.properties(true) {
             let prop = prop?;
             let array_dim = prop.array_dim().read()? as usize;
-            let name = prop.zfield().name_private().read()?;
+            let name = prop.cast_checked::<ZField>().name()?;
             if array_dim == 1 {
-                if let Some(value) = read_prop(&prop, ptr, 0)? {
+                if let Some(value) = read_prop(&prop, ptr.clone(), 0)? {
                     properties.insert(name, value);
                 }
             } else {
                 let mut elements = vec![];
                 let mut success = true;
                 for i in 0..array_dim {
-                    if let Some(value) = read_prop(&prop, ptr, i)? {
+                    if let Some(value) = read_prop(&prop, ptr.clone(), i)? {
                         elements.push(value);
                     } else {
                         success = false;
@@ -516,219 +565,242 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         Ok(properties)
     }
     fn read_prop<C: Ctx>(
-        prop: &Ptr<ZProperty, C>,
-        ptr: &Ptr<(), C>,
+        prop: &Ref<C, ZProperty>,
+        mut ptr: OpaquePtr<C>,
         index: usize,
     ) -> Result<Option<PropertyValue>> {
-        let size = prop.element_size().read()? as usize;
-        let ptr = ptr.byte_offset(prop.offset_internal().read()? as usize + index * size);
-        let f = prop.zfield().cast_flags()?;
+        let size = prop.element_size().read()? as u64;
+        ptr.address += prop.offset_internal().read()? as u64 + index as u64 * size;
+        let f = prop.cast_checked::<ZField>().cast_flags()?;
 
         let value = if f.contains(EClassCastFlags::CASTCLASS_FStructProperty) {
-            let prop = prop.cast::<ZStructProperty>();
-            PropertyValue::Struct(read_props(&prop.struct_().read()?.ustruct(), &ptr)?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FStrProperty) {
-            PropertyValue::Str(ptr.cast::<FString>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FNameProperty) {
-            PropertyValue::Name(ptr.cast::<FName>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FTextProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastDelegateProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
-            let prop = prop.cast::<ZBoolProperty>();
-            let byte_offset = prop.byte_offset_().read()?;
-            let byte_mask = prop.byte_mask().read()?;
-            let byte = ptr.byte_offset(byte_offset as usize).cast::<u8>().read()?;
-            PropertyValue::Bool(byte & byte_mask != 0)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FArrayProperty) {
-            let prop = prop.cast::<ZArrayProperty>();
-            let array = ptr.cast::<FScriptArray>();
-
-            let num = array.num().read()? as usize;
-            let mut data = Vec::with_capacity(num);
-            if let Some(data_ptr) = array.data().read()? {
-                let inner_prop = prop.inner().read()?;
-                for i in 0..num {
-                    // TODO handle size != alignment
-                    let value = read_prop(&inner_prop, &data_ptr, i)?;
-                    if let Some(value) = value {
-                        data.push(value);
-                    } else {
-                        return Ok(None);
-                    }
-                }
-            }
-
-            PropertyValue::Array(data)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
-            let prop = prop.cast::<ZEnumProperty>();
-            let underlying = read_prop(&prop.underlying_prop().read()?, &ptr, 0)?
-                .expect("valid underlying prop");
-            let value = match underlying {
-                PropertyValue::Byte(BytePropertyValue::Value(v)) => v as i64,
-                PropertyValue::Int8(v) => v as i64,
-                PropertyValue::Int16(v) => v as i64,
-                PropertyValue::Int(v) => v as i64,
-                PropertyValue::Int64(v) => v,
-                PropertyValue::UInt16(v) => v as i64,
-                PropertyValue::UInt32(v) => v as i64,
-                e => bail!("underlying enum prop {e:?}"),
-            };
-            let names = read_enum(&prop.enum_().read()?.expect("valid enum"))?.names;
-            let name = names
-                .into_iter()
-                .find_map(|(name, v)| (v == value).then_some(name));
-
-            PropertyValue::Enum(if let Some(name) = name {
-                EnumPropertyValue::Name(name)
-            } else {
-                EnumPropertyValue::Value(value)
-            })
-        } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
-            // /* offset 0x000 */ Data: TScriptArray<TSizedDefaultAllocator<32> >,
-            // /* offset 0x010 */ AllocationFlags: TScriptBitArray<FDefaultBitArrayAllocator,void>,
-            // /* offset 0x030 */ FirstFreeIndex: i32,
-            // /* offset 0x034 */ NumFreeIndices: i32,
-
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
-            //let prop = prop.cast::<FSetProperty>();
-            //#[derive(Clone, Copy)]
-            //pub struct FScriptSet;
-            //impl<C: Clone + StructsTrait> Ptr<FScriptSet, C> {
-            //    pub fn data(&self) -> Ptr<FScriptArray, C> {
-            //        self.byte_offset(0).cast()
-            //    }
-            //    pub fn allocation_flags(&self) -> Ptr<TBitArray<TInlineAllocator<4>>, C> {
-            //        self.byte_offset(16).cast()
-            //    }
-            //}
-            //let array = ptr.cast::<FScriptSet>();
-            //dbg!(array.allocation_flags().read()?);
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
-            PropertyValue::Float(ptr.cast::<f32>().read()?.into())
-        } else if f.contains(EClassCastFlags::CASTCLASS_FDoubleProperty) {
-            PropertyValue::Double(ptr.cast::<f64>().read()?.into())
-        } else if f.contains(EClassCastFlags::CASTCLASS_FByteProperty) {
-            let prop = prop.cast::<ZByteProperty>();
-            let value = ptr.cast::<u8>().read()?;
-            PropertyValue::Byte(
-                if let Some(name) = prop
-                    .enum_()
+            let prop = prop.cast_checked::<ZStructProperty>();
+            PropertyValue::Struct(read_props(
+                &prop
+                    .r_struct()
                     .read()?
-                    .map(|e| read_enum(&e))
-                    .transpose()?
-                    .and_then(|e| {
-                        e.names
-                            .into_iter()
-                            .find_map(|(name, v)| (v == value as i64).then_some(name))
-                    })
-                {
-                    BytePropertyValue::Name(name)
-                } else {
-                    BytePropertyValue::Value(value)
-                },
-            )
-        } else if f.contains(EClassCastFlags::CASTCLASS_FUInt16Property) {
-            PropertyValue::UInt16(ptr.cast::<u16>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FUInt32Property) {
-            PropertyValue::UInt32(ptr.cast::<u32>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FUInt64Property) {
-            PropertyValue::UInt64(ptr.cast::<u64>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FInt8Property) {
-            PropertyValue::Int8(ptr.cast::<i8>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FInt16Property) {
-            PropertyValue::Int16(ptr.cast::<i16>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FIntProperty) {
-            PropertyValue::Int(ptr.cast::<i32>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FInt64Property) {
-            PropertyValue::Int64(ptr.cast::<i64>().read()?)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
-            let obj = ptr
-                .cast::<Option<Ptr<UObject, _>>>()
-                .read()?
-                .map(|e| e.path())
-                .transpose()?;
-            PropertyValue::Object(obj)
-        } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
-            return Ok(None);
-        } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
-            return Ok(None);
+                    .to_ref_checked()
+                    .cast_checked::<UStruct>(),
+                &ptr,
+            )?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FStrProperty) {
+        //     PropertyValue::Str(ptr.cast::<FString>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FNameProperty) {
+        //     PropertyValue::Name(ptr.cast::<FName>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FTextProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastInlineDelegateProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastSparseDelegateProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FMulticastDelegateProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FDelegateProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FBoolProperty) {
+        //     let prop = gospel_bindings::FBoolProperty::try_cast(prop)?.unwrap();
+        //     let byte_offset = prop.byte_offset_().read()?;
+        //     let byte_mask = prop.byte_mask().read()?;
+        //     let byte = ptr.byte_offset(byte_offset as usize).cast::<u8>().read()?;
+        //     PropertyValue::Bool(byte & byte_mask != 0)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FArrayProperty) {
+        //     let prop = gospel_bindings::FArrayProperty::try_cast(prop)?.unwrap();
+        //     let array = ptr.cast::<FScriptArray>();
+
+        //     let num = array.num().read()? as usize;
+        //     let mut data = Vec::with_capacity(num);
+        //     if let Some(data_ptr) = array.data().read()? {
+        //         let inner_prop = prop.inner().read()?;
+        //         for i in 0..num {
+        //             // TODO handle size != alignment
+        //             let value = read_prop(&inner_prop, &data_ptr, i)?;
+        //             if let Some(value) = value {
+        //                 data.push(value);
+        //             } else {
+        //                 return Ok(None);
+        //             }
+        //         }
+        //     }
+
+        //     PropertyValue::Array(data)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FEnumProperty) {
+        //     let prop = gospel_bindings::FEnumProperty::try_cast(prop)?.unwrap();
+        //     let underlying = read_prop(&prop.underlying_prop().read()?, &ptr, 0)?
+        //         .expect("valid underlying prop");
+        //     let value = match underlying {
+        //         PropertyValue::Byte(BytePropertyValue::Value(v)) => v as i64,
+        //         PropertyValue::Int8(v) => v as i64,
+        //         PropertyValue::Int16(v) => v as i64,
+        //         PropertyValue::Int(v) => v as i64,
+        //         PropertyValue::Int64(v) => v,
+        //         PropertyValue::UInt16(v) => v as i64,
+        //         PropertyValue::UInt32(v) => v as i64,
+        //         e => bail!("underlying enum prop {e:?}"),
+        //     };
+        //     let names = read_enum(&prop.enum_().read()?.expect("valid enum"))?.names;
+        //     let name = names
+        //         .into_iter()
+        //         .find_map(|(name, v)| (v == value).then_some(name));
+
+        //     PropertyValue::Enum(if let Some(name) = name {
+        //         EnumPropertyValue::Name(name)
+        //     } else {
+        //         EnumPropertyValue::Value(value)
+        //     })
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
+        //     // /* offset 0x000 */ Data: TScriptArray<TSizedDefaultAllocator<32> >,
+        //     // /* offset 0x010 */ AllocationFlags: TScriptBitArray<FDefaultBitArrayAllocator,void>,
+        //     // /* offset 0x030 */ FirstFreeIndex: i32,
+        //     // /* offset 0x034 */ NumFreeIndices: i32,
+
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
+        //     //let prop = prop.cast::<FSetProperty>();
+        //     //#[derive(Clone, Copy)]
+        //     //pub struct FScriptSet;
+        //     //impl<C: Clone + StructsTrait> Ptr<FScriptSet, C> {
+        //     //    pub fn data(&self) -> Ptr<FScriptArray, C> {
+        //     //        self.byte_offset(0).cast()
+        //     //    }
+        //     //    pub fn allocation_flags(&self) -> Ptr<TBitArray<TInlineAllocator<4>>, C> {
+        //     //        self.byte_offset(16).cast()
+        //     //    }
+        //     //}
+        //     //let array = ptr.cast::<FScriptSet>();
+        //     //dbg!(array.allocation_flags().read()?);
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
+        //     PropertyValue::Float(ptr.cast::<f32>().read()?.into())
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FDoubleProperty) {
+        //     PropertyValue::Double(ptr.cast::<f64>().read()?.into())
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FByteProperty) {
+        //     let prop = gospel_bindings::FByteProperty::try_cast(prop)?.unwrap();
+        //     let value = ptr.cast::<u8>().read()?;
+        //     PropertyValue::Byte(
+        //         if let Some(name) = prop
+        //             .enum_()
+        //             .read()?
+        //             .map(|e| read_enum(&e))
+        //             .transpose()?
+        //             .and_then(|e| {
+        //                 e.names
+        //                     .into_iter()
+        //                     .find_map(|(name, v)| (v == value as i64).then_some(name))
+        //             })
+        //         {
+        //             BytePropertyValue::Name(name)
+        //         } else {
+        //             BytePropertyValue::Value(value)
+        //         },
+        //     )
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FUInt16Property) {
+        //     PropertyValue::UInt16(ptr.cast::<u16>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FUInt32Property) {
+        //     PropertyValue::UInt32(ptr.cast::<u32>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FUInt64Property) {
+        //     PropertyValue::UInt64(ptr.cast::<u64>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FInt8Property) {
+        //     PropertyValue::Int8(ptr.cast::<i8>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FInt16Property) {
+        //     PropertyValue::Int16(ptr.cast::<i16>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FIntProperty) {
+        //     PropertyValue::Int(ptr.cast::<i32>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FInt64Property) {
+        //     PropertyValue::Int64(ptr.cast::<i64>().read()?)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
+        //     let obj = ptr
+        //         .cast::<Option<Ptr<UObject, _>>>()
+        //         .read()?
+        //         .map(|e| e.path())
+        //         .transpose()?;
+        //     PropertyValue::Object(obj)
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FWeakObjectProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FSoftObjectProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FLazyObjectProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FInterfaceProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FFieldPathProperty) {
+        //     return Ok(None);
+        // } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
+        //     return Ok(None);
         } else {
-            unimplemented!("{f:?}");
+            return Ok(None);
+            // unimplemented!("{f:?}");
         };
         Ok(Some(value))
     }
 
-    fn read_object<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<Object> {
-        let outer = obj.outer_private().read()?.map(|s| s.path()).transpose()?;
+    fn read_object<C: Ctx>(obj: &Ref<C, UObject>) -> Result<Object> {
+        let outer = obj
+            .outer_private()
+            .read()?
+            .to_ref()
+            .map(|s| s.path())
+            .transpose()?;
 
-        let class = obj.class_private().read()?;
-        let class_name = class.path()?;
+        let class = obj.class_private().read()?.to_ref_checked();
+        let class_name = class.cast_checked::<UObject>().path()?;
 
         Ok(Object {
-            vtable: obj.vtable().read()? as u64,
-            object_flags: obj.object_flags().read()?,
+            vtable: obj.v_table().read()? as u64,
+            object_flags: EObjectFlags::from_bits(obj.object_flags().read()? as u32).unwrap(),
             outer,
             class: class_name,
             children: Default::default(),
-            property_values: read_props(&class.ustruct(), &obj.cast())?.into(),
+            property_values: read_props(
+                &class.cast_checked::<UStruct>(),
+                &obj.inner_ptr.opaque_ptr,
+            )?
+            .into(),
         })
     }
 
-    fn read_struct<C: Ctx>(obj: &Ptr<UStruct, C>) -> Result<Struct> {
+    fn read_struct<C: Ctx>(obj: &Ref<C, UStruct>) -> Result<Struct> {
         let mut properties = vec![];
         for prop in obj.properties(false) {
             let prop = prop?;
-            let f = prop.zfield().cast_flags()?;
+            let f = prop.cast_checked::<ZField>().cast_flags()?;
             if f.contains(EClassCastFlags::CASTCLASS_FProperty) {
-                properties.push(map_prop(&prop.cast::<ZProperty>())?);
+                properties.push(map_prop(&prop.cast_checked::<ZProperty>())?);
             }
         }
 
-        let super_struct = obj.super_struct().read()?.map(|s| s.path()).transpose()?;
+        let super_struct = obj
+            .super_struct()
+            .read()?
+            .to_ref()
+            .map(|s| s.cast_checked::<UObject>().path())
+            .transpose()?;
         Ok(Struct {
-            object: read_object(&obj.cast())?,
+            object: read_object(&obj.cast_checked::<UObject>())?,
             super_struct,
             properties,
             properties_size: obj.properties_size().read()? as usize,
-            min_alignment: obj.min_alignment().read()? as usize,
+            min_alignment: obj.get_min_alignment()? as usize,
         })
     }
 
-    fn read_script_struct<C: Ctx>(obj: &Ptr<UScriptStruct, C>) -> Result<ScriptStruct> {
+    fn read_script_struct<C: Ctx>(obj: &Ref<C, UScriptStruct>) -> Result<ScriptStruct> {
         Ok(ScriptStruct {
-            r#struct: read_struct(&obj.ustruct())?,
-            struct_flags: obj.struct_flags().read()?,
+            r#struct: read_struct(&obj.cast_checked::<UStruct>())?,
+            struct_flags: EStructFlags::from_bits(obj.struct_flags().read()? as i32).unwrap(),
         })
     }
 
-    fn read_class<C: Ctx>(obj: &Ptr<UClass, C>) -> Result<Class> {
-        let class_flags = obj.class_flags().read()?;
-        let class_cast_flags = obj.class_cast_flags().read()?;
+    fn read_class<C: Ctx>(obj: &Ref<C, UClass>) -> Result<Class> {
+        let class_flags = EClassFlags::from_bits(obj.class_flags().read()?).unwrap();
+        let class_cast_flags = EClassCastFlags::from_bits(obj.class_cast_flags().read()?).unwrap();
         let class_default_object = obj
             .class_default_object()
             .read()?
+            .to_ref()
             .map(|s| s.path())
             .transpose()?;
         Ok(Class {
-            r#struct: read_struct(&obj.cast())?,
+            r#struct: read_struct(&obj.cast_checked::<UStruct>())?,
             class_flags,
             class_cast_flags,
             class_default_object,
@@ -736,42 +808,43 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         })
     }
 
-    fn read_enum<C: Ctx>(obj: &Ptr<UEnum, C>) -> Result<Enum> {
-        Ok(Enum {
-            object: read_object(&obj.cast())?,
-            cpp_type: obj.cpp_type().read()?,
-            cpp_form: obj.cpp_form().read()?,
-            enum_flags: (obj.ctx().ue_version() >= (4, 26))
-                .then(|| obj.enum_flags().read())
-                .transpose()?,
-            names: obj.read_names()?,
-        })
-    }
+    // fn read_enum<C: Ctx>(obj: &Ref<C, UEnum>) -> Result<Enum> {
+    //     Ok(Enum {
+    //         object: read_object(&obj.cast_checked())?,
+    //         cpp_type: obj.cpp_type().read()?,
+    //         cpp_form: obj.cpp_form().read()?,
+    //         enum_flags: (obj.ctx().ue_version() >= (4, 26))
+    //             .then(|| obj.enum_flags().read())
+    //             .transpose()?,
+    //         names: obj.read_names()?,
+    //     })
+    // }
 
     if !path.starts_with("/Script/") {
         return Ok(None);
     }
-    let f = class.class_cast_flags().read()?;
+    let f = EClassCastFlags::from_bits(class.class_cast_flags().read()?).unwrap();
     let object = if f.contains(EClassCastFlags::CASTCLASS_UClass) {
-        ObjectType::Class(read_class(&obj.cast())?)
+        ObjectType::Class(read_class(&obj.cast_checked())?)
     } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
-        let full_obj = obj.cast::<UFunction>();
-        let function_flags = full_obj.function_flags().read()?;
+        let full_obj = obj.cast_checked::<UFunction>();
+        let function_flags =
+            EFunctionFlags::from_bits(full_obj.function_flags().cast_checked::<u32>().read()?)
+                .unwrap();
         ObjectType::Function(Function {
-            r#struct: read_struct(&obj.cast())?,
+            r#struct: read_struct(&obj.cast_checked())?,
             function_flags,
-            func: full_obj.func().read()? as u64,
+            func: full_obj.func().read()?.inner_ptr.opaque_ptr.address,
         })
     } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
-        ObjectType::ScriptStruct(read_script_struct(&obj.cast())?)
-    } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
-        ObjectType::Enum(read_enum(&obj.cast())?)
+        ObjectType::ScriptStruct(read_script_struct(&obj.cast_checked::<UScriptStruct>())?)
+    // } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
+    //     ObjectType::Enum(read_enum(&obj.cast_checked())?)
     } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
         ObjectType::Package(Package {
             object: read_object(&obj)?,
         })
     } else {
-        let obj = obj.cast::<UObject>();
         ObjectType::Object(read_object(&obj)?)
         //println!("{path:?} {:?}", f);
     };

@@ -1,0 +1,4 @@
+[module]
+name = "unreal"
+description = "Unreal Engine core types"
+version = "1.0.0"

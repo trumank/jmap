@@ -1,4 +1,4 @@
-use crate::{containers::PtrFNamePool, structs::StructInfo};
+use crate::containers::PtrFNamePool;
 use anyhow::{Context as _, Result};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
@@ -256,10 +256,8 @@ impl Mem for ProcessHandle {
     }
 }
 
-pub trait Ctx: Mem {
+pub trait Ctx: Mem + gospel_runtime::memory_access::Memory {
     fn fnamepool(&self) -> PtrFNamePool;
-    fn get_struct(&self, struct_name: &str) -> &StructInfo;
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
     fn ue_version(&self) -> (u16, u16);
     fn case_preserving(&self) -> bool;
 }
@@ -268,7 +266,6 @@ pub trait Ctx: Mem {
 pub struct CtxPtr<M: Mem> {
     pub mem: M,
     pub fnamepool: PtrFNamePool,
-    pub structs: Arc<HashMap<String, StructInfo>>,
     pub version: (u16, u16),
     pub case_preserving: bool,
 }
@@ -281,27 +278,24 @@ impl<M: Mem> Ctx for CtxPtr<M> {
     fn fnamepool(&self) -> PtrFNamePool {
         self.fnamepool
     }
-    fn get_struct(&self, struct_name: &str) -> &StructInfo {
-        let Some(s) = self.structs.get(struct_name) else {
-            panic!("struct {struct_name} not found");
-        };
-        s
-    }
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
-        let Some(member) = self
-            .get_struct(struct_name)
-            .members
-            .iter()
-            .find(|m| m.name == member_name)
-        else {
-            panic!("struct member {struct_name}::{member_name} not found");
-        };
-        member.offset as usize
-    }
     fn ue_version(&self) -> (u16, u16) {
         self.version
     }
     fn case_preserving(&self) -> bool {
         self.case_preserving
+    }
+}
+impl<M: Mem> gospel_runtime::memory_access::Memory for CtxPtr<M> {
+    fn address_width(&self) -> usize {
+        8
+    }
+    fn data_endianness(&self) -> gospel_runtime::memory_access::DataEndianness {
+        gospel_runtime::memory_access::DataEndianness::LittleEndian
+    }
+    fn read_chunk(&self, address: u64, buffer: &mut [u8]) -> anyhow::Result<()> {
+        self.mem.read_buf(address, buffer)
+    }
+    fn write_chunk(&self, _address: u64, _buffer: &[u8]) -> anyhow::Result<()> {
+        unimplemented!("read only")
     }
 }

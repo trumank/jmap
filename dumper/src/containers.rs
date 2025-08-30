@@ -102,12 +102,10 @@ impl<C: Clone + Ctx> Ptr<FNameEntryId, C> {
 pub struct FName;
 impl<C: Clone + Ctx> Ptr<FName, C> {
     pub fn comparison_index(&self) -> Ptr<FNameEntryId, C> {
-        let offset = self.ctx().struct_member("FName", "ComparisonIndex");
-        self.byte_offset(offset).cast()
+        todo!()
     }
     pub fn number(&self) -> Ptr<u32, C> {
-        let offset = self.ctx().struct_member("FName", "Number");
-        self.byte_offset(offset).cast()
+        todo!()
     }
 }
 impl<C: Ctx> Ptr<FName, C> {
