@@ -235,8 +235,8 @@ impl<C: MemComplete> Ptr<UEnum, C> {
             let data: Ptr<UEnumNameTuple, _> = self.names().data()?.unwrap().cast();
             let size = self.ctx().get_struct("UEnumNameTuple").size;
             let version = self.ctx().ue_version();
-            for i in (0..len).step_by(size as usize) {
-                let elm = data.byte_offset(i);
+            for i in 0..len {
+                let elm = data.byte_offset(i * size as usize);
                 let name = elm.name().read()?;
                 let value = if version < (4, 9) {
                     i as i64
