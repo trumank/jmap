@@ -5,6 +5,8 @@ mod objects;
 pub mod structs;
 mod vtable;
 
+pub use header::into_header;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 use std::sync::Arc;

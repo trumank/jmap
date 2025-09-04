@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
-use dumper::{Input, structs::Structs};
+use dumper::{Input, into_header, structs::Structs};
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use ue_reflection::ReflectionData;
 
@@ -36,13 +36,15 @@ fn main() -> Result<()> {
         Json,
         JsonGz,
         Usmap,
+        Header,
     }
 
     let output_type = match cli.output.file_name().and_then(|e| e.to_str()) {
         Some(n) if n.ends_with(".json") => OutputType::Json,
         Some(n) if n.ends_with(".json.gz") => OutputType::JsonGz,
         Some(n) if n.ends_with(".usmap") => OutputType::Usmap,
-        _ => bail!("Error: Expected .json or .usmap output type"),
+        Some(n) if n.ends_with(".h") || n.ends_with(".hpp") => OutputType::Header,
+        _ => bail!("Error: Expected .json .usmap or .hpp output type"),
     };
 
     let struct_info: Option<Structs> = if let Some(path) = cli.struct_info {
@@ -77,6 +79,10 @@ fn main() -> Result<()> {
             usmap.write(&mut std::io::BufWriter::new(std::fs::File::create(
                 cli.output,
             )?))?;
+        }
+        OutputType::Header => {
+            let header = into_header(&reflection_data);
+            std::fs::write(cli.output, header)?;
         }
     }
 
