@@ -18,8 +18,8 @@ flate2 = "1.1.2"
 gospel-compiler = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
 gospel-typelib = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
 gospel-vm = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
-rdex = { git = "https://github.com/trumank/remu64", version = "0.1.0" }
-remu64 = { git = "https://github.com/trumank/remu64", version = "0.1.0" }
+rdex = { git = "https://github.com/trumank/remu64" }
+remu64 = { git = "https://github.com/trumank/remu64" }
 memmap2 = "0.9.5"
 ordered-float = "5.0.0"
 ordermap = "0.5.5"

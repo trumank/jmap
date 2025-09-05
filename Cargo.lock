@@ -528,6 +528,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "fallible-iterator"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
+
+[[package]]
 name = "fancy-regex"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -964,7 +970,7 @@ dependencies = [
  "num-traits",
  "procfs-core 0.16.0",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "thiserror 1.0.69",
  "time",
  "tracing",
@@ -984,7 +990,7 @@ dependencies = [
  "num-traits",
  "procfs-core 0.17.0",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "thiserror 2.0.12",
  "time",
  "tracing",
@@ -1002,7 +1008,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "smart-default",
 ]
 
@@ -1017,7 +1023,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "range-map",
- "scroll",
+ "scroll 0.12.0",
  "smart-default",
 ]
 
@@ -1179,6 +1185,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "pdb"
+version = "0.8.0"
+source = "git+https://github.com/trumank/pdb#7053e702967a70f87c7a1d6598ad9a1edf6f62d1"
+dependencies = [
+ "fallible-iterator",
+ "scroll 0.11.0",
+ "uuid",
+]
+
+[[package]]
 name = "pin-project"
 version = "1.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1327,7 +1343,7 @@ dependencies = [
 [[package]]
 name = "rdex"
 version = "0.1.0"
-source = "git+https://github.com/trumank/remu64#44b67ebfe0f472faf872f3bdb1f6a6882102c772"
+source = "git+https://github.com/trumank/remu64#c8d1d62767c9a4d26591c9e51f593a08db6dbb90"
 dependencies = [
  "anyhow",
  "clap",
@@ -1335,6 +1351,7 @@ dependencies = [
  "iced-x86",
  "memmap2",
  "minidump 0.21.2",
+ "pdb",
  "remu64",
 ]
 
@@ -1391,7 +1408,7 @@ checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 [[package]]
 name = "remu64"
 version = "0.1.0"
-source = "git+https://github.com/trumank/remu64#44b67ebfe0f472faf872f3bdb1f6a6882102c772"
+source = "git+https://github.com/trumank/remu64#c8d1d62767c9a4d26591c9e51f593a08db6dbb90"
 dependencies = [
  "bitflags",
  "iced-x86",
@@ -1431,6 +1448,12 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+
+[[package]]
+name = "scroll"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04c565b551bafbef4157586fa379538366e4385d42082f255bfd96e4fe8519da"
 
 [[package]]
 name = "scroll"

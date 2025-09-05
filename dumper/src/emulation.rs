@@ -1,10 +1,10 @@
 use crate::mem::Mem;
-use remu64::error::{EmulatorError, Result};
-use remu64::memory::{MemoryRegionTrait, MemoryTrait, Permission};
 use anyhow::Result as AnyhowResult;
 use rdex::{
     ArgumentType, DumpExec, FunctionExecutor, ModuleInfo, ProcessArchitecture, ProcessTrait,
 };
+use remu64::error::{EmulatorError, Result};
+use remu64::memory::{MemoryRegionMut, MemoryRegionRef, MemoryTrait, Permission};
 use std::ops::Range;
 
 /// Memory adapter that implements amd64-emu's MemoryTrait on top of the dumper's Mem trait
@@ -21,30 +21,11 @@ impl<M: Mem> MemoryAdapter<M> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct VirtualRegion {}
-
-impl MemoryRegionTrait for VirtualRegion {
-    fn range(&self) -> Range<u64> {
-        unimplemented!()
-    }
-    fn data(&self) -> &[u8] {
-        unimplemented!()
-    }
-    fn data_mut(&mut self) -> &mut [u8] {
-        unimplemented!()
-    }
-    fn perms(&self) -> Permission {
-        unimplemented!()
-    }
-}
-
 impl<M: Mem> MemoryTrait for MemoryAdapter<M> {
-    type MemoryRegion = VirtualRegion;
-    fn find_region(&self, _addr: u64) -> Option<&Self::MemoryRegion> {
+    fn find_region(&self, _addr: u64) -> Option<MemoryRegionRef<'_>> {
         None
     }
-    fn find_region_mut(&mut self, _addr: u64) -> Option<&mut Self::MemoryRegion> {
+    fn find_region_mut(&mut self, _addr: u64) -> Option<MemoryRegionMut<'_>> {
         None
     }
     fn read(&self, addr: u64, buf: &mut [u8]) -> Result<()> {
@@ -69,9 +50,6 @@ impl<M: Mem> MemoryTrait for MemoryAdapter<M> {
     }
     fn permissions(&self, _addr: u64) -> Result<Permission> {
         Ok(Permission::ALL)
-    }
-    fn total_size(&self) -> usize {
-        usize::MAX
     }
 }
 #[derive(Clone)]
