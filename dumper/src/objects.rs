@@ -571,12 +571,11 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
         let max_per_chunk = 16 * 1024;
         let chunk_index = item / max_per_chunk;
 
-        Ok(self
-            .chunks()
+        self.chunks()
             .offset(chunk_index)
             .read()?
             .offset(item % max_per_chunk)
-            .read()?)
+            .read()
     }
 }
 #[derive(Clone, Copy)]
@@ -592,7 +591,7 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
 }
 impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
-        Ok(self.data().read()?.offset(item).read()?)
+        self.data().read()?.offset(item).read()
     }
 }
 
