@@ -7,7 +7,7 @@ use gospel_typelib::type_model::{
     ResolvedUDTMemberLayout, TargetTriplet, Type, TypeGraphLike, TypeLayoutCache,
 };
 use gospel_vm::vm::{GospelVMOptions, GospelVMRunContext, GospelVMState, GospelVMValue};
-use patternsleuth_resolvers::unreal::engine_version::EngineVersion;
+use patternsleuth::resolvers::unreal::engine_version::EngineVersion;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]

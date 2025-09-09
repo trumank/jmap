@@ -20,8 +20,7 @@ bitflags = "2.6.0"
 bytemuck = "1.21.0"
 clap = { version = "4.5.31", features = ["derive"] }
 derive-where = "1.2.7"
-patternsleuth_image = { git = "https://github.com/trumank/patternsleuth", branch = "refactor" }
-patternsleuth_resolvers = { git = "https://github.com/trumank/patternsleuth", branch = "refactor" }
+patternsleuth = { git = "https://github.com/trumank/patternsleuth" }
 pretty-hex = "0.4.1"
 read-process-memory = "0.1.6"
 serde = "1.0.216"

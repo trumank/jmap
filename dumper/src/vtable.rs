@@ -1,10 +1,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use patternsleuth_image::{MemoryAccessError, image::Image};
+use crate::mem::Mem;
+use anyhow::Result;
 use ue_reflection::ObjectType;
 
-pub fn analyze_vtables(
-    image: &Image,
+pub fn analyze_vtables<M: Mem>(
+    mem: &M,
     objects: &mut BTreeMap<String, ObjectType>,
 ) -> BTreeMap<u64, Vec<u64>> {
     let mut class_vtables: HashMap<String, u64> = HashMap::new();
@@ -23,15 +24,15 @@ pub fn analyze_vtables(
     //     println!("{i} {vtable:08x} {classes:?}");
     // }
 
-    fn read_ptr(image: &Image, addr: u64) -> Result<u64, MemoryAccessError> {
+    fn read_ptr<M: Mem>(mem: &M, addr: u64) -> Result<u64> {
         let mut buf = [0; 8];
-        image.memory.read(addr as usize, &mut buf)?;
+        mem.read_buf(addr, &mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
-    fn is_valid(image: &Image, addr: u64) -> bool {
+    fn is_valid<M: Mem>(mem: &M, addr: u64) -> bool {
         // TODO check for executable bit, not just valid memory
         let mut buf = [0; 1];
-        image.memory.read(addr as usize, &mut buf).is_ok()
+        mem.read_buf(addr, &mut buf).is_ok()
     }
 
     let mut vtables: BTreeMap<u64, Vec<u64>> = Default::default();
@@ -51,8 +52,8 @@ pub fn analyze_vtables(
                 break;
             }
 
-            if let Ok(ptr) = read_ptr(image, addr) {
-                if is_valid(image, ptr) {
+            if let Ok(ptr) = read_ptr(mem, addr) {
+                if is_valid(mem, ptr) {
                     funcs.push(ptr);
                 } else {
                     // println!("BREAK BAD FUNC PTR n={}", funcs.len());

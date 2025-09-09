@@ -236,6 +236,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
+name = "bytes"
+version = "1.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d71b6127be86fdcfddb610f7182ac57211d4b18a3e9c82eb2d17662f2227ad6a"
+
+[[package]]
 name = "cc"
 version = "1.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -313,7 +319,7 @@ version = "4.5.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09176aae279615badda0765c0c0b3f6ed53f4709118af73cf4655d85d1530cd7"
 dependencies = [
- "heck",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "syn",
@@ -482,10 +488,10 @@ dependencies = [
  "gospel-typelib",
  "gospel-vm",
  "memmap2",
+ "minidump",
  "ordered-float",
  "ordermap",
- "patternsleuth_image",
- "patternsleuth_resolvers",
+ "patternsleuth",
  "pretty-hex",
  "read-process-memory",
  "serde",
@@ -670,7 +676,7 @@ dependencies = [
  "semver",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.27.2",
  "toml",
  "walkdir",
 ]
@@ -682,7 +688,7 @@ source = "git+https://github.com/trumank/gospel#dabd9cae277a2ab42fdb74d05df733fc
 dependencies = [
  "anyhow",
  "serde",
- "strum",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -694,7 +700,7 @@ dependencies = [
  "bitcode",
  "gospel-typelib",
  "serde",
- "strum",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -714,6 +720,12 @@ name = "hashbrown"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bf151400ff0baff5465007dd2f3e717f3fe502074ca563069ce3a6629d07b289"
+
+[[package]]
+name = "heck"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "heck"
@@ -942,9 +954,9 @@ dependencies = [
 
 [[package]]
 name = "minidump"
-version = "0.24.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a30545aa9eded3d58064b370aa0efc43be2e5a3fdb14e46fe7d7f1043280090"
+checksum = "ee9ea21482e519a57bfc5df90b736f25465ef349a31c18ff2c6332a2f18474de"
 dependencies = [
  "debugid",
  "encoding_rs",
@@ -952,6 +964,7 @@ dependencies = [
  "minidump-common",
  "num-traits",
  "procfs-core",
+ "prost",
  "range-map",
  "scroll",
  "thiserror",
@@ -962,9 +975,9 @@ dependencies = [
 
 [[package]]
 name = "minidump-common"
-version = "0.24.1"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dad3a7b1bd550c5f6f181b6b0fee6794f81aef6809e71467a6170ac2c0107b7"
+checksum = "dd1e7ee92185b2f4fa67c3e5c1743057d979e145f58b4391d5481b79f0d8067c"
 dependencies = [
  "bitflags",
  "debugid",
@@ -1094,38 +1107,38 @@ dependencies = [
 ]
 
 [[package]]
-name = "patternsleuth_image"
-version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#0f098f7d51b62f437f9b82ca6ff4e0f701343064"
-dependencies = [
- "anyhow",
- "itertools 0.12.1",
- "libc",
- "minidump",
- "object",
- "patternsleuth_scanner",
- "windows",
-]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "patternsleuth_resolvers"
+name = "patternsleuth"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#0f098f7d51b62f437f9b82ca6ff4e0f701343064"
+source = "git+https://github.com/trumank/patternsleuth#4ef02462d1ebc761d03fa2d0740e57041362c5b5"
 dependencies = [
+ "anyhow",
  "futures",
  "futures-scopes",
  "iced-x86",
  "inventory",
  "itertools 0.12.1",
- "patternsleuth_image",
+ "libc",
+ "memchr",
+ "minidump",
+ "object",
+ "paste",
  "patternsleuth_scanner",
+ "rayon",
+ "strum 0.25.0",
  "tracing",
+ "windows",
 ]
 
 [[package]]
 name = "patternsleuth_scanner"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth?branch=refactor#0f098f7d51b62f437f9b82ca6ff4e0f701343064"
+source = "git+https://github.com/trumank/patternsleuth#4ef02462d1ebc761d03fa2d0740e57041362c5b5"
 dependencies = [
  "anyhow",
  "memchr",
@@ -1209,6 +1222,29 @@ checksum = "239df02d8349b06fc07398a3a1697b06418223b1c7725085e801e7c0fc6a12ec"
 dependencies = [
  "bitflags",
  "hex",
+]
+
+[[package]]
+name = "prost"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
+dependencies = [
+ "bytes",
+ "prost-derive",
+]
+
+[[package]]
+name = "prost-derive"
+version = "0.13.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
+dependencies = [
+ "anyhow",
+ "itertools 0.14.0",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1528,11 +1564,33 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "strum"
+version = "0.25.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "290d54ea6f91c969195bdbcd7442c8c2a2ba87da8bf60a7ee86a235d4bc1e125"
+dependencies = [
+ "strum_macros 0.25.3",
+]
+
+[[package]]
+name = "strum"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
 dependencies = [
- "strum_macros",
+ "strum_macros 0.27.1",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.25.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "23dc1fa9ac9c169a78ba62f0b841814b7abae11bdd047b9c58f893439e309ea0"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn",
 ]
 
 [[package]]
@@ -1541,7 +1599,7 @@ version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c77a8c5abcaf0f9ce05d62342b7d298c346515365c36b673df4ebe3ced01fde8"
 dependencies = [
- "heck",
+ "heck 0.5.0",
  "proc-macro2",
  "quote",
  "rustversion",
@@ -1748,7 +1806,7 @@ dependencies = [
  "ordermap",
  "serde",
  "serde_json",
- "strum",
+ "strum 0.27.2",
 ]
 
 [[package]]
@@ -1767,7 +1825,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "strum",
+ "strum 0.27.2",
  "tracing",
  "zstd",
 ]

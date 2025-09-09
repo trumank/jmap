@@ -16,8 +16,8 @@ use containers::{FName, FString};
 use mem::{CtxPtr, Mem, MemCache, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
-use patternsleuth_image::image::Image;
-use patternsleuth_resolvers::{impl_try_collector, resolve};
+use patternsleuth::image::Image;
+use patternsleuth::resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
     BytePropertyValue, Class, EClassCastFlags, Enum, EnumPropertyValue, Function, Object,
@@ -39,9 +39,9 @@ use crate::structs::Structs;
 impl_try_collector! {
     #[derive(Debug, PartialEq, Clone)]
     struct Resolution {
-        guobject_array: patternsleuth_resolvers::unreal::guobject_array::GUObjectArray,
-        fname_pool: patternsleuth_resolvers::unreal::fname::FNamePool,
-        engine_version: patternsleuth_resolvers::unreal::engine_version::EngineVersion,
+        guobject_array: patternsleuth::resolvers::unreal::guobject_array::GUObjectArray,
+        fname_pool: patternsleuth::resolvers::unreal::fname::FNamePool,
+        engine_version: patternsleuth::resolvers::unreal::engine_version::EngineVersion,
     }
 }
 
@@ -241,11 +241,105 @@ fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
 }
 
 #[derive(Clone)]
-struct ImgMem<'img, 'data>(&'img Image<'data>);
+struct MemoryRegion<'a> {
+    base_address: u64,
+    end_address: u64,
+    data: &'a [u8],
+}
 
-impl Mem for ImgMem<'_, '_> {
+#[derive(Clone)]
+struct MinidumpMem<'a> {
+    regions: Arc<Vec<MemoryRegion<'a>>>,
+}
+
+impl<'a> MinidumpMem<'a> {
+    fn new(minidump: &'a minidump::Minidump<'_, &'a [u8]>) -> Result<Self> {
+        use minidump::UnifiedMemory;
+
+        let mut regions = Vec::new();
+
+        let memory_list = minidump
+            .get_memory()
+            .context("No memory list in minidump")?;
+
+        for memory_region in memory_list.iter() {
+            let (base_address, bytes) = match memory_region {
+                UnifiedMemory::Memory(mem) => (mem.base_address, mem.bytes),
+                UnifiedMemory::Memory64(mem) => (mem.base_address, mem.bytes),
+            };
+
+            if !bytes.is_empty() {
+                let end_address = base_address + bytes.len() as u64;
+                regions.push(MemoryRegion {
+                    base_address,
+                    end_address,
+                    data: bytes,
+                });
+            }
+        }
+
+        regions.sort_by_key(|r| r.base_address);
+
+        Ok(MinidumpMem {
+            regions: Arc::new(regions),
+        })
+    }
+}
+
+impl Mem for MinidumpMem<'_> {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
-        self.0.memory.read(address as usize, buf)?;
+        let mut bytes_read = 0;
+        let total_bytes = buf.len();
+        let read_end_address = address + total_bytes as u64;
+
+        let start_idx = self
+            .regions
+            .binary_search_by(|region| {
+                if region.end_address <= address {
+                    std::cmp::Ordering::Less
+                } else if region.base_address > address {
+                    std::cmp::Ordering::Greater
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .unwrap_or_else(|i| i);
+
+        for region in &self.regions[start_idx..] {
+            if bytes_read >= total_bytes {
+                break;
+            }
+
+            if region.base_address >= read_end_address {
+                break;
+            }
+
+            if address < region.end_address && region.base_address < read_end_address {
+                let read_start = address.max(region.base_address);
+                let read_end = read_end_address.min(region.end_address);
+
+                if read_start < read_end {
+                    let region_offset = (read_start - region.base_address) as usize;
+                    let buf_offset = (read_start - address) as usize;
+                    let copy_len = (read_end - read_start) as usize;
+
+                    buf[buf_offset..buf_offset + copy_len]
+                        .copy_from_slice(&region.data[region_offset..region_offset + copy_len]);
+
+                    bytes_read += copy_len;
+                }
+            }
+        }
+
+        if bytes_read < total_bytes {
+            bail!(
+                "Only read {}/{} bytes starting at address 0x{:x}",
+                bytes_read,
+                total_bytes,
+                address
+            );
+        }
+
         Ok(())
     }
 }
@@ -260,16 +354,17 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData
         Input::Process(pid) => {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
-            let image = patternsleuth_image::process::external::read_image_from_pid(pid)?;
+            let image = patternsleuth::process::external::read_image_from_pid(pid)?;
             dump_inner(mem, &image, struct_info)
         }
         Input::Dump(path) => {
             let file = std::fs::File::open(path)?;
             let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
 
-            let image = patternsleuth_image::image::Image::read::<&str>(None, &mmap, None, false)?;
-            let mem = ImgMem(&image);
-            dump_inner(mem, &image, struct_info)
+            let minidump = minidump::Minidump::read(&*mmap)?;
+            let mem = MinidumpMem::new(&minidump)?;
+            let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
+            dump_inner(mem, &img, struct_info)
         }
     }
 }
@@ -328,7 +423,7 @@ fn dump_inner<M: Mem>(
         case_preserving,
     };
 
-    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0 as u64, mem);
+    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem.clone());
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
@@ -378,10 +473,10 @@ fn dump_inner<M: Mem>(
         }
     }
 
-    let vtables = vtable::analyze_vtables(image, &mut objects);
+    let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
     Ok(ReflectionData {
-        image_base_address: image.base_address as u64,
+        image_base_address: image.base_address,
         objects,
         vtables,
     })
