@@ -19,7 +19,7 @@ pub trait VirtSize<C: StructsTrait> {
 #[derive(Clone)]
 #[repr(C)]
 pub struct Ptr<T, C> {
-    address: NonZero<usize>,
+    address: NonZero<u64>,
     ctx: C,
     _type: PhantomData<T>,
 }
@@ -29,14 +29,14 @@ impl<T, C> std::fmt::Debug for Ptr<T, C> {
     }
 }
 impl<T, C> Ptr<T, C> {
-    pub fn new(address: usize, ctx: C) -> Self {
+    pub fn new(address: u64, ctx: C) -> Self {
         Self {
             address: address.try_into().unwrap(),
             ctx,
             _type: Default::default(),
         }
     }
-    pub fn new_non_zero(address: NonZero<usize>, ctx: C) -> Self {
+    pub fn new_non_zero(address: NonZero<u64>, ctx: C) -> Self {
         Self {
             address,
             ctx,
@@ -46,16 +46,22 @@ impl<T, C> Ptr<T, C> {
     pub fn ctx(&self) -> &C {
         &self.ctx
     }
+    pub fn address(&self) -> u64 {
+        self.address.get()
+    }
 }
 impl<T, C: Clone> Ptr<T, C> {
-    pub fn map(&self, map: impl FnOnce(usize) -> usize) -> Self {
+    pub fn map(&self, map: impl FnOnce(u64) -> u64) -> Self {
         Self::new(map(self.address.into()), self.ctx.clone())
     }
     pub fn cast<O>(&self) -> Ptr<O, C> {
         Ptr::new_non_zero(self.address, self.ctx.clone())
     }
     pub fn byte_offset(&self, n: usize) -> Self {
-        Self::new_non_zero(self.address.checked_add(n).unwrap(), self.ctx.clone())
+        Self::new_non_zero(
+            self.address.checked_add(n as u64).unwrap(),
+            self.ctx.clone(),
+        )
     }
 }
 impl<T: VirtSize<C>, C: Clone + StructsTrait> Ptr<T, C> {
@@ -73,7 +79,7 @@ impl<T: Pod, C: Mem> Ptr<T, C> {
 }
 impl<T, C: Mem + Clone> Ptr<Option<Ptr<T, C>>, C> {
     pub fn read(&self) -> Result<Option<Ptr<T, C>>> {
-        let addr = self.ctx.read::<usize>(self.address.into())?;
+        let addr = self.ctx.read::<u64>(self.address.into())?;
         Ok(if addr != 0 {
             Some(self.map(|_| addr).cast())
         } else {
@@ -83,7 +89,7 @@ impl<T, C: Mem + Clone> Ptr<Option<Ptr<T, C>>, C> {
 }
 impl<T, C: Mem + Clone> Ptr<Ptr<T, C>, C> {
     pub fn read(&self) -> Result<Ptr<T, C>> {
-        let addr = self.ctx.read::<usize>(self.address.into())?;
+        let addr = self.ctx.read::<u64>(self.address.into())?;
         Ok(self.map(|_| addr).cast())
     }
 }
@@ -178,14 +184,14 @@ impl<T, C: StructsTrait> VirtSize<C> for Option<Ptr<T, C>> {
 }
 
 pub trait Mem {
-    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()>;
-    fn read<T: Pod>(&self, address: usize) -> Result<T> {
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()>;
+    fn read<T: Pod>(&self, address: u64) -> Result<T> {
         let mut buf = vec![0u8; std::mem::size_of::<T>()];
         self.read_buf(address, &mut buf)?;
         T::try_from_bytes(&buf)
     }
 
-    fn read_vec<T: Pod>(&self, address: usize, count: usize) -> Result<Vec<T>> {
+    fn read_vec<T: Pod>(&self, address: u64, count: usize) -> Result<Vec<T>> {
         let size = std::mem::size_of::<T>();
         let mut buf = vec![0u8; count * size];
         self.read_buf(address, &mut buf)?;
@@ -202,7 +208,7 @@ const PAGE_SIZE: usize = 0x1000;
 #[derive(Clone)]
 pub struct MemCache<M> {
     inner: M,
-    pages: Arc<Mutex<HashMap<usize, Vec<u8>>>>,
+    pages: Arc<Mutex<HashMap<u64, Vec<u8>>>>,
 }
 impl<M: Mem> MemCache<M> {
     pub fn wrap(inner: M) -> Self {
@@ -213,15 +219,15 @@ impl<M: Mem> MemCache<M> {
     }
 }
 impl<M: Mem> Mem for MemCache<M> {
-    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         let mut remaining = buf.len();
         let mut cur = 0;
 
         let mut lock = self.pages.lock().unwrap();
 
         while remaining > 0 {
-            let page_start = (address + cur) & !(PAGE_SIZE - 1);
-            let page_offset = (address + cur) - page_start;
+            let page_start = address + (cur & !(PAGE_SIZE - 1)) as u64;
+            let page_offset = (address - page_start) as usize + cur;
             let to_copy = remaining.min(PAGE_SIZE - page_offset);
 
             let buf_region = &mut buf[cur..cur + to_copy];
@@ -244,8 +250,8 @@ impl<M: Mem> Mem for MemCache<M> {
 }
 
 impl Mem for ProcessHandle {
-    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
-        self.copy_address(address, buf)
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
+        self.copy_address(address as usize, buf)
             .with_context(|| format!("reading {} bytes at 0x{:x}", buf.len(), address))
     }
 }
@@ -259,7 +265,7 @@ pub struct Ctx<M: Mem> {
     pub case_preserving: bool,
 }
 impl<M: Mem> Mem for Ctx<M> {
-    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.mem.read_buf(address, buf)
     }
 }

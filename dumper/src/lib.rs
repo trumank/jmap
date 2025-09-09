@@ -255,8 +255,8 @@ fn map_prop<M: MemComplete>(ptr: &Ptr<ZProperty, M>) -> Result<Property> {
 struct ImgMem<'img, 'data>(&'img Image<'data>);
 
 impl Mem for ImgMem<'_, '_> {
-    fn read_buf(&self, address: usize, buf: &mut [u8]) -> Result<()> {
-        self.0.memory.read(address, buf)?;
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
+        self.0.memory.read(address as usize, buf)?;
         Ok(())
     }
 }
@@ -339,7 +339,7 @@ fn dump_inner<M: Mem + Clone>(
         case_preserving,
     };
 
-    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem);
+    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0 as u64, mem);
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
