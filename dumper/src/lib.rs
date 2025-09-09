@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use containers::{FName, FString};
-use mem::{Ctx, Mem, MemCache, NameTrait, Ptr, StructsTrait};
+use mem::{CtxPtr, Mem, MemCache, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth_image::image::Image;
@@ -26,7 +26,7 @@ use ue_reflection::{
 };
 
 use crate::containers::PtrFNamePool;
-use crate::mem::VersionTrait;
+use crate::mem::Ctx;
 use crate::objects::{
     FUObjectArray, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct, ZArrayProperty,
     ZBoolProperty, ZByteProperty, ZClassProperty, ZDelegateProperty, ZEnumProperty,
@@ -45,18 +45,7 @@ impl_try_collector! {
     }
 }
 
-// TODO
-// [ ] UStruct?
-// [ ] interfaces
-// [ ] functions signatures
-// [ ] native function pointers
-// [ ] dynamic structs
-// [ ] ue version info
-
-trait MemComplete: Mem + Clone + NameTrait + StructsTrait + VersionTrait {}
-impl<T: Mem + Clone + NameTrait + StructsTrait + VersionTrait> MemComplete for T {}
-
-fn read_path<M: MemComplete>(obj: &Ptr<UObject, M>) -> Result<String> {
+fn read_path<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<String> {
     let mut objects = vec![obj.clone()];
 
     let mut obj = obj.clone();
@@ -66,7 +55,7 @@ fn read_path<M: MemComplete>(obj: &Ptr<UObject, M>) -> Result<String> {
     }
 
     let mut path = String::new();
-    let mut prev: Option<&Ptr<UObject, M>> = None;
+    let mut prev: Option<&Ptr<UObject, C>> = None;
     for obj in objects.iter().rev() {
         if let Some(prev) = prev {
             let sep = if prev
@@ -89,7 +78,7 @@ fn read_path<M: MemComplete>(obj: &Ptr<UObject, M>) -> Result<String> {
     Ok(path)
 }
 
-fn map_prop<M: MemComplete>(ptr: &Ptr<ZProperty, M>) -> Result<Property> {
+fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
     let name = ptr.zfield().name_private().read()?;
     let f = ptr.zfield().cast_flags()?;
 
@@ -291,7 +280,7 @@ mod script_containers {
 
     #[derive(Clone, Copy)]
     pub struct FScriptArray;
-    impl<C: Clone + StructsTrait> Ptr<FScriptArray, C> {
+    impl<C: Clone + Ctx> Ptr<FScriptArray, C> {
         pub fn data(&self) -> Ptr<Option<Ptr<(), C>>, C> {
             self.byte_offset(0).cast()
         }
@@ -301,7 +290,7 @@ mod script_containers {
     }
 }
 
-fn dump_inner<M: Mem + Clone>(
+fn dump_inner<M: Mem>(
     mem: M,
     image: &Image<'_>,
     struct_info: Option<Structs>,
@@ -325,7 +314,7 @@ fn dump_inner<M: Mem + Clone>(
             })?
     };
 
-    let mem = Ctx {
+    let mem = CtxPtr {
         mem,
         fnamepool,
         structs: Arc::new(
@@ -398,15 +387,12 @@ fn dump_inner<M: Mem + Clone>(
     })
 }
 
-fn read_object<M: Mem + Clone>(
-    obj: Ptr<UObject, Ctx<M>>,
-    path: &str,
-) -> Result<Option<ObjectType>> {
+fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<ObjectType>> {
     let class = obj.class_private().read()?;
 
-    fn read_props<M: MemComplete>(
-        ustruct: &Ptr<UStruct, M>,
-        ptr: &Ptr<(), M>,
+    fn read_props<C: Ctx>(
+        ustruct: &Ptr<UStruct, C>,
+        ptr: &Ptr<(), C>,
     ) -> Result<OrderMap<String, PropertyValue>> {
         let mut properties = OrderMap::new();
         for prop in ustruct.properties(true) {
@@ -434,9 +420,9 @@ fn read_object<M: Mem + Clone>(
         }
         Ok(properties)
     }
-    fn read_prop<M: MemComplete>(
-        prop: &Ptr<ZProperty, M>,
-        ptr: &Ptr<(), M>,
+    fn read_prop<C: Ctx>(
+        prop: &Ptr<ZProperty, C>,
+        ptr: &Ptr<(), C>,
         index: usize,
     ) -> Result<Option<PropertyValue>> {
         let size = prop.element_size().read()? as usize;
@@ -595,7 +581,7 @@ fn read_object<M: Mem + Clone>(
         Ok(Some(value))
     }
 
-    fn read_object<M: MemComplete>(obj: &Ptr<UObject, M>) -> Result<Object> {
+    fn read_object<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<Object> {
         let outer = obj.outer_private().read()?.map(|s| s.path()).transpose()?;
 
         let class = obj.class_private().read()?;
@@ -611,7 +597,7 @@ fn read_object<M: Mem + Clone>(
         })
     }
 
-    fn read_struct<M: MemComplete>(obj: &Ptr<UStruct, M>) -> Result<Struct> {
+    fn read_struct<C: Ctx>(obj: &Ptr<UStruct, C>) -> Result<Struct> {
         let mut properties = vec![];
         for prop in obj.properties(false) {
             let prop = prop?;
@@ -631,14 +617,14 @@ fn read_object<M: Mem + Clone>(
         })
     }
 
-    fn read_script_struct<M: MemComplete>(obj: &Ptr<UScriptStruct, M>) -> Result<ScriptStruct> {
+    fn read_script_struct<C: Ctx>(obj: &Ptr<UScriptStruct, C>) -> Result<ScriptStruct> {
         Ok(ScriptStruct {
             r#struct: read_struct(&obj.ustruct())?,
             struct_flags: obj.struct_flags().read()?,
         })
     }
 
-    fn read_class<M: MemComplete>(obj: &Ptr<UClass, M>) -> Result<Class> {
+    fn read_class<C: Ctx>(obj: &Ptr<UClass, C>) -> Result<Class> {
         let class_flags = obj.class_flags().read()?;
         let class_cast_flags = obj.class_cast_flags().read()?;
         let class_default_object = obj
@@ -655,7 +641,7 @@ fn read_object<M: Mem + Clone>(
         })
     }
 
-    fn read_enum<M: MemComplete>(obj: &Ptr<UEnum, M>) -> Result<Enum> {
+    fn read_enum<C: Ctx>(obj: &Ptr<UEnum, C>) -> Result<Enum> {
         Ok(Enum {
             object: read_object(&obj.cast())?,
             cpp_type: obj.cpp_type().read()?,

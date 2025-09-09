@@ -12,7 +12,7 @@ use ue_reflection::{
     EPropertyFlags, EStructFlags,
 };
 
-pub trait VirtSize<C: StructsTrait> {
+pub trait VirtSize<C: Ctx> {
     fn size(ctx: &C) -> usize;
 }
 
@@ -64,7 +64,7 @@ impl<T, C: Clone> Ptr<T, C> {
         )
     }
 }
-impl<T: VirtSize<C>, C: Clone + StructsTrait> Ptr<T, C> {
+impl<T: VirtSize<C>, C: Clone + Ctx> Ptr<T, C> {
     pub fn offset(&self, n: usize) -> Self {
         self.byte_offset(n * T::size(self.ctx()))
     }
@@ -77,7 +77,7 @@ impl<T: Pod, C: Mem> Ptr<T, C> {
         self.ctx.read_vec(self.address.into(), count)
     }
 }
-impl<T, C: Mem + Clone> Ptr<Option<Ptr<T, C>>, C> {
+impl<T, C: Mem> Ptr<Option<Ptr<T, C>>, C> {
     pub fn read(&self) -> Result<Option<Ptr<T, C>>> {
         let addr = self.ctx.read::<u64>(self.address.into())?;
         Ok(if addr != 0 {
@@ -87,7 +87,7 @@ impl<T, C: Mem + Clone> Ptr<Option<Ptr<T, C>>, C> {
         })
     }
 }
-impl<T, C: Mem + Clone> Ptr<Ptr<T, C>, C> {
+impl<T, C: Mem> Ptr<Ptr<T, C>, C> {
     pub fn read(&self) -> Result<Ptr<T, C>> {
         let addr = self.ctx.read::<u64>(self.address.into())?;
         Ok(self.map(|_| addr).cast())
@@ -166,24 +166,24 @@ impl Pod for EPropertyFlags {}
 impl Pod for EEnumFlags {}
 impl Pod for ECppForm {}
 
-impl<T: Pod, C: StructsTrait> VirtSize<C> for T {
+impl<T: Pod, C: Ctx> VirtSize<C> for T {
     fn size(_ctx: &C) -> usize {
         std::mem::size_of::<Self>()
     }
 }
 
-impl<T, C: StructsTrait> VirtSize<C> for Ptr<T, C> {
+impl<T, C: Ctx> VirtSize<C> for Ptr<T, C> {
     fn size(_ctx: &C) -> usize {
         8
     }
 }
-impl<T, C: StructsTrait> VirtSize<C> for Option<Ptr<T, C>> {
+impl<T, C: Ctx> VirtSize<C> for Option<Ptr<T, C>> {
     fn size(_ctx: &C) -> usize {
         8
     }
 }
 
-pub trait Mem {
+pub trait Mem: Clone {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()>;
     fn read<T: Pod>(&self, address: u64) -> Result<T> {
         let mut buf = vec![0u8; std::mem::size_of::<T>()];
@@ -256,25 +256,31 @@ impl Mem for ProcessHandle {
     }
 }
 
+pub trait Ctx: Mem {
+    fn fnamepool(&self) -> PtrFNamePool;
+    fn get_struct(&self, struct_name: &str) -> &StructInfo;
+    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
+    fn ue_version(&self) -> (u16, u16);
+    fn case_preserving(&self) -> bool;
+}
+
 #[derive(Clone)]
-pub struct Ctx<M: Mem> {
+pub struct CtxPtr<M: Mem> {
     pub mem: M,
     pub fnamepool: PtrFNamePool,
     pub structs: Arc<HashMap<String, StructInfo>>,
     pub version: (u16, u16),
     pub case_preserving: bool,
 }
-impl<M: Mem> Mem for Ctx<M> {
+impl<M: Mem> Mem for CtxPtr<M> {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.mem.read_buf(address, buf)
     }
 }
-impl<M: Mem> NameTrait for Ctx<M> {
+impl<M: Mem> Ctx for CtxPtr<M> {
     fn fnamepool(&self) -> PtrFNamePool {
         self.fnamepool
     }
-}
-impl<M: Mem> StructsTrait for Ctx<M> {
     fn get_struct(&self, struct_name: &str) -> &StructInfo {
         let Some(s) = self.structs.get(struct_name) else {
             panic!("struct {struct_name} not found");
@@ -292,24 +298,10 @@ impl<M: Mem> StructsTrait for Ctx<M> {
         };
         member.offset as usize
     }
-}
-impl<M: Mem> VersionTrait for Ctx<M> {
     fn ue_version(&self) -> (u16, u16) {
         self.version
     }
     fn case_preserving(&self) -> bool {
         self.case_preserving
     }
-}
-
-pub trait NameTrait {
-    fn fnamepool(&self) -> PtrFNamePool;
-}
-pub trait StructsTrait {
-    fn get_struct(&self, struct_name: &str) -> &StructInfo;
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
-}
-pub trait VersionTrait {
-    fn ue_version(&self) -> (u16, u16);
-    fn case_preserving(&self) -> bool;
 }

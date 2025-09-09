@@ -1,7 +1,6 @@
 use crate::{
-    MemComplete,
     containers::{FName, FString, TArray},
-    mem::{Mem, Ptr, StructsTrait, VirtSize},
+    mem::{Ctx, Ptr, VirtSize},
     read_path,
 };
 use anyhow::Result;
@@ -18,14 +17,13 @@ macro_rules! inherit {
                 self.cast()
             }
         }
-        // TODO rethink this whole trait ordeal
-        impl<C: MemComplete> Ptr<$class, C> {
+        impl<C: Ctx> Ptr<$class, C> {
             #[allow(unused)]
             pub fn path(&self) -> Result<String> {
                 self.uobject().path()
             }
         }
-        impl<C: MemComplete> Ptr<$class, C> {
+        impl<C: Ctx> Ptr<$class, C> {
             #[allow(unused)]
             pub fn class_private(&self) -> Ptr<Ptr<UClass, C>, C> {
                 self.uobject().class_private()
@@ -71,7 +69,7 @@ macro_rules! inherit {
 
 #[derive(Clone, Copy)]
 pub struct UObject;
-impl<C: Clone + StructsTrait> Ptr<UObject, C> {
+impl<C: Ctx> Ptr<UObject, C> {
     pub fn vtable(&self) -> Ptr<usize, C> {
         self.cast()
     }
@@ -92,7 +90,7 @@ impl<C: Clone + StructsTrait> Ptr<UObject, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: MemComplete> Ptr<UObject, C> {
+impl<C: Ctx> Ptr<UObject, C> {
     pub fn path(&self) -> Result<String> {
         read_path(self)
     }
@@ -101,7 +99,7 @@ impl<C: MemComplete> Ptr<UObject, C> {
 #[derive(Clone, Copy)]
 pub struct UField;
 inherit!(UField : UObject);
-impl<C: Clone + StructsTrait> Ptr<UField, C> {
+impl<C: Ctx> Ptr<UField, C> {
     pub fn next(&self) -> Ptr<Option<Ptr<UField, C>>, C> {
         let offset = self.ctx().struct_member("UField", "Next");
         self.byte_offset(offset).cast()
@@ -111,7 +109,7 @@ impl<C: Clone + StructsTrait> Ptr<UField, C> {
 #[derive(Clone, Copy)]
 pub struct UStruct;
 inherit!(UStruct : UField);
-impl<C: Clone + StructsTrait> Ptr<UStruct, C> {
+impl<C: Ctx> Ptr<UStruct, C> {
     pub fn super_struct(&self) -> Ptr<Option<Ptr<UStruct, C>>, C> {
         let offset = self.ctx().struct_member("UStruct", "SuperStruct");
         self.byte_offset(offset).cast()
@@ -134,7 +132,7 @@ impl<C: Clone + StructsTrait> Ptr<UStruct, C> {
     }
 }
 
-impl<C: MemComplete> Ptr<UStruct, C> {
+impl<C: Ctx> Ptr<UStruct, C> {
     pub fn properties(&self, recurse_parents: bool) -> PropertyIterator<C> {
         PropertyIterator {
             current_struct: Some(self.clone()),
@@ -154,7 +152,7 @@ impl<C: MemComplete> Ptr<UStruct, C> {
 #[derive(Clone, Copy)]
 pub struct UClass;
 inherit!(UClass : UStruct);
-impl<C: Clone + StructsTrait> Ptr<UClass, C> {
+impl<C: Ctx> Ptr<UClass, C> {
     pub fn class_flags(&self) -> Ptr<EClassFlags, C> {
         let offset = self.ctx().struct_member("UClass", "ClassFlags");
         self.byte_offset(offset).cast()
@@ -172,7 +170,7 @@ impl<C: Clone + StructsTrait> Ptr<UClass, C> {
 #[derive(Clone, Copy)]
 pub struct UScriptStruct;
 inherit!(UScriptStruct : UStruct);
-impl<C: Clone + StructsTrait> Ptr<UScriptStruct, C> {
+impl<C: Ctx> Ptr<UScriptStruct, C> {
     pub fn struct_flags(&self) -> Ptr<EStructFlags, C> {
         let offset = self.ctx().struct_member("UScriptStruct", "StructFlags");
         self.byte_offset(offset).cast()
@@ -182,7 +180,7 @@ impl<C: Clone + StructsTrait> Ptr<UScriptStruct, C> {
 #[derive(Clone, Copy)]
 pub struct UFunction;
 inherit!(UFunction : UStruct);
-impl<C: Clone + StructsTrait> Ptr<UFunction, C> {
+impl<C: Ctx> Ptr<UFunction, C> {
     pub fn function_flags(&self) -> Ptr<EFunctionFlags, C> {
         let offset = self.ctx().struct_member("UFunction", "FunctionFlags");
         self.byte_offset(offset).cast()
@@ -196,7 +194,7 @@ impl<C: Clone + StructsTrait> Ptr<UFunction, C> {
 #[derive(Clone, Copy)]
 pub struct UEnum;
 inherit!(UEnum : UField);
-impl<C: Clone + StructsTrait> Ptr<UEnum, C> {
+impl<C: Ctx> Ptr<UEnum, C> {
     pub fn cpp_type(&self) -> Ptr<FString, C> {
         let offset = self.ctx().struct_member("UEnum", "CppType");
         self.byte_offset(offset).cast()
@@ -217,7 +215,7 @@ impl<C: Clone + StructsTrait> Ptr<UEnum, C> {
 }
 #[derive(Clone, Copy)]
 pub struct UEnumNameTuple;
-impl<C: Clone + StructsTrait> Ptr<UEnumNameTuple, C> {
+impl<C: Ctx> Ptr<UEnumNameTuple, C> {
     pub fn name(&self) -> Ptr<FName, C> {
         let offset = self.ctx().struct_member("UEnumNameTuple", "Name");
         self.byte_offset(offset).cast()
@@ -227,7 +225,7 @@ impl<C: Clone + StructsTrait> Ptr<UEnumNameTuple, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: MemComplete> Ptr<UEnum, C> {
+impl<C: Ctx> Ptr<UEnum, C> {
     pub fn read_names(&self) -> Result<Vec<(String, i64)>> {
         let mut names = vec![];
         let len = self.names().len()?;
@@ -254,7 +252,7 @@ impl<C: MemComplete> Ptr<UEnum, C> {
 
 #[derive(Clone, Copy)]
 pub struct ZField;
-impl<C: Clone + StructsTrait> Ptr<ZField, C> {
+impl<C: Ctx> Ptr<ZField, C> {
     pub fn next(&self) -> Ptr<Option<Ptr<ZField, C>>, C> {
         let offset = self.ctx().struct_member("ZField", "Next");
         self.byte_offset(offset).cast()
@@ -264,7 +262,7 @@ impl<C: Clone + StructsTrait> Ptr<ZField, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: MemComplete> Ptr<ZField, C> {
+impl<C: Ctx> Ptr<ZField, C> {
     pub fn cast_flags(&self) -> Result<EClassCastFlags> {
         if self.ctx().ue_version() < (4, 25) {
             // UField
@@ -281,7 +279,7 @@ impl<C: MemComplete> Ptr<ZField, C> {
 
 #[derive(Clone, Copy)]
 pub struct FFieldClass;
-impl<C: Clone + StructsTrait> Ptr<FFieldClass, C> {
+impl<C: Ctx> Ptr<FFieldClass, C> {
     pub fn cast_flags(&self) -> Ptr<EClassCastFlags, C> {
         let offset = self.ctx().struct_member("FFieldClass", "CastFlags");
         self.byte_offset(offset).cast()
@@ -291,7 +289,7 @@ impl<C: Clone + StructsTrait> Ptr<FFieldClass, C> {
 #[derive(Clone, Copy)]
 pub struct ZProperty;
 inherit!(ZProperty : ZField);
-impl<C: Clone + StructsTrait> Ptr<ZProperty, C> {
+impl<C: Ctx> Ptr<ZProperty, C> {
     pub fn array_dim(&self) -> Ptr<i32, C> {
         let offset = self.ctx().struct_member("ZProperty", "ArrayDim");
         self.byte_offset(offset).cast()
@@ -312,7 +310,7 @@ impl<C: Clone + StructsTrait> Ptr<ZProperty, C> {
 
 #[derive(Clone, Copy)]
 pub struct ZBoolProperty;
-impl<C: Clone + StructsTrait> Ptr<ZBoolProperty, C> {
+impl<C: Ctx> Ptr<ZBoolProperty, C> {
     pub fn field_size(&self) -> Ptr<u8, C> {
         let offset = self.ctx().struct_member("ZBoolProperty", "FieldSize");
         self.byte_offset(offset).cast()
@@ -332,7 +330,7 @@ impl<C: Clone + StructsTrait> Ptr<ZBoolProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZObjectProperty;
-impl<C: Clone + StructsTrait> Ptr<ZObjectProperty, C> {
+impl<C: Ctx> Ptr<ZObjectProperty, C> {
     pub fn property_class(&self) -> Ptr<Ptr<UClass, C>, C> {
         let offset = self
             .ctx()
@@ -342,7 +340,7 @@ impl<C: Clone + StructsTrait> Ptr<ZObjectProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZClassProperty;
-impl<C: Clone + StructsTrait> Ptr<ZClassProperty, C> {
+impl<C: Ctx> Ptr<ZClassProperty, C> {
     pub fn fobject_property(&self) -> Ptr<ZObjectProperty, C> {
         self.cast()
     }
@@ -353,7 +351,7 @@ impl<C: Clone + StructsTrait> Ptr<ZClassProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZSoftObjectProperty;
-impl<C: Clone + StructsTrait> Ptr<ZSoftObjectProperty, C> {
+impl<C: Ctx> Ptr<ZSoftObjectProperty, C> {
     pub fn property_class(&self) -> Ptr<Ptr<UClass, C>, C> {
         let offset = self
             .ctx()
@@ -363,7 +361,7 @@ impl<C: Clone + StructsTrait> Ptr<ZSoftObjectProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZSoftClassProperty;
-impl<C: Clone + StructsTrait> Ptr<ZSoftClassProperty, C> {
+impl<C: Ctx> Ptr<ZSoftClassProperty, C> {
     pub fn fsoft_object_property(&self) -> Ptr<ZSoftObjectProperty, C> {
         self.cast()
     }
@@ -374,7 +372,7 @@ impl<C: Clone + StructsTrait> Ptr<ZSoftClassProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZWeakObjectProperty;
-impl<C: Clone + StructsTrait> Ptr<ZWeakObjectProperty, C> {
+impl<C: Ctx> Ptr<ZWeakObjectProperty, C> {
     pub fn property_class(&self) -> Ptr<Ptr<UClass, C>, C> {
         let offset = self
             .ctx()
@@ -384,7 +382,7 @@ impl<C: Clone + StructsTrait> Ptr<ZWeakObjectProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZLazyObjectProperty;
-impl<C: Clone + StructsTrait> Ptr<ZLazyObjectProperty, C> {
+impl<C: Ctx> Ptr<ZLazyObjectProperty, C> {
     pub fn property_class(&self) -> Ptr<Ptr<UClass, C>, C> {
         let offset = self
             .ctx()
@@ -394,7 +392,7 @@ impl<C: Clone + StructsTrait> Ptr<ZLazyObjectProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZInterfaceProperty;
-impl<C: Clone + StructsTrait> Ptr<ZInterfaceProperty, C> {
+impl<C: Ctx> Ptr<ZInterfaceProperty, C> {
     pub fn interface_class(&self) -> Ptr<Ptr<UClass, C>, C> {
         let offset = self
             .ctx()
@@ -404,7 +402,7 @@ impl<C: Clone + StructsTrait> Ptr<ZInterfaceProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZArrayProperty;
-impl<C: Clone + StructsTrait> Ptr<ZArrayProperty, C> {
+impl<C: Ctx> Ptr<ZArrayProperty, C> {
     pub fn inner(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         let offset = self.ctx().struct_member("ZArrayProperty", "Inner");
         self.byte_offset(offset).cast()
@@ -412,7 +410,7 @@ impl<C: Clone + StructsTrait> Ptr<ZArrayProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZStructProperty;
-impl<C: Clone + StructsTrait> Ptr<ZStructProperty, C> {
+impl<C: Ctx> Ptr<ZStructProperty, C> {
     pub fn struct_(&self) -> Ptr<Ptr<UScriptStruct, C>, C> {
         let offset = self.ctx().struct_member("ZStructProperty", "Struct");
         self.byte_offset(offset).cast()
@@ -420,7 +418,7 @@ impl<C: Clone + StructsTrait> Ptr<ZStructProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZMapProperty;
-impl<C: Clone + StructsTrait> Ptr<ZMapProperty, C> {
+impl<C: Ctx> Ptr<ZMapProperty, C> {
     pub fn key_prop(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         let offset = self.ctx().struct_member("ZMapProperty", "KeyProp");
         self.byte_offset(offset).cast()
@@ -432,7 +430,7 @@ impl<C: Clone + StructsTrait> Ptr<ZMapProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZSetProperty;
-impl<C: Clone + StructsTrait> Ptr<ZSetProperty, C> {
+impl<C: Ctx> Ptr<ZSetProperty, C> {
     pub fn element_prop(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         let offset = self.ctx().struct_member("ZSetProperty", "ElementProp");
         self.byte_offset(offset).cast()
@@ -440,7 +438,7 @@ impl<C: Clone + StructsTrait> Ptr<ZSetProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZEnumProperty;
-impl<C: Clone + StructsTrait> Ptr<ZEnumProperty, C> {
+impl<C: Ctx> Ptr<ZEnumProperty, C> {
     pub fn underlying_prop(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         let offset = self.ctx().struct_member("ZEnumProperty", "UnderlyingProp");
         self.byte_offset(offset).cast()
@@ -452,7 +450,7 @@ impl<C: Clone + StructsTrait> Ptr<ZEnumProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZByteProperty;
-impl<C: Clone + StructsTrait> Ptr<ZByteProperty, C> {
+impl<C: Ctx> Ptr<ZByteProperty, C> {
     pub fn enum_(&self) -> Ptr<Option<Ptr<UEnum, C>>, C> {
         let offset = self.ctx().struct_member("ZByteProperty", "Enum");
         self.byte_offset(offset).cast()
@@ -460,7 +458,7 @@ impl<C: Clone + StructsTrait> Ptr<ZByteProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct FOptionalProperty;
-impl<C: Clone + StructsTrait> Ptr<FOptionalProperty, C> {
+impl<C: Ctx> Ptr<FOptionalProperty, C> {
     pub fn value_property(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         // TODO implement struct inheritence. for now calculate offset manually
         let parent = self.ctx().get_struct("ZProperty").size as usize;
@@ -473,7 +471,7 @@ impl<C: Clone + StructsTrait> Ptr<FOptionalProperty, C> {
 
 #[derive(Clone, Copy)]
 pub struct ZDelegateProperty;
-impl<C: Clone + StructsTrait> Ptr<ZDelegateProperty, C> {
+impl<C: Ctx> Ptr<ZDelegateProperty, C> {
     pub fn signature_function(&self) -> Ptr<Option<Ptr<UFunction, C>>, C> {
         let offset = self
             .ctx()
@@ -483,7 +481,7 @@ impl<C: Clone + StructsTrait> Ptr<ZDelegateProperty, C> {
 }
 #[derive(Clone, Copy)]
 pub struct ZMulticastDelegateProperty;
-impl<C: Clone + StructsTrait> Ptr<ZMulticastDelegateProperty, C> {
+impl<C: Ctx> Ptr<ZMulticastDelegateProperty, C> {
     pub fn signature_function(&self) -> Ptr<Option<Ptr<UFunction, C>>, C> {
         let offset = self
             .ctx()
@@ -494,12 +492,12 @@ impl<C: Clone + StructsTrait> Ptr<ZMulticastDelegateProperty, C> {
 
 #[derive(Clone, Copy)]
 pub struct FUObjectItem;
-impl<C: Clone + StructsTrait> Ptr<FUObjectItem, C> {
+impl<C: Ctx> Ptr<FUObjectItem, C> {
     pub fn object(&self) -> Ptr<Option<Ptr<UObject, C>>, C> {
         self.byte_offset(0).cast()
     }
 }
-impl<C: StructsTrait> VirtSize<C> for FUObjectItem {
+impl<C: Ctx> VirtSize<C> for FUObjectItem {
     fn size(ctx: &C) -> usize {
         ctx.get_struct("FUObjectItem").size as usize
     }
@@ -507,7 +505,7 @@ impl<C: StructsTrait> VirtSize<C> for FUObjectItem {
 
 #[derive(Clone, Copy)]
 pub struct FFixedUObjectArray;
-impl<C: Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
+impl<C: Ctx> Ptr<FFixedUObjectArray, C> {
     pub fn objects(&self) -> Ptr<Ptr<FUObjectItem, C>, C> {
         let offset = self.ctx().struct_member("FFixedUObjectArray", "Objects");
         self.byte_offset(offset).cast()
@@ -519,7 +517,7 @@ impl<C: Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: Mem + Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
+impl<C: Ctx> Ptr<FFixedUObjectArray, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Ptr<FUObjectItem, C>> {
         Ok(self.objects().read()?.offset(item))
     }
@@ -527,7 +525,7 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FFixedUObjectArray, C> {
 
 #[derive(Clone, Copy)]
 pub struct FChunkedFixedUObjectArray;
-impl<C: Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
+impl<C: Ctx> Ptr<FChunkedFixedUObjectArray, C> {
     pub fn objects(&self) -> Ptr<Ptr<Ptr<FUObjectItem, C>, C>, C> {
         let offset = self
             .ctx()
@@ -541,7 +539,7 @@ impl<C: Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: Mem + Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
+impl<C: Ctx> Ptr<FChunkedFixedUObjectArray, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Ptr<FUObjectItem, C>> {
         let max_per_chunk = 64 * 1024;
         let chunk_index = item / max_per_chunk;
@@ -556,7 +554,7 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FChunkedFixedUObjectArray, C> {
 }
 #[derive(Clone, Copy)]
 pub struct FUObjectArrayOld;
-impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
+impl<C: Ctx> Ptr<FUObjectArrayOld, C> {
     pub fn chunks(&self) -> Ptr<Ptr<Option<Ptr<UObject, C>>, C>, C> {
         let offset = self.ctx().struct_member("FUObjectArrayOld", "Chunks");
         self.byte_offset(offset).cast()
@@ -566,7 +564,7 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
+impl<C: Ctx> Ptr<FUObjectArrayOld, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
         let max_per_chunk = 16 * 1024;
         let chunk_index = item / max_per_chunk;
@@ -580,7 +578,7 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOld, C> {
 }
 #[derive(Clone, Copy)]
 pub struct FUObjectArrayOlder;
-impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
+impl<C: Ctx> Ptr<FUObjectArrayOlder, C> {
     pub fn data(&self) -> Ptr<Ptr<Option<Ptr<UObject, C>>, C>, C> {
         self.cast()
     }
@@ -589,7 +587,7 @@ impl<C: Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
         self.byte_offset(offset).cast()
     }
 }
-impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
+impl<C: Ctx> Ptr<FUObjectArrayOlder, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
         self.data().read()?.offset(item).read()
     }
@@ -597,13 +595,13 @@ impl<C: Mem + Clone + StructsTrait> Ptr<FUObjectArrayOlder, C> {
 
 #[derive(Clone, Copy)]
 pub struct FUObjectArray;
-impl<C: Clone + StructsTrait> Ptr<FUObjectArray, C> {
+impl<C: Ctx> Ptr<FUObjectArray, C> {
     fn obj_objects(&self) -> Ptr<(), C> {
         let offset = self.ctx().struct_member("FUObjectArray", "ObjObjects");
         self.byte_offset(offset).cast()
     }
 }
-impl<C: MemComplete> Ptr<FUObjectArray, C> {
+impl<C: Ctx> Ptr<FUObjectArray, C> {
     pub fn read_item_ptr(&self, item: usize) -> Result<Option<Ptr<UObject, C>>> {
         if self.ctx().ue_version() < (4, 8) {
             self.obj_objects()
@@ -648,13 +646,13 @@ impl<C: MemComplete> Ptr<FUObjectArray, C> {
 }
 
 #[derive(Clone)]
-pub struct PropertyIterator<C: MemComplete> {
+pub struct PropertyIterator<C: Ctx> {
     current_struct: Option<Ptr<UStruct, C>>,
     current_field: Option<Ptr<ZField, C>>,
     recurse_parents: bool,
 }
 
-impl<C: MemComplete> Iterator for PropertyIterator<C> {
+impl<C: Ctx> Iterator for PropertyIterator<C> {
     type Item = Result<Ptr<ZProperty, C>>;
 
     fn next(&mut self) -> Option<Self::Item> {
