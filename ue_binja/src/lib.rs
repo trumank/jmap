@@ -78,8 +78,6 @@ pub extern "C" fn CorePluginInit() -> bool {
 }
 
 struct Ctx<'ref_data, 'types, 'bv> {
-    header_style: HeaderStyle,
-
     bv: &'bv BinaryView,
 
     ref_data: &'ref_data ReflectionData,
@@ -158,56 +156,31 @@ pub fn into_header(
     filter: impl Fn(&str, &ObjectType) -> bool,
 ) {
     Ctx {
-        header_style: HeaderStyle::Binja,
-
         bv,
-
         ref_data,
         store: &mut TypeStore::default(),
     }
     .generate(filter)
 }
 
-#[derive(Debug, Clone, Copy)]
-enum HeaderStyle {
-    Binja,
-    C,
-}
-impl HeaderStyle {
-    fn class_name(&self) -> &'static str {
-        match self {
-            HeaderStyle::Binja => "class",
-            HeaderStyle::C => "struct",
-        }
+fn format_template(name: &str, params: impl IntoIterator<Item = impl AsRef<str>>) -> String {
+    let mut buffer = String::new();
+    buffer.push_str(name);
+
+    buffer.push('<');
+
+    let mut iter = params.into_iter();
+    if let Some(first) = iter.next() {
+        buffer.push_str(first.as_ref());
     }
-    fn format_template(
-        &self,
-        name: &str,
-        params: impl IntoIterator<Item = impl AsRef<str>>,
-    ) -> String {
-        let (c_open, c_sep, c_close) = match self {
-            HeaderStyle::Binja => ("<", ", ", ">"),
-            HeaderStyle::C => ("_", "_", "_"),
-        };
-
-        let mut buffer = String::new();
-        buffer.push_str(name);
-
-        buffer.push_str(c_open);
-
-        let mut iter = params.into_iter();
-        if let Some(first) = iter.next() {
-            buffer.push_str(first.as_ref());
-        }
-        for next in iter {
-            buffer.push_str(c_sep);
-            buffer.push_str(next.as_ref());
-        }
-
-        buffer.push_str(c_close);
-
-        buffer
+    for next in iter {
+        buffer.push_str(", ");
+        buffer.push_str(next.as_ref());
     }
+
+    buffer.push('>');
+
+    buffer
 }
 
 impl<'ref_data> Ctx<'ref_data, '_, '_> {
@@ -314,10 +287,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
     }
 
     fn type_to_string(&mut self, id: TypeId, escape: bool) -> String {
-        let escape_inner = match self.header_style {
-            HeaderStyle::Binja => escape,
-            HeaderStyle::C => false,
-        };
+        let escape_inner = escape;
         let ctype = self.store[id];
         let type_name = match ctype {
             CType::Float => TypeName::primitive("float"),
@@ -347,47 +317,44 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::TArray(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(self.header_style.format_template("TArray", [inner]))
+                TypeName::new(format_template("TArray", [inner]))
             }
             CType::TMap(k, v) => {
                 let k = self.type_to_string(k, false);
                 let v = self.type_to_string(v, false);
-                TypeName::new(self.header_style.format_template("TMap", [k, v]))
+                TypeName::new(format_template("TMap", [k, v]))
             }
             CType::TSet(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(self.header_style.format_template("TSet", [inner]))
+                TypeName::new(format_template("TSet", [inner]))
             }
             CType::Ptr(type_id) => {
                 TypeName::pointer(format!("{}*", self.type_to_string(type_id, escape_inner),))
             }
             CType::TWeakObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(self.header_style.format_template("TWeakObjectPtr", [inner]))
+                TypeName::new(format_template("TWeakObjectPtr", [inner]))
             }
             CType::TSoftObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(self.header_style.format_template("TSoftObjectPtr", [inner]))
+                TypeName::new(format_template("TSoftObjectPtr", [inner]))
             }
             CType::TLazyObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(self.header_style.format_template("TLazyObjectPtr", [inner]))
+                TypeName::new(format_template("TLazyObjectPtr", [inner]))
             }
             CType::TScriptInterface(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                TypeName::new(
-                    self.header_style
-                        .format_template("TScriptInterface", [inner]),
-                )
+                TypeName::new(format_template("TScriptInterface", [inner]))
             }
             CType::TTuple(a, b) => {
                 let a = self.type_to_string(a, false);
                 let b = self.type_to_string(b, false);
-                TypeName::new(self.header_style.format_template("TTuple", [a, b]))
+                TypeName::new(format_template("TTuple", [a, b]))
             }
             CType::TOptional(inner) => {
                 let inner = self.type_to_string(inner, false);
-                TypeName::new(self.header_style.format_template("TOptional", [inner]))
+                TypeName::new(format_template("TOptional", [inner]))
             }
 
             CType::Array(type_id, _size) => TypeName::new(self.type_to_string(type_id, false)), // handle size at struct member, not here
@@ -435,16 +402,16 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::TArray(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(&self.header_style.format_template("TArray", [inner]))
+                struct_(&format_template("TArray", [inner]))
             }
             CType::TMap(k, v) => {
                 let k = self.type_to_string(k, false);
                 let v = self.type_to_string(v, false);
-                struct_(&self.header_style.format_template("TMap", [k, v]))
+                struct_(&format_template("TMap", [k, v]))
             }
             CType::TSet(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(&self.header_style.format_template("TSet", [inner]))
+                struct_(&format_template("TSet", [inner]))
             }
             CType::Ptr(type_id) => Type::pointer(
                 &CoreArchitecture::by_name("x86_64").unwrap(),
@@ -452,32 +419,28 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             ),
             CType::TWeakObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(&self.header_style.format_template("TWeakObjectPtr", [inner]))
+                struct_(&format_template("TWeakObjectPtr", [inner]))
             }
             CType::TSoftObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(&self.header_style.format_template("TSoftObjectPtr", [inner]))
+                struct_(&format_template("TSoftObjectPtr", [inner]))
             }
             CType::TLazyObjectPtr(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(&self.header_style.format_template("TLazyObjectPtr", [inner]))
+                struct_(&format_template("TLazyObjectPtr", [inner]))
             }
             CType::TScriptInterface(type_id) => {
                 let inner = self.type_to_string(type_id, false);
-                struct_(
-                    &self
-                        .header_style
-                        .format_template("TScriptInterface", [inner]),
-                )
+                struct_(&format_template("TScriptInterface", [inner]))
             }
             CType::TTuple(a, b) => {
                 let a = self.type_to_string(a, false);
                 let b = self.type_to_string(b, false);
-                struct_(&self.header_style.format_template("TTuple", [a, b]))
+                struct_(&format_template("TTuple", [a, b]))
             }
             CType::TOptional(inner) => {
                 let inner = self.type_to_string(inner, false);
-                struct_(&self.header_style.format_template("TOptional", [inner]))
+                struct_(&format_template("TOptional", [inner]))
             }
 
             CType::Array(type_id, size) => Type::array(&self.bn_type(type_id), size as u64),
@@ -860,13 +823,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                     let iter = rest.iter().map(|e| (e, ",")).chain([(last, "")]);
                     for ((name, value), comma) in iter {
                         //let name = name.strip_prefix(&prefix).unwrap_or(&name);
-                        let name = match self.header_style {
-                            HeaderStyle::Binja => {
-                                format!("`{name}`")
-                            }
-                            HeaderStyle::C => name.replace(":", "_"),
-                        };
-                        writeln!(buffer, "    {name} = {value}{comma}",).unwrap();
+                        writeln!(buffer, "    `{name}` = {value}{comma}",).unwrap();
                     }
                 }
                 writeln!(buffer, "}};").unwrap();
@@ -936,13 +893,6 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
     fn generate(&mut self, filter: impl Fn(&str, &ObjectType) -> bool) {
         let mut buffer = String::new();
-
-        match self.header_style {
-            HeaderStyle::Binja => {}
-            HeaderStyle::C => {
-                writeln!(&mut buffer, "#include <stdint.h>\n").unwrap();
-            }
-        }
 
         // create vtable structs
         // add vtable member
