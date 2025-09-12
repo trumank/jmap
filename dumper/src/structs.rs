@@ -52,7 +52,7 @@ pub fn get_struct_info_for_version(
 
     let mut vm_state = GospelVMState::create();
 
-    let ue_version = (version.major as i32) * 100 + (version.minor as i32);
+    let ue_version = (version.major as u64) * 100 + (version.minor as u64);
     let case_preserving_flag = if case_preserving { 1 } else { 0 };
 
     let struct_names = vec![
@@ -140,7 +140,7 @@ fn eval_struct_layout(
                 let Type::UDT(udt) = &type_tree.types[type_index] else {
                     bail!("Expected UserDefinedType");
                 };
-                let layout = udt.layout(&type_tree, &mut layout_cache)?;
+                let layout = udt.layout(type_index, &type_tree, &mut layout_cache)?;
 
                 for (member, member_layout) in udt.members.iter().zip(&layout.member_layouts) {
                     if let Some(name) = member.name()
@@ -175,7 +175,7 @@ fn eval_struct_layout(
                 Type::UDT(udt) => udt,
                 _ => unreachable!(),
             }
-            .layout(&type_tree, &mut layout_cache)?;
+            .layout(type_tree.root_type_index, &type_tree, &mut layout_cache)?;
 
             let mut members = members.into_values().collect::<Vec<_>>();
             members.sort_by_key(|m| m.offset);

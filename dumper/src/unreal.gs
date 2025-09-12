@@ -28,8 +28,8 @@ type uint32_t = unsigned int;
 type int64_t = long long int;
 type uint64_t = unsigned long long int;
 
-type intptr_t = if (__address_size == 8) int64_t else int32_t;
-type uintptr_t = if (__address_size == 8) uint64_t else uint32_t;
+type intptr_t = if (sys::address_size == 8) int64_t else int32_t;
+type uintptr_t = if (sys::address_size == 8) uint64_t else uint32_t;
 
 /* Test block comment */
 template<typename T>
