@@ -65,11 +65,11 @@ fn main() -> Result<()> {
 
     match output_type {
         OutputType::Json => {
-            let mut file = BufWriter::new(File::create(cli.output)?);
+            let mut file = BufWriter::new(File::create(&cli.output)?);
             serde_json::to_writer_pretty(&mut file, &reflection_data)?;
         }
         OutputType::JsonGz => {
-            let mut file = BufWriter::new(File::create(cli.output)?);
+            let mut file = BufWriter::new(File::create(&cli.output)?);
             let mut e = flate2::write::GzEncoder::new(&mut file, flate2::Compression::default());
             serde_json::to_writer_pretty(&mut e, &reflection_data)?;
             e.finish()?;
@@ -77,14 +77,16 @@ fn main() -> Result<()> {
         OutputType::Usmap => {
             let usmap = into_usmap(&reflection_data);
             usmap.write(&mut std::io::BufWriter::new(std::fs::File::create(
-                cli.output,
+                &cli.output,
             )?))?;
         }
         OutputType::Header => {
             let header = into_header(&reflection_data);
-            std::fs::write(cli.output, header)?;
+            std::fs::write(&cli.output, header)?;
         }
     }
+
+    println!("Success! Output written to {}", cli.output.display());
 
     Ok(())
 }
