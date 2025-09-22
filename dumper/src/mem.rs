@@ -226,8 +226,8 @@ impl<M: Mem> Mem for MemCache<M> {
         let mut lock = self.pages.lock().unwrap();
 
         while remaining > 0 {
-            let page_start = address + (cur & !(PAGE_SIZE - 1)) as u64;
-            let page_offset = (address - page_start) as usize + cur;
+            let page_start = (address + cur as u64) & !(PAGE_SIZE as u64 - 1);
+            let page_offset = address as usize + cur - page_start as usize;
             let to_copy = remaining.min(PAGE_SIZE - page_offset);
 
             let buf_region = &mut buf[cur..cur + to_copy];
