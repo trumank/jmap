@@ -13,7 +13,7 @@ license.workspace = true
 bitflags = { workspace = true, features = ["bytemuck", "serde"] }
 bytemuck = { workspace = true, features = ["derive"] }
 ordered-float = { version = "5.0.0", features = ["serde"] }
-ordermap = { version = "0.5.5", features = ["serde"] }
+ordermap = { version = "0.5.12", features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 strum = { version = "0.27", features = ["derive"] }

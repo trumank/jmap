@@ -18,10 +18,10 @@ flate2 = "1.1.2"
 gospel-compiler = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
 gospel-typelib = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
 gospel-vm = { version = "0.1.0", git = "https://github.com/trumank/gospel" }
-memmap2 = "0.9.5"
+memmap2 = "0.9.8"
 minidump = "0.26.0"
 ordered-float = "5.0.0"
-ordermap = "0.5.5"
+ordermap = "0.5.12"
 patternsleuth = { workspace = true, features = ["image-pe", "process-external"] }
 pretty-hex.workspace = true
 read-process-memory.workspace = true
