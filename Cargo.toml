@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["dumper", "ue_reflection", "usmap", "ue_binja"]
+default-members = ["dumper", "ue_reflection", "usmap"]
 
 [workspace.package]
 version = "0.1.0"
