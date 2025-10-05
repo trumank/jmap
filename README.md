@@ -4,19 +4,21 @@ Work in progress collection of tools for extracting and utilizing Unreal Engine 
 
 ## [dumper](dumper)
 
+Make sure you are in the dumper project folder before running these commands.
+
 Dump from running process:
 ```console
-cargo run --release --pid 12345 output.json
+cargo run --release -- --pid 12345 output.json
 ```
 
 Dump from existing full-memory minidump:
 ```console
-cargo run --release --minidump FSD-Win64-Shipping.DMP output.json
+cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.json
 ```
 
 Or output directly to .usmap:
 ```console
-cargo run --release --minidump FSD-Win64-Shipping.DMP output.usmap
+cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.usmap
 ```
 
 ## output
