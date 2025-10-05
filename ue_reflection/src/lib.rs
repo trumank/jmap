@@ -612,17 +612,3 @@ impl From<OrderMap<String, PropertyValue>> for ValuesWrapper {
         ValuesWrapper::Value(value)
     }
 }
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn test_deser() {
-        let ref_data: ReflectionData = serde_json::from_reader(std::io::BufReader::new(
-            std::fs::File::open("../rc.json").unwrap(),
-        ))
-        .unwrap();
-        dbg!(&ref_data.objects);
-    }
-}
