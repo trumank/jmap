@@ -127,11 +127,11 @@ fn into_usmap(reflection_data: &ReflectionData) -> usmap::Usmap {
                     assert!(!name.contains("::"), "enum prefix was not stripped");
                     name
                 };
-                entries.insert(value, variant_name.to_string());
+                entries.insert(*value, variant_name.to_string());
             }
             enums.push(usmap::Enum {
                 name: obj_name(path).to_string(),
-                entries: entries.into_values().collect(),
+                entries: entries,
             });
         }
     }

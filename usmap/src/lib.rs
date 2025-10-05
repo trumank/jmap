@@ -1,7 +1,7 @@
 mod compression;
 
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     io::{Read, Seek, Write},
 };
 
@@ -241,6 +241,7 @@ pub enum PropertyInner {
     },
     Utf8Str,
     AnsiStr,
+    Unknown,
 }
 impl PropertyInner {
     fn get_type(&self) -> EPropertyType {
@@ -276,6 +277,7 @@ impl PropertyInner {
             PropertyInner::Optional { .. } => EPropertyType::OptionalProperty,
             PropertyInner::Utf8Str => EPropertyType::Utf8StrProperty,
             PropertyInner::AnsiStr => EPropertyType::AnsiStrProperty,
+            PropertyInner::Unknown => EPropertyType::Unknown,
         }
     }
 }
@@ -300,6 +302,7 @@ pub enum UsmapVersion {
     PackageVersioning,
     LongFName,
     LargeEnums,
+    ExplicitEnumValues,
 }
 impl UsmapVersion {
     #[instrument(skip_all, name = "UsmapVersion::read")]
@@ -356,7 +359,7 @@ pub struct Struct {
 pub struct Enum {
     #[serde(rename = "$key$")]
     pub name: String,
-    pub entries: Vec<String>,
+    pub entries: BTreeMap<i64, String>,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Property {
@@ -465,7 +468,7 @@ impl Usmap {
     pub fn write<S: Write>(&self, s: &mut S) -> Result<()> {
         let mut names = Names::new();
         let mut header = Header {
-            version: UsmapVersion::LargeEnums,
+            version: UsmapVersion::ExplicitEnumValues,
             //compression_method: Some(CompressionMethod::Zstd),
             compression_method: None, // disable compression because FModel/UAssetAPI parsers seem to be broken
             compressed_size: 0,
@@ -586,14 +589,20 @@ fn read_enums<S: Read>(s: &mut SerCtx<S>) -> Result<Vec<Enum>> {
 
     for _ in 0..size {
         let name = s.read_name()?;
-        let mut entries = vec![];
+        let mut entries = BTreeMap::new();
         let num_entries = if s.header.version >= UsmapVersion::LargeEnums {
             s.read_u16::<LE>()? as usize
         } else {
             s.read_u8()? as usize
         };
-        for _ in 0..num_entries {
-            entries.push(s.read_name()?);
+        for i in 0..num_entries {
+            let value = if s.header.version >= UsmapVersion::ExplicitEnumValues {
+                s.read_i64::<LE>()?
+            } else {
+                i as i64
+            };
+            let name = s.read_name()?;
+            entries.insert(value, name);
         }
         enums.push(Enum { name, entries });
     }
@@ -610,8 +619,11 @@ fn write_enums<S: Write>(s: &mut SerCtx<S>, enums: &[Enum]) -> Result<()> {
         } else {
             s.write_u8(e.entries.len().try_into().expect("enum entries too large"))?;
         }
-        for entry in &e.entries {
-            s.write_name(entry.clone())?;
+        for (value, name) in &e.entries {
+            if s.header.version >= UsmapVersion::ExplicitEnumValues {
+                s.write_i64::<LE>(*value)?;
+            }
+            s.write_name(name.clone())?;
         }
     }
     Ok(())
@@ -726,7 +738,7 @@ fn read_property_inner<S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> {
         },
         EPropertyType::Utf8StrProperty => PropertyInner::Utf8Str,
         EPropertyType::AnsiStrProperty => PropertyInner::AnsiStr,
-        EPropertyType::Unknown => todo!("Unknown"),
+        EPropertyType::Unknown => PropertyInner::Unknown,
     };
     Ok(inner)
 }
@@ -939,5 +951,9 @@ mod test {
     #[test]
     fn test_5_4() -> Result<()> {
         test_usmap("tests/5.4.3-34507850+++UE5+Release-5.4-DeepSpace7.usmap")
+    }
+    #[test]
+    fn test_explicit_enum_values() -> Result<()> {
+        test_usmap("tests/ExplicitEnumValuesExample.usmap")
     }
 }
