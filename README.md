@@ -21,6 +21,14 @@ Or output directly to .usmap:
 cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.usmap
 ```
 
+In case of message "Error: Resolution: EngineVersion: expected at least one value", set an environment variable for patternsleuth library:
+
+`$env:PATTERNSLEUTH_RES_EngineVersion="ver"` e.g. `$env:PATTERNSLEUTH_RES_EngineVersion="5.6"`
+
+In case of message like "Error: Resolution: FNamePool: found 2 unique values [7FF6DB379E00, 7FFDB90C6140]", set an environment variable for patternsleuth library:
+
+`$env:PATTERNSLEUTH_RES_FNamePool=0x<one of the found FNamePool values>` e.g. `$env:PATTERNSLEUTH_RES_FNamePool=0x7FF6DB379E00`
+
 ## output
 The output JSON is a superset of .usmap and contains enough information to fully reconstruct a matching project in the Unreal Engine editor.
 
