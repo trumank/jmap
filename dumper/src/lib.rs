@@ -583,6 +583,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
                 PropertyValue::Int64(v) => v,
                 PropertyValue::UInt16(v) => v as i64,
                 PropertyValue::UInt32(v) => v as i64,
+                PropertyValue::UInt64(v) => v as i64,
                 e => bail!("underlying enum prop {e:?}"),
             };
             let names = read_enum(&prop.enum_().read()?.expect("valid enum"))?.names;
