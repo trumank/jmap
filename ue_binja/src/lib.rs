@@ -277,6 +277,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 CType::TScriptInterface(self.store.insert(class))
             }
             PropertyType::Optional { inner } => CType::TOptional(self.prop_ctype(inner)),
+            PropertyType::Utf8Str => CType::FUtf8String,
+            PropertyType::AnsiStr => CType::FUtf8String,
         };
         let id = self.store.insert(new_type);
         if prop.array_dim == 1 {
@@ -301,6 +303,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int32 => TypeName::primitive("int32_t"),
             CType::Int64 => TypeName::primitive("int64_t"),
 
+            CType::Char => TypeName::primitive("char"),
             CType::WChar => TypeName::primitive("wchar_t"),
 
             CType::Bool => TypeName::primitive("bool"),
@@ -308,6 +311,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::FName => TypeName::new("FName"),
             CType::FString => TypeName::new("FString"),
+            CType::FUtf8String => TypeName::new("FUtf8String"),
+            CType::FAnsiString => TypeName::new("FAnsiString"),
             CType::FText => TypeName::new("FText"),
             CType::FFieldPath => TypeName::new("FFieldPath"),
             CType::MulticastInlineDelegate => TypeName::new("MulticastInlineDelegate"),
@@ -386,6 +391,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int32 => Type::int(4, true),
             CType::Int64 => Type::int(8, true),
 
+            CType::Char => Type::named_int(1, false, "char"),
             CType::WChar => Type::named_int(2, false, "wchar_t"),
 
             CType::Bool => Type::bool(),
@@ -393,6 +399,8 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
             CType::FName => struct_("FName"),
             CType::FString => struct_("FString"),
+            CType::FUtf8String => struct_("FUtf8String"),
+            CType::FAnsiString => struct_("FAnsiString"),
             CType::FText => struct_("FText"),
             CType::FFieldPath => struct_("FFieldPath"),
             CType::MulticastInlineDelegate => struct_("MulticastInlineDelegate"),
@@ -478,6 +486,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int16 => {}
             CType::Int32 => {}
             CType::Int64 => {}
+            CType::Char => {}
             CType::WChar => {}
             CType::Bool => {}
             CType::BoolBit(type_id, _field_mask) => {
@@ -486,6 +495,12 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::FName => {}
             CType::FString => {
                 dependencies.push((DepType::Full, type_fstring_data(self.store)));
+            }
+            CType::FUtf8String => {
+                dependencies.push((DepType::Full, type_futf8string_data(self.store)));
+            }
+            CType::FAnsiString => {
+                dependencies.push((DepType::Full, type_futf8string_data(self.store)));
             }
             CType::FText => {}
             CType::FFieldPath => {}
@@ -570,17 +585,20 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int16 => (2, 2),
             CType::Int32 => (4, 4),
             CType::Int64 => (8, 8),
+            CType::Char => (1, 1),
             CType::WChar => (2, 2),
             CType::Bool => (1, 1),
             CType::BoolBit(type_id, _field_mask) => self.get_type_size(type_id),
             CType::FName => (8, 4),
-            CType::FString => (16, 8),    // TODO size TArray<wchar_t>
-            CType::FText => (1, 1),       // TODO
-            CType::FFieldPath => (32, 8), // TODO
+            CType::FString => (16, 8),     // TODO size TArray<wchar_t>
+            CType::FUtf8String => (16, 8), // TODO size TArray<char>
+            CType::FAnsiString => (16, 8), // TODO size TArray<char>
+            CType::FText => (1, 1),        // TODO
+            CType::FFieldPath => (32, 8),  // TODO
             CType::MulticastInlineDelegate => (16, 8), // TODO
             CType::MulticastSparseDelegate => (1, 1), // TODO
             CType::MulticastDelegate => (1, 1), // TODO
-            CType::Delegate => (1, 1),    // TODO
+            CType::Delegate => (1, 1),     // TODO
             CType::TArray(_) => (16, 8),
             CType::TMap(k, v) => (1, 1), // TODO
             CType::TSet(k) => (1, 1),    // TODO
@@ -639,6 +657,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             CType::Int16 => {}
             CType::Int32 => {}
             CType::Int64 => {}
+            CType::Char => {}
             CType::WChar => {}
             CType::Bool => {}
             CType::BoolBit(_, _) => {}
@@ -654,6 +673,28 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
             }
             CType::FString => {
                 let data = type_fstring_data(self.store);
+                let data_name = self.type_to_string(data, true);
+                writeln!(
+                    buffer,
+                    r#"struct {this} {{
+    {data_name} data;
+}};"#
+                )
+                .unwrap();
+            }
+            CType::FUtf8String => {
+                let data = type_futf8string_data(self.store);
+                let data_name = self.type_to_string(data, true);
+                writeln!(
+                    buffer,
+                    r#"struct {this} {{
+    {data_name} data;
+}};"#
+                )
+                .unwrap();
+            }
+            CType::FAnsiString => {
+                let data = type_futf8string_data(self.store);
                 let data_name = self.type_to_string(data, true);
                 writeln!(
                     buffer,
@@ -1204,6 +1245,7 @@ enum CType<'a, T = TypeId> {
     Int32,
     Int64,
 
+    Char,
     WChar,
 
     Bool,
@@ -1211,6 +1253,8 @@ enum CType<'a, T = TypeId> {
 
     FName,
     FString,
+    FUtf8String,
+    FAnsiString,
     FText,
     FFieldPath,
     MulticastInlineDelegate,
@@ -1296,6 +1340,9 @@ fn get_bitfield_bit_index(byte_offset: u8, byte_mask: u8) -> usize {
 }
 
 fn type_fstring_data(s: &mut TypeStore<'_>) -> TypeId {
+    CType::TArray(CType::WChar.i(s)).i(s)
+}
+fn type_futf8string_data(s: &mut TypeStore<'_>) -> TypeId {
     CType::TArray(CType::WChar.i(s)).i(s)
 }
 

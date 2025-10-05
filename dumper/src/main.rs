@@ -228,5 +228,7 @@ fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyI
         PT::Optional { inner } => PI::Optional {
             inner: into_usmap_prop_inner(&inner.r#type).into(),
         },
+        PT::Utf8Str => PI::Utf8Str,
+        PT::AnsiStr => PI::AnsiStr,
     }
 }

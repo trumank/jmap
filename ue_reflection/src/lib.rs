@@ -127,64 +127,68 @@ bitflags::bitflags! {
     pub struct EClassCastFlags : u64 {
         const _ = !0;
 
-        const CASTCLASS_None = 0x0000000000000000;
-        const CASTCLASS_UField = 0x0000000000000001;
-        const CASTCLASS_FInt8Property = 0x0000000000000002;
-        const CASTCLASS_UEnum = 0x0000000000000004;
-        const CASTCLASS_UStruct = 0x0000000000000008;
-        const CASTCLASS_UScriptStruct = 0x0000000000000010;
-        const CASTCLASS_UClass = 0x0000000000000020;
-        const CASTCLASS_FByteProperty = 0x0000000000000040;
-        const CASTCLASS_FIntProperty = 0x0000000000000080;
-        const CASTCLASS_FFloatProperty = 0x0000000000000100;
-        const CASTCLASS_FUInt64Property = 0x0000000000000200;
-        const CASTCLASS_FClassProperty = 0x0000000000000400;
-        const CASTCLASS_FUInt32Property = 0x0000000000000800;
-        const CASTCLASS_FInterfaceProperty = 0x0000000000001000;
-        const CASTCLASS_FNameProperty = 0x0000000000002000;
-        const CASTCLASS_FStrProperty = 0x0000000000004000;
-        const CASTCLASS_FProperty = 0x0000000000008000;
-        const CASTCLASS_FObjectProperty = 0x0000000000010000;
-        const CASTCLASS_FBoolProperty = 0x0000000000020000;
-        const CASTCLASS_FUInt16Property = 0x0000000000040000;
-        const CASTCLASS_UFunction = 0x0000000000080000;
-        const CASTCLASS_FStructProperty = 0x0000000000100000;
-        const CASTCLASS_FArrayProperty = 0x0000000000200000;
-        const CASTCLASS_FInt64Property = 0x0000000000400000;
-        const CASTCLASS_FDelegateProperty = 0x0000000000800000;
-        const CASTCLASS_FNumericProperty = 0x0000000001000000;
-        const CASTCLASS_FMulticastDelegateProperty = 0x0000000002000000;
-        const CASTCLASS_FObjectPropertyBase = 0x0000000004000000;
-        const CASTCLASS_FWeakObjectProperty = 0x0000000008000000;
-        const CASTCLASS_FLazyObjectProperty = 0x0000000010000000;
-        const CASTCLASS_FSoftObjectProperty = 0x0000000020000000;
-        const CASTCLASS_FTextProperty = 0x0000000040000000;
-        const CASTCLASS_FInt16Property = 0x0000000080000000;
-        const CASTCLASS_FDoubleProperty = 0x0000000100000000;
-        const CASTCLASS_FSoftClassProperty = 0x0000000200000000;
-        const CASTCLASS_UPackage = 0x0000000400000000;
-        const CASTCLASS_ULevel = 0x0000000800000000;
-        const CASTCLASS_AActor = 0x0000001000000000;
-        const CASTCLASS_APlayerController = 0x0000002000000000;
-        const CASTCLASS_APawn = 0x0000004000000000;
-        const CASTCLASS_USceneComponent = 0x0000008000000000;
-        const CASTCLASS_UPrimitiveComponent = 0x0000010000000000;
-        const CASTCLASS_USkinnedMeshComponent = 0x0000020000000000;
-        const CASTCLASS_USkeletalMeshComponent = 0x0000040000000000;
-        const CASTCLASS_UBlueprint = 0x0000080000000000;
-        const CASTCLASS_UDelegateFunction = 0x0000100000000000;
-        const CASTCLASS_UStaticMeshComponent = 0x0000200000000000;
-        const CASTCLASS_FMapProperty = 0x0000400000000000;
-        const CASTCLASS_FSetProperty = 0x0000800000000000;
-        const CASTCLASS_FEnumProperty = 0x0001000000000000;
-        const CASTCLASS_USparseDelegateFunction = 0x0002000000000000;
-        const CASTCLASS_FMulticastInlineDelegateProperty = 0x0004000000000000;
-        const CASTCLASS_FMulticastSparseDelegateProperty = 0x0008000000000000;
-        const CASTCLASS_FFieldPathProperty = 0x0010000000000000;
+        const CASTCLASS_None                               = 0x0000000000000000;
+        const CASTCLASS_UField                             = 0x0000000000000001;
+        const CASTCLASS_FInt8Property                      = 0x0000000000000002;
+        const CASTCLASS_UEnum                              = 0x0000000000000004;
+        const CASTCLASS_UStruct                            = 0x0000000000000008;
+        const CASTCLASS_UScriptStruct                      = 0x0000000000000010;
+        const CASTCLASS_UClass                             = 0x0000000000000020;
+        const CASTCLASS_FByteProperty                      = 0x0000000000000040;
+        const CASTCLASS_FIntProperty                       = 0x0000000000000080;
+        const CASTCLASS_FFloatProperty                     = 0x0000000000000100;
+        const CASTCLASS_FUInt64Property                    = 0x0000000000000200;
+        const CASTCLASS_FClassProperty                     = 0x0000000000000400;
+        const CASTCLASS_FUInt32Property                    = 0x0000000000000800;
+        const CASTCLASS_FInterfaceProperty                 = 0x0000000000001000;
+        const CASTCLASS_FNameProperty                      = 0x0000000000002000;
+        const CASTCLASS_FStrProperty                       = 0x0000000000004000;
+        const CASTCLASS_FProperty                          = 0x0000000000008000;
+        const CASTCLASS_FObjectProperty                    = 0x0000000000010000;
+        const CASTCLASS_FBoolProperty                      = 0x0000000000020000;
+        const CASTCLASS_FUInt16Property                    = 0x0000000000040000;
+        const CASTCLASS_UFunction                          = 0x0000000000080000;
+        const CASTCLASS_FStructProperty                    = 0x0000000000100000;
+        const CASTCLASS_FArrayProperty                     = 0x0000000000200000;
+        const CASTCLASS_FInt64Property                     = 0x0000000000400000;
+        const CASTCLASS_FDelegateProperty                  = 0x0000000000800000;
+        const CASTCLASS_FNumericProperty                   = 0x0000000001000000;
+        const CASTCLASS_FMulticastDelegateProperty         = 0x0000000002000000;
+        const CASTCLASS_FObjectPropertyBase                = 0x0000000004000000;
+        const CASTCLASS_FWeakObjectProperty                = 0x0000000008000000;
+        const CASTCLASS_FLazyObjectProperty                = 0x0000000010000000;
+        const CASTCLASS_FSoftObjectProperty                = 0x0000000020000000;
+        const CASTCLASS_FTextProperty                      = 0x0000000040000000;
+        const CASTCLASS_FInt16Property                     = 0x0000000080000000;
+        const CASTCLASS_FDoubleProperty                    = 0x0000000100000000;
+        const CASTCLASS_FSoftClassProperty                 = 0x0000000200000000;
+        const CASTCLASS_UPackage                           = 0x0000000400000000;
+        const CASTCLASS_ULevel                             = 0x0000000800000000;
+        const CASTCLASS_AActor                             = 0x0000001000000000;
+        const CASTCLASS_APlayerController                  = 0x0000002000000000;
+        const CASTCLASS_APawn                              = 0x0000004000000000;
+        const CASTCLASS_USceneComponent                    = 0x0000008000000000;
+        const CASTCLASS_UPrimitiveComponent                = 0x0000010000000000;
+        const CASTCLASS_USkinnedMeshComponent              = 0x0000020000000000;
+        const CASTCLASS_USkeletalMeshComponent             = 0x0000040000000000;
+        const CASTCLASS_UBlueprint                         = 0x0000080000000000;
+        const CASTCLASS_UDelegateFunction                  = 0x0000100000000000;
+        const CASTCLASS_UStaticMeshComponent               = 0x0000200000000000;
+        const CASTCLASS_FMapProperty                       = 0x0000400000000000;
+        const CASTCLASS_FSetProperty                       = 0x0000800000000000;
+        const CASTCLASS_FEnumProperty                      = 0x0001000000000000;
+        const CASTCLASS_USparseDelegateFunction            = 0x0002000000000000;
+        const CASTCLASS_FMulticastInlineDelegateProperty   = 0x0004000000000000;
+        const CASTCLASS_FMulticastSparseDelegateProperty   = 0x0008000000000000;
+        const CASTCLASS_FFieldPathProperty                 = 0x0010000000000000;
         const CASTCLASS_FLargeWorldCoordinatesRealProperty = 0x0080000000000000;
-        const CASTCLASS_FOptionalProperty = 0x0100000000000000;
-        const CASTCLASS_FVerseValueProperty = 0x0200000000000000;
-        const CASTCLASS_UVerseVMClass = 0x0400000000000000;
+        const CASTCLASS_FOptionalProperty                  = 0x0100000000000000;
+        const CASTCLASS_FVerseValueProperty                = 0x0200000000000000;
+        const CASTCLASS_FVRestValueProperty                = 0x0400000000000000;
+        const CASTCLASS_FVerseStringProperty               = 0x0800000000000000;
+        const CASTCLASS_FUtf8StrProperty                   = 0x1000000000000000;
+        const CASTCLASS_FAnsiStrProperty                   = 0x2000000000000000;
+        const CASTCLASS_FVCellProperty                     = 0x4000000000000000;
     }
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
@@ -532,6 +536,10 @@ pub enum PropertyType {
     FieldPath,
     #[serde(rename = "OptionalProperty")]
     Optional { inner: Box<Property> },
+    #[serde(rename = "FUtf8StrProperty")]
+    Utf8Str,
+    #[serde(rename = "AnsiStrProperty")]
+    AnsiStr,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
@@ -565,6 +573,8 @@ pub enum PropertyValue {
     Interface(String),
     FieldPath, // TODO
     Optional(Option<Box<PropertyValue>>),
+    Utf8Str(String),
+    AnsiStr(String),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]

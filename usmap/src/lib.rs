@@ -188,6 +188,8 @@ enum EPropertyType {
     EnumProperty,
     FieldPathProperty,
     OptionalProperty,
+    Utf8StrProperty,
+    AnsiStrProperty,
 
     Unknown = 0xFF,
 }
@@ -237,6 +239,8 @@ pub enum PropertyInner {
     Optional {
         inner: Box<PropertyInner>,
     },
+    Utf8Str,
+    AnsiStr,
 }
 impl PropertyInner {
     fn get_type(&self) -> EPropertyType {
@@ -270,6 +274,8 @@ impl PropertyInner {
             PropertyInner::Enum { .. } => EPropertyType::EnumProperty,
             PropertyInner::FieldPath => EPropertyType::FieldPathProperty,
             PropertyInner::Optional { .. } => EPropertyType::OptionalProperty,
+            PropertyInner::Utf8Str => EPropertyType::Utf8StrProperty,
+            PropertyInner::AnsiStr => EPropertyType::AnsiStrProperty,
         }
     }
 }
@@ -718,6 +724,8 @@ fn read_property_inner<S: Read>(s: &mut SerCtx<S>) -> Result<PropertyInner> {
         EPropertyType::OptionalProperty => PropertyInner::Optional {
             inner: read_property_inner(s)?.into(),
         },
+        EPropertyType::Utf8StrProperty => PropertyInner::Utf8Str,
+        EPropertyType::AnsiStrProperty => PropertyInner::AnsiStr,
         EPropertyType::Unknown => todo!("Unknown"),
     };
     Ok(inner)

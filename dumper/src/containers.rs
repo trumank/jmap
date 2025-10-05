@@ -22,6 +22,21 @@ impl<C: Mem> Ptr<FString, C> {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+#[repr(transparent)]
+pub struct FUtf8String(pub TArray<u16>);
+impl<C: Mem> Ptr<FUtf8String, C> {
+    pub fn read(&self) -> Result<String> {
+        let array = self.cast::<TArray<u8>>();
+        Ok(if let Some(chars) = array.data()? {
+            let chars = chars.read_vec(array.len()?)?;
+            String::from_utf8(chars)?
+        } else {
+            "".to_string()
+        })
+    }
+}
+
 #[derive_where(Debug, Clone, Copy; T, A::ForElementType<T>)]
 #[repr(C)]
 pub struct TArray<T, A: TAlloc = TSizedHeapAllocator<32>> {

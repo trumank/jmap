@@ -25,7 +25,7 @@ use ue_reflection::{
     Struct,
 };
 
-use crate::containers::PtrFNamePool;
+use crate::containers::{FUtf8String, PtrFNamePool};
 use crate::mem::Ctx;
 use crate::objects::{
     FUObjectArray, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct, ZArrayProperty,
@@ -225,6 +225,10 @@ fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
         PropertyType::Optional {
             inner: map_prop(&prop.value_property().read()?.cast())?.into(),
         }
+    } else if f.contains(EClassCastFlags::CASTCLASS_FUtf8StrProperty) {
+        PropertyType::Utf8Str
+    } else if f.contains(EClassCastFlags::CASTCLASS_FAnsiStrProperty) {
+        PropertyType::AnsiStr
     } else {
         unimplemented!("{f:?}");
     };
@@ -670,6 +674,11 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
             return Ok(None);
         } else if f.contains(EClassCastFlags::CASTCLASS_FOptionalProperty) {
             return Ok(None);
+        } else if f.contains(EClassCastFlags::CASTCLASS_FUtf8StrProperty) {
+            PropertyValue::Utf8Str(ptr.cast::<FUtf8String>().read()?)
+        } else if f.contains(EClassCastFlags::CASTCLASS_FAnsiStrProperty) {
+            // technically needs to be C locale but probably never going to encounter non-ASCII characters anyway
+            PropertyValue::Utf8Str(ptr.cast::<FUtf8String>().read()?)
         } else {
             unimplemented!("{f:?}");
         };

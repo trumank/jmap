@@ -95,6 +95,8 @@ fn property_type_name(objects: &Objects, prop: &Property) -> String {
         PropertyType::Optional { inner } => {
             format!("TOptional<{}>", property_type_name(objects, inner))
         }
+        PropertyType::Utf8Str => "char*".into(),
+        PropertyType::AnsiStr => "char*".into(),
     }
 }
 
