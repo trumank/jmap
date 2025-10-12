@@ -1,8 +1,8 @@
 use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
 use dumper::{Input, into_header, structs::Structs};
-use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use std::io::Cursor;
+use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 use ue_reflection::ReflectionData;
 
 #[derive(Parser, Debug)]
@@ -62,7 +62,9 @@ fn main() -> Result<()> {
             serde_json::from_reader(decoder)?
         } else if filename.ends_with(".json") {
             serde_json::from_slice(&std::fs::read(path)?)?
-        } else { bail!("Error: Expected .json or .json.gz file as input"); }
+        } else {
+            bail!("Error: Expected .json or .json.gz file as input");
+        }
     } else if let Some(pid) = cli.pid {
         dumper::dump(Input::Process(pid), struct_info)?
     } else if let Some(path) = cli.minidump {

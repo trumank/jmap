@@ -20,9 +20,9 @@ use patternsleuth::image::Image;
 use patternsleuth::resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
-    BytePropertyValue, Class, EClassCastFlags, Enum, EnumPropertyValue, Function, Object,
-    ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData, ScriptStruct,
-    Struct,
+    BytePropertyValue, Class, EClassCastFlags, EObjectFlags, Enum, EnumPropertyValue, Function,
+    Object, ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData,
+    ScriptStruct, Struct,
 };
 
 use crate::containers::{FUtf8String, PtrFNamePool};
@@ -477,12 +477,12 @@ fn dump_inner<M: Mem>(
         }
     }
 
-    let vtables = vtable::analyze_vtables(&mem, &mut objects);
+    // let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
     Ok(ReflectionData {
         image_base_address: image.base_address,
         objects,
-        vtables,
+        vtables: Default::default(),
     })
 }
 
@@ -761,10 +761,14 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
     if !path.starts_with("/Script/") {
         return Ok(None);
     }
+    let object_flags = obj.object_flags().read()?;
+    let is_basic_object = object_flags.contains(EObjectFlags::RF_ArchetypeObject)
+        || object_flags.contains(EObjectFlags::RF_ClassDefaultObject);
+
     let f = class.class_cast_flags().read()?;
-    let object = if f.contains(EClassCastFlags::CASTCLASS_UClass) {
+    let object = if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UClass) {
         ObjectType::Class(read_class(&obj.cast())?)
-    } else if f.contains(EClassCastFlags::CASTCLASS_UFunction) {
+    } else if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UFunction) {
         let full_obj = obj.cast::<UFunction>();
         let function_flags = full_obj.function_flags().read()?;
         ObjectType::Function(Function {
@@ -772,11 +776,11 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
             function_flags,
             func: full_obj.func().read()? as u64,
         })
-    } else if f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
+    } else if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
         ObjectType::ScriptStruct(read_script_struct(&obj.cast())?)
-    } else if f.contains(EClassCastFlags::CASTCLASS_UEnum) {
+    } else if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UEnum) {
         ObjectType::Enum(read_enum(&obj.cast())?)
-    } else if f.contains(EClassCastFlags::CASTCLASS_UPackage) {
+    } else if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UPackage) {
         ObjectType::Package(Package {
             object: read_object(&obj)?,
         })
