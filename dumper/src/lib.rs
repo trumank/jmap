@@ -477,12 +477,12 @@ fn dump_inner<M: Mem>(
         }
     }
 
-    // let vtables = vtable::analyze_vtables(&mem, &mut objects);
+    let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
     Ok(ReflectionData {
         image_base_address: image.base_address,
         objects,
-        vtables: Default::default(),
+        vtables,
     })
 }
 
