@@ -141,7 +141,7 @@ fn into_usmap(reflection_data: &ReflectionData) -> usmap::Usmap {
             }
             enums.push(usmap::Enum {
                 name: obj_name(path).to_string(),
-                entries: entries,
+                entries,
             });
         }
     }
