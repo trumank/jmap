@@ -480,7 +480,7 @@ fn dump_inner<M: Mem>(
     let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
     Ok(ReflectionData {
-        image_base_address: image.base_address,
+        image_base_address: image.base_address.into(),
         objects,
         vtables,
     })
@@ -693,7 +693,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         let class_name = class.path()?;
 
         Ok(Object {
-            vtable: obj.vtable().read()? as u64,
+            vtable: (obj.vtable().read()? as u64).into(),
             object_flags: obj.object_flags().read()?,
             outer,
             class: class_name,
@@ -774,7 +774,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         ObjectType::Function(Function {
             r#struct: read_struct(&obj.cast())?,
             function_flags,
-            func: full_obj.func().read()? as u64,
+            func: (full_obj.func().read()? as u64).into(),
         })
     } else if !is_basic_object && f.contains(EClassCastFlags::CASTCLASS_UScriptStruct) {
         ObjectType::ScriptStruct(read_script_struct(&obj.cast())?)

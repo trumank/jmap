@@ -1041,7 +1041,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 }
 
                 if let Some(vtable) = class.instance_vtable {
-                    let vtable_addr = vtable - og_base + image_base;
+                    let vtable_addr = vtable.0 - og_base.0 + image_base;
                     let sym =
                         Symbol::builder(SymbolType::Data, &format!("{name}::vtable"), vtable_addr)
                             .create();
@@ -1064,7 +1064,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                         .enumerate()
                     {
                         vtable_func_map
-                            .entry(*func)
+                            .entry(func.0)
                             .or_default()
                             .entry(i)
                             .or_default()
@@ -1090,7 +1090,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
 
                 let owner_name = obj_name(self.ref_data, owner);
                 let func_name = format!("{owner_name}::vfunc_0x{:x}", 8 * index);
-                let func_addr = func - og_base + image_base;
+                let func_addr = func - og_base.0 + image_base;
                 let sym = Symbol::builder(SymbolType::Function, &func_name, func_addr).create();
                 self.bv.define_user_symbol(&sym);
             }
@@ -1107,7 +1107,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
                 ObjectType::ScriptStruct(script_struct) => {}
                 ObjectType::Class(class) => {}
                 ObjectType::Function(function) => {
-                    let addr = function.func - og_base + image_base;
+                    let addr = function.func.0 - og_base.0 + image_base;
 
                     let Some(outer) = function.r#struct.object.outer.as_deref() else {
                         continue;

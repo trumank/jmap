@@ -5,6 +5,75 @@ use ordered_float::OrderedFloat;
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 
+/// A pointer/address wrapper that serializes as a hex string and can deserialize from
+/// hex strings, decimal numbers, or decimal strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Pod, Zeroable)]
+#[repr(transparent)]
+pub struct Address(pub u64);
+
+impl From<u64> for Address {
+    fn from(addr: u64) -> Self {
+        Self(addr)
+    }
+}
+
+impl From<Address> for u64 {
+    fn from(value: Address) -> Self {
+        value.0
+    }
+}
+
+impl Serialize for Address {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&format!("0x{:x}", self.0))
+    }
+}
+
+impl<'de> Deserialize<'de> for Address {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct AddressVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for AddressVisitor {
+            type Value = Address;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a hex string, decimal number, or decimal string")
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                Ok(Address(value))
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                if let Some(hex_str) = value.strip_prefix("0x") {
+                    u64::from_str_radix(hex_str, 16)
+                        .map(Address)
+                        .map_err(|e| E::custom(format!("invalid hex string: {}", e)))
+                } else {
+                    value
+                        .parse::<u64>()
+                        .map(Address)
+                        .map_err(|e| E::custom(format!("invalid decimal string: {}", e)))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(AddressVisitor)
+    }
+}
+
 bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
@@ -319,14 +388,14 @@ bitflags::bitflags! {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReflectionData {
-    pub image_base_address: u64,
+    pub image_base_address: Address,
     pub objects: BTreeMap<String, ObjectType>,
-    pub vtables: BTreeMap<u64, Vec<u64>>,
+    pub vtables: BTreeMap<Address, Vec<Address>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
-    pub vtable: u64,
+    pub vtable: Address,
     pub object_flags: EObjectFlags,
     pub outer: Option<String>,
     pub class: String,
@@ -365,14 +434,14 @@ pub struct Class {
     pub class_cast_flags: EClassCastFlags,
     pub class_default_object: Option<String>,
     /// VTable ptr of any instance of this UClass if found
-    pub instance_vtable: Option<u64>,
+    pub instance_vtable: Option<Address>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Function {
     #[serde(flatten)]
     pub r#struct: Struct,
     pub function_flags: EFunctionFlags,
-    pub func: u64,
+    pub func: Address,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Enum {

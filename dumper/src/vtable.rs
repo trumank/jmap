@@ -2,14 +2,14 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::mem::Mem;
 use anyhow::Result;
-use ue_reflection::ObjectType;
+use ue_reflection::{Address, ObjectType};
 
 pub fn analyze_vtables<M: Mem>(
     mem: &M,
     objects: &mut BTreeMap<String, ObjectType>,
-) -> BTreeMap<u64, Vec<u64>> {
-    let mut class_vtables: HashMap<String, u64> = HashMap::new();
-    let mut grouped: BTreeMap<u64, HashSet<&str>> = Default::default();
+) -> BTreeMap<Address, Vec<Address>> {
+    let mut class_vtables: HashMap<String, Address> = HashMap::new();
+    let mut grouped: BTreeMap<Address, HashSet<&str>> = Default::default();
     for obj in objects.values() {
         let object = obj.get_object();
         let vtable = object.vtable;
@@ -35,7 +35,7 @@ pub fn analyze_vtables<M: Mem>(
         mem.read_buf(addr, &mut buf).is_ok()
     }
 
-    let mut vtables: BTreeMap<u64, Vec<u64>> = Default::default();
+    let mut vtables: BTreeMap<Address, Vec<Address>> = Default::default();
 
     let mut vtable_iter = grouped.iter().peekable();
     while let Some((vtable, _classes)) = vtable_iter.next() {
@@ -52,9 +52,9 @@ pub fn analyze_vtables<M: Mem>(
                 break;
             }
 
-            if let Ok(ptr) = read_ptr(mem, addr) {
+            if let Ok(ptr) = read_ptr(mem, addr.0) {
                 if is_valid(mem, ptr) {
-                    funcs.push(ptr);
+                    funcs.push(ptr.into());
                 } else {
                     // println!("BREAK BAD FUNC PTR n={}", funcs.len());
                     break;
@@ -63,7 +63,7 @@ pub fn analyze_vtables<M: Mem>(
                 // println!("BREAK BAD READ n={}", funcs.len());
                 break;
             }
-            addr += 8;
+            addr.0 += 8;
         }
         // println!("{classes:x?}");
         // println!("{funcs:x?}");
