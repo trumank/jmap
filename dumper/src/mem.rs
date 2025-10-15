@@ -131,9 +131,9 @@ impl_try_from_bytes_pod!(i8, u8, i16, u16, i32, u32, i64, u64, usize, f32, f64);
 impl_try_from_bytes_bitflags!(
     (EObjectFlags, u32),
     (EClassCastFlags, u64),
-    (EClassFlags, i32),
+    (EClassFlags, u32),
     (EFunctionFlags, u32),
-    (EStructFlags, i32),
+    (EStructFlags, u32),
     (EPropertyFlags, u64),
     (EEnumFlags, u8),
 );

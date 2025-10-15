@@ -83,7 +83,7 @@ bitflags::bitflags! {
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
-    pub struct EClassFlags: i32 {
+    pub struct EClassFlags: u32 {
         const _ = !0;
 
         const CLASS_None = 0x0000;
@@ -118,7 +118,7 @@ bitflags::bitflags! {
         const CLASS_Intrinsic = 0x10000000;
         const CLASS_Constructed = 0x20000000;
         const CLASS_ConfigDoNotCheckDefaults = 0x40000000;
-        const CLASS_NewerVersionExists = i32::MIN;
+        const CLASS_NewerVersionExists = i32::MIN as u32;
     }
 
 
@@ -193,7 +193,7 @@ bitflags::bitflags! {
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
-    pub struct  EPropertyFlags: u64 {
+    pub struct EPropertyFlags: u64 {
         const _ = !0;
 
         const CPF_None = 0x0000;
@@ -277,7 +277,7 @@ bitflags::bitflags! {
 
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
-    pub struct EStructFlags: i32 {
+    pub struct EStructFlags: u32 {
         const _ = !0;
 
         const STRUCT_NoFlags = 0x0000;
@@ -310,6 +310,8 @@ bitflags::bitflags! {
     #[derive(Debug, Clone, Copy, Serialize, Deserialize, Pod, Zeroable)]
     #[repr(C)]
     pub struct EEnumFlags : u8 {
+        const _ = !0;
+
         const Flags = 0x00000001;
         const NewerVersionExists = 0x00000002;
     }
