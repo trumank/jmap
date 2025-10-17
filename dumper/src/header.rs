@@ -1,7 +1,10 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use ue_reflection::{EClassCastFlags, ObjectType, Property, PropertyType, ReflectionData, Struct};
+use ue_reflection::{
+    EClassCastFlags, EFunctionFlags, EPropertyFlags, Function, ObjectType, Property, PropertyType,
+    ReflectionData, Struct,
+};
 
 type Objects = BTreeMap<String, ObjectType>;
 
@@ -25,6 +28,24 @@ fn get_class_name(objects: &Objects, path: &str) -> String {
         }
         _ => name.into(),
     }
+}
+
+fn get_class_functions<'a>(
+    objects: &'a Objects,
+    class_obj: &'a Struct,
+) -> Vec<(&'a String, &'a Function)> {
+    class_obj
+        .object
+        .children
+        .iter()
+        .filter_map(|child_path| {
+            if let Some(ObjectType::Function(func)) = objects.get(child_path) {
+                Some((child_path, func))
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn property_type_name(objects: &Objects, prop: &Property) -> String {
@@ -100,6 +121,72 @@ fn property_type_name(objects: &Objects, prop: &Property) -> String {
     }
 }
 
+fn generate_function(buffer: &mut String, objects: &Objects, path: &str, func: &Function) {
+    let name = path.rsplit(['/', '.', ':']).next().unwrap();
+
+    // Find return type (property with CPF_ReturnParm)
+    let return_prop = func
+        .r#struct
+        .properties
+        .iter()
+        .find(|p| p.flags.contains(EPropertyFlags::CPF_ReturnParm));
+
+    let return_type = if let Some(ret) = return_prop {
+        property_type_name(objects, ret)
+    } else {
+        "void".to_string()
+    };
+
+    // Get parameters (CPF_Parm but not CPF_ReturnParm)
+    let params: Vec<String> = func
+        .r#struct
+        .properties
+        .iter()
+        .filter(|p| {
+            p.flags.contains(EPropertyFlags::CPF_Parm)
+                && !p.flags.contains(EPropertyFlags::CPF_ReturnParm)
+        })
+        .map(|p| {
+            let type_name = property_type_name(objects, p);
+            let is_out = p.flags.contains(EPropertyFlags::CPF_OutParm);
+            let is_const = p.flags.contains(EPropertyFlags::CPF_ConstParm);
+
+            // Build parameter with modifiers
+            let mut param = String::new();
+            if is_const {
+                param.push_str("const ");
+            }
+            param.push_str(&type_name);
+            if is_out {
+                param.push_str("&");
+            }
+            param.push(' ');
+            param.push_str(&p.name);
+            param
+        })
+        .collect();
+
+    // Function qualifiers
+    let is_static = func.function_flags.contains(EFunctionFlags::FUNC_Static);
+    let is_const = func.function_flags.contains(EFunctionFlags::FUNC_Const);
+
+    // Write function declaration
+    write!(buffer, "    ").unwrap();
+    if is_static {
+        write!(buffer, "static ").unwrap();
+    }
+    write!(buffer, "{} {}(", return_type, name).unwrap();
+    write!(buffer, "{}", params.join(", ")).unwrap();
+    write!(buffer, ")").unwrap();
+
+    // Add const after parameters if it's an instance method
+    if is_const && !is_static {
+        write!(buffer, " const").unwrap();
+    }
+
+    writeln!(buffer, ";").unwrap();
+}
+
 fn generate_struct_or_class(
     buffer: &mut String,
     objects: &Objects,
@@ -133,6 +220,14 @@ fn generate_struct_or_class(
             prop.offset, type_name, prop.name, array_suffix
         )
         .unwrap();
+    }
+
+    let functions = get_class_functions(objects, struct_obj);
+    if !functions.is_empty() {
+        writeln!(buffer).unwrap();
+        for (func_path, func) in functions {
+            generate_function(buffer, objects, func_path, func);
+        }
     }
 
     writeln!(buffer, "}};").unwrap();
