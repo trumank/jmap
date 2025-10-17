@@ -28,5 +28,12 @@ pretty-hex.workspace = true
 read-process-memory.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+time = "0.3.44"
 ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
 usmap = { version = "0.1.0", path = "../usmap" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62.2", features = ["Win32_System_Diagnostics_ToolHelp"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+proc-maps = "0.4.0"

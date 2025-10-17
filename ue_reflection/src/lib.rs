@@ -388,9 +388,20 @@ bitflags::bitflags! {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReflectionData {
+    pub metadata: Option<Metadata>,
     pub image_base_address: Address,
     pub objects: BTreeMap<String, ObjectType>,
     pub vtables: BTreeMap<Address, Vec<Address>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Metadata {
+    /// Name or URL of tool used create the reflection data dump
+    pub tool: String,
+    /// ISO 8601
+    pub timestamp: String,
+    /// Name of data source
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,6 +2,7 @@ mod containers;
 mod header;
 mod mem;
 mod objects;
+mod proc_name;
 pub mod structs;
 mod vtable;
 
@@ -21,7 +22,7 @@ use patternsleuth::resolvers::{impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
     BytePropertyValue, Class, EClassCastFlags, EObjectFlags, Enum, EnumPropertyValue, Function,
-    Object, ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData,
+    Metadata, Object, ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData,
     ScriptStruct, Struct,
 };
 
@@ -356,19 +357,23 @@ pub enum Input {
 pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
     match input {
         Input::Process(pid) => {
+            let source_name = proc_name::get_process_name(pid).unwrap_or_default();
+
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image, struct_info)
+            dump_inner(mem, &image, struct_info, &source_name)
         }
         Input::Dump(path) => {
-            let file = std::fs::File::open(path)?;
+            let source_name = path.file_name().unwrap_or_default().to_string_lossy();
+
+            let file = std::fs::File::open(&path)?;
             let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
 
             let minidump = minidump::Minidump::read(&*mmap)?;
             let mem = MinidumpMem::new(&minidump)?;
             let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
-            dump_inner(mem, &img, struct_info)
+            dump_inner(mem, &img, struct_info, &source_name)
         }
     }
 }
@@ -393,6 +398,7 @@ fn dump_inner<M: Mem>(
     mem: M,
     image: &Image<'_>,
     struct_info: Option<Structs>,
+    source_name: &str,
 ) -> Result<ReflectionData> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
@@ -480,6 +486,11 @@ fn dump_inner<M: Mem>(
     let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
     Ok(ReflectionData {
+        metadata: Some(Metadata {
+            tool: "https://github.com/trumank/meatloaf".to_string(),
+            timestamp: time::OffsetDateTime::now_utc().to_string(),
+            source: source_name.to_string(),
+        }),
         image_base_address: image.base_address.into(),
         objects,
         vtables,
