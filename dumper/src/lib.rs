@@ -18,12 +18,12 @@ use mem::{CtxPtr, Mem, MemCache, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth::image::Image;
-use patternsleuth::resolvers::{impl_try_collector, resolve};
+use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
-    BytePropertyValue, Class, EClassCastFlags, EObjectFlags, Enum, EnumPropertyValue, Function,
-    Metadata, Object, ObjectType, Package, Property, PropertyType, PropertyValue, ReflectionData,
-    ScriptStruct, Struct,
+    BytePropertyValue, Class, EClassCastFlags, EObjectFlags, EngineVersion, Enum,
+    EnumPropertyValue, Function, Metadata, Object, ObjectType, Package, Property, PropertyType,
+    PropertyValue, ReflectionData, ScriptStruct, Struct,
 };
 
 use crate::containers::{FUtf8String, PtrFNamePool};
@@ -43,6 +43,14 @@ impl_try_collector! {
         guobject_array: patternsleuth::resolvers::unreal::guobject_array::GUObjectArray,
         fname_pool: patternsleuth::resolvers::unreal::fname::FNamePool,
         engine_version: patternsleuth::resolvers::unreal::engine_version::EngineVersion,
+        opt: OptResolution,
+    }
+}
+
+impl_collector! {
+    #[derive(Debug, PartialEq, Clone)]
+    struct OptResolution {
+        build: patternsleuth::resolvers::unreal::engine_version::BuildChangeList,
     }
 }
 
@@ -490,6 +498,11 @@ fn dump_inner<M: Mem>(
             tool: "https://github.com/trumank/meatloaf".to_string(),
             timestamp: time::OffsetDateTime::now_utc().to_string(),
             source: source_name.to_string(),
+            engine_version: EngineVersion {
+                major: results.engine_version.major,
+                minor: results.engine_version.minor,
+            },
+            build_change_list: results.opt.build.as_ref().ok().map(|cl| cl.0.clone()),
         }),
         image_base_address: image.base_address.into(),
         objects,

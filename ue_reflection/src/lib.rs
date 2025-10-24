@@ -402,6 +402,14 @@ pub struct Metadata {
     pub timestamp: String,
     /// Name of data source
     pub source: String,
+    pub engine_version: EngineVersion,
+    pub build_change_list: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EngineVersion {
+    pub major: u16,
+    pub minor: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
