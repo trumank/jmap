@@ -1,5 +1,5 @@
 [package]
-name = "dumper"
+name = "jmap_dumper"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,7 +8,7 @@ homepage.workspace = true
 description.workspace = true
 keywords.workspace = true
 license.workspace = true
-default-run = "dumper"
+default-run = "jmap_dumper"
 
 [dependencies]
 anyhow.workspace = true
@@ -29,7 +29,7 @@ read-process-memory.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 time = "0.3.44"
-ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
+jmap = { version = "0.1.0", path = "../jmap" }
 usmap = { version = "0.1.0", path = "../usmap" }
 
 [target.'cfg(target_os = "windows")'.dependencies]

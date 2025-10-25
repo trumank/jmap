@@ -14,17 +14,17 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
 use containers::{FName, FString};
+use jmap::{
+    BytePropertyValue, Class, EClassCastFlags, EObjectFlags, EngineVersion, Enum,
+    EnumPropertyValue, Function, Jmap, Metadata, Object, ObjectType, Package, Property,
+    PropertyType, PropertyValue, ScriptStruct, Struct,
+};
 use mem::{CtxPtr, Mem, MemCache, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth::image::Image;
 use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
-use ue_reflection::{
-    BytePropertyValue, Class, EClassCastFlags, EObjectFlags, EngineVersion, Enum,
-    EnumPropertyValue, Function, Jmap, Metadata, Object, ObjectType, Package, Property,
-    PropertyType, PropertyValue, ScriptStruct, Struct,
-};
 
 use crate::containers::{FUtf8String, PtrFNamePool};
 use crate::mem::Ctx;

@@ -2,7 +2,7 @@
 
 JSON based format for storing UObject reflection data, vtable layouts, version information, among other things extracted from compiled Unreal Engine binaries.
 
-## [dumper](dumper)
+## [jmap_dumper](jmap_dumper)
 
 Dump from running process:
 ```console
@@ -36,7 +36,7 @@ It contains:
 
 It also does light VTables analysis and dumps approximate VTables for all UObjects found.
 
-## [ue_reflection](jmap)
+## [jmap](jmap)
 Crate for reading/writing .jmap files.
 
 ## [usmap](usmap)

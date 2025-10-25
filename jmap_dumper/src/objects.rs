@@ -4,7 +4,7 @@ use crate::{
     read_path,
 };
 use anyhow::Result;
-use ue_reflection::{
+use jmap::{
     EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
     EPropertyFlags, EStructFlags,
 };

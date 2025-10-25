@@ -1,15 +1,15 @@
 [workspace]
 resolver = "2"
-members = ["dumper", "ue_reflection", "usmap", "ue_binja"]
-default-members = ["dumper", "ue_reflection", "usmap"]
+members = ["jmap_dumper", "jmap", "usmap", "ue_binja"]
+default-members = ["jmap_dumper", "jmap", "usmap"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 authors = ["trumank"]
-repository = "https://github.com/trumank/ue-containers"
-homepage = "https://github.com/trumank/ue-containers"
-description = "Unreal Engine core reflection/container stuff"
+repository = "https://github.com/trumank/jmap"
+homepage = "https://github.com/trumank/jmap"
+description = "Unreal Engine reflection data extractor"
 keywords = ["unreal-engine"]
 license = "MIT"
 

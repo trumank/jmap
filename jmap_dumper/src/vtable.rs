@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::mem::Mem;
 use anyhow::Result;
-use ue_reflection::{Address, ObjectType};
+use jmap::{Address, ObjectType};
 
 pub fn analyze_vtables<M: Mem>(
     mem: &M,

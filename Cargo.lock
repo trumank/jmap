@@ -518,34 +518,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dumper"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bytemuck",
- "clap",
- "derive-where",
- "flate2",
- "gospel-compiler",
- "gospel-typelib",
- "gospel-vm",
- "memmap2",
- "minidump",
- "ordered-float",
- "ordermap",
- "patternsleuth",
- "pretty-hex",
- "proc-maps",
- "read-process-memory",
- "serde",
- "serde_json",
- "time",
- "ue_reflection",
- "usmap",
- "windows 0.62.2",
-]
-
-[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -919,6 +891,47 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
+
+[[package]]
+name = "jmap"
+version = "0.1.0"
+dependencies = [
+ "bitflags",
+ "bytemuck",
+ "ordered-float",
+ "ordermap",
+ "serde",
+ "serde_json",
+ "strum 0.27.2",
+]
+
+[[package]]
+name = "jmap_dumper"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytemuck",
+ "clap",
+ "derive-where",
+ "flate2",
+ "gospel-compiler",
+ "gospel-typelib",
+ "gospel-vm",
+ "jmap",
+ "memmap2",
+ "minidump",
+ "ordered-float",
+ "ordermap",
+ "patternsleuth",
+ "pretty-hex",
+ "proc-maps",
+ "read-process-memory",
+ "serde",
+ "serde_json",
+ "time",
+ "usmap",
+ "windows 0.62.2",
+]
 
 [[package]]
 name = "jobserver"
@@ -1983,22 +1996,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "binaryninja",
+ "jmap",
  "log",
  "serde_json",
- "ue_reflection",
-]
-
-[[package]]
-name = "ue_reflection"
-version = "0.1.0"
-dependencies = [
- "bitflags",
- "bytemuck",
- "ordered-float",
- "ordermap",
- "serde",
- "serde_json",
- "strum 0.27.2",
 ]
 
 [[package]]

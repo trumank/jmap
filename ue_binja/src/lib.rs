@@ -18,7 +18,7 @@ use binaryninja::{
 };
 use log::{error, info};
 
-use ue_reflection::{Class, EClassCastFlags, Jmap, ObjectType, Property, PropertyType, Struct};
+use jmap::{Class, EClassCastFlags, Jmap, ObjectType, Property, PropertyType, Struct};
 
 struct ImportCommand {}
 impl Command for ImportCommand {

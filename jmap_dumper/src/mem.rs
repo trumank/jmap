@@ -1,15 +1,15 @@
 use crate::{containers::PtrFNamePool, structs::StructInfo};
 use anyhow::{Context as _, Result};
+use jmap::{
+    EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
+    EPropertyFlags, EStructFlags,
+};
 use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
     collections::HashMap,
     marker::PhantomData,
     num::NonZero,
     sync::{Arc, Mutex},
-};
-use ue_reflection::{
-    EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
-    EPropertyFlags, EStructFlags,
 };
 
 pub trait VirtSize<C: Ctx> {

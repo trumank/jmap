@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 use std::fmt::Write;
 
-use ue_reflection::{
-    EClassCastFlags, EFunctionFlags, EPropertyFlags, Function, ObjectType, Property, PropertyType,
-    Jmap, Struct,
+use jmap::{
+    EClassCastFlags, EFunctionFlags, EPropertyFlags, Function, Jmap, ObjectType, Property,
+    PropertyType, Struct,
 };
 
 type Objects = BTreeMap<String, ObjectType>;

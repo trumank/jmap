@@ -1,5 +1,5 @@
 [package]
-name = "ue_reflection"
+name = "jmap"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

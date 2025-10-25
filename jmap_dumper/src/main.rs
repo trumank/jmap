@@ -1,9 +1,9 @@
 use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
-use dumper::{Input, into_header, structs::Structs};
+use jmap::Jmap;
+use jmap_dumper::{Input, into_header, structs::Structs};
 use std::io::Cursor;
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
-use ue_reflection::Jmap;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None,
@@ -66,9 +66,9 @@ fn main() -> Result<()> {
             bail!("Error: Expected .jmap or .jmap.gz file as input");
         }
     } else if let Some(pid) = cli.pid {
-        dumper::dump(Input::Process(pid), struct_info)?
+        jmap_dumper::dump(Input::Process(pid), struct_info)?
     } else if let Some(path) = cli.minidump {
-        dumper::dump(Input::Dump(path), struct_info)?
+        jmap_dumper::dump(Input::Dump(path), struct_info)?
     } else {
         unreachable!();
     };
@@ -111,8 +111,8 @@ fn into_usmap(reflection_data: &Jmap) -> usmap::Usmap {
 
     for (path, obj) in &reflection_data.objects {
         let struct_ = match &obj {
-            ue_reflection::ObjectType::ScriptStruct(obj) => Some(&obj.r#struct),
-            ue_reflection::ObjectType::Class(obj) => Some(&obj.r#struct),
+            jmap::ObjectType::ScriptStruct(obj) => Some(&obj.r#struct),
+            jmap::ObjectType::Class(obj) => Some(&obj.r#struct),
             _ => None,
         };
         if let Some(s) = struct_ {
@@ -156,7 +156,7 @@ fn into_usmap(reflection_data: &Jmap) -> usmap::Usmap {
     }
 }
 
-fn into_usmap_prop(index: usize, prop: &ue_reflection::Property) -> usmap::Property {
+fn into_usmap_prop(index: usize, prop: &jmap::Property) -> usmap::Property {
     usmap::Property {
         name: prop.name.clone(),
         array_dim: prop.array_dim.try_into().unwrap(),
@@ -165,8 +165,8 @@ fn into_usmap_prop(index: usize, prop: &ue_reflection::Property) -> usmap::Prope
     }
 }
 
-fn into_usmap_prop_inner(prop: &ue_reflection::PropertyType) -> usmap::PropertyInner {
-    use ue_reflection::PropertyType as PT;
+fn into_usmap_prop_inner(prop: &jmap::PropertyType) -> usmap::PropertyInner {
+    use jmap::PropertyType as PT;
     use usmap::PropertyInner as PI;
     match &prop {
         PT::Struct { r#struct } => PI::Struct {

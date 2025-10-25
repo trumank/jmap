@@ -17,4 +17,4 @@ anyhow.workspace = true
 binaryninja = {git = "https://github.com/Vector35/binaryninja-api.git", branch = "dev"}
 log = "0.4.28"
 serde_json.workspace = true
-ue_reflection = { version = "0.1.0", path = "../ue_reflection" }
+jmap = { version = "0.1.0", path = "../jmap" }
