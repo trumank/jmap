@@ -18,9 +18,7 @@ use binaryninja::{
 };
 use log::{error, info};
 
-use ue_reflection::{
-    Class, EClassCastFlags, ObjectType, Property, PropertyType, ReflectionData, Struct,
-};
+use ue_reflection::{Class, EClassCastFlags, Jmap, ObjectType, Property, PropertyType, Struct};
 
 struct ImportCommand {}
 impl Command for ImportCommand {
@@ -56,7 +54,7 @@ impl Command for ImportCommand {
     }
 }
 
-fn load(path: std::path::PathBuf) -> Result<ReflectionData> {
+fn load(path: std::path::PathBuf) -> Result<Jmap> {
     Ok(serde_json::from_reader(std::io::BufReader::new(
         std::fs::File::open(path)?,
     ))?)
@@ -70,7 +68,7 @@ pub extern "C" fn CorePluginInit() -> bool {
 
     command::register_command(
         "ue_binja - import reflection data",
-        "Import Unreal Engine reflection data from meatloaf",
+        "Import Unreal Engine reflection data (.jmap)",
         ImportCommand {},
     );
 
@@ -80,7 +78,7 @@ pub extern "C" fn CorePluginInit() -> bool {
 struct Ctx<'ref_data, 'types, 'bv> {
     bv: &'bv BinaryView,
 
-    ref_data: &'ref_data ReflectionData,
+    ref_data: &'ref_data Jmap,
     store: &'types mut TypeStore<'ref_data>,
 }
 
@@ -123,7 +121,7 @@ impl<'a> std::ops::Index<TypeId> for TypeStore<'a> {
     }
 }
 
-fn obj_name(ref_data: &ReflectionData, path: &str) -> String {
+fn obj_name(ref_data: &Jmap, path: &str) -> String {
     let obj = &ref_data.objects[path];
     let name = path.rsplit(['/', '.', ':']).next().unwrap();
     match obj {
@@ -150,11 +148,7 @@ fn obj_name(ref_data: &ReflectionData, path: &str) -> String {
 }
 
 #[allow(unused)]
-pub fn into_header(
-    ref_data: &ReflectionData,
-    bv: &BinaryView,
-    filter: impl Fn(&str, &ObjectType) -> bool,
-) {
+pub fn into_header(ref_data: &Jmap, bv: &BinaryView, filter: impl Fn(&str, &ObjectType) -> bool) {
     Ctx {
         bv,
         ref_data,
@@ -943,11 +937,11 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
         let image_base = self.bv.original_image_base();
         let og_base = self.ref_data.image_base_address;
 
-        fn get_class<'a>(ref_data: &'a ReflectionData, class: &str) -> &'a Class {
+        fn get_class<'a>(ref_data: &'a Jmap, class: &str) -> &'a Class {
             ref_data.objects.get(class).unwrap().get_class().unwrap()
         }
         fn get_parent_in<'a>(
-            ref_data: &'a ReflectionData,
+            ref_data: &'a Jmap,
             mut class: &'a str,
             in_set: &HashSet<&'a str>,
         ) -> &'a str {
@@ -967,7 +961,7 @@ impl<'ref_data> Ctx<'ref_data, '_, '_> {
         let mut vtable_func_map: HashMap<u64, HashMap<usize, HashSet<&str>>> = Default::default();
 
         {
-            fn vtable_len(ref_data: &ReflectionData, class: &str) -> usize {
+            fn vtable_len(ref_data: &Jmap, class: &str) -> usize {
                 let mut class = Some(class);
                 while let Some(next) = class {
                     let obj = ref_data.objects.get(next).unwrap().get_class().unwrap();

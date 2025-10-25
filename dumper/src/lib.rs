@@ -22,8 +22,8 @@ use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 use ue_reflection::{
     BytePropertyValue, Class, EClassCastFlags, EObjectFlags, EngineVersion, Enum,
-    EnumPropertyValue, Function, Metadata, Object, ObjectType, Package, Property, PropertyType,
-    PropertyValue, ReflectionData, ScriptStruct, Struct,
+    EnumPropertyValue, Function, Jmap, Metadata, Object, ObjectType, Package, Property,
+    PropertyType, PropertyValue, ScriptStruct, Struct,
 };
 
 use crate::containers::{FUtf8String, PtrFNamePool};
@@ -362,7 +362,7 @@ pub enum Input {
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<ReflectionData> {
+pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<Jmap> {
     match input {
         Input::Process(pid) => {
             let source_name = proc_name::get_process_name(pid).unwrap_or_default();
@@ -407,7 +407,7 @@ fn dump_inner<M: Mem>(
     image: &Image<'_>,
     struct_info: Option<Structs>,
     source_name: &str,
-) -> Result<ReflectionData> {
+) -> Result<Jmap> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
 
@@ -493,9 +493,9 @@ fn dump_inner<M: Mem>(
 
     let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
-    Ok(ReflectionData {
+    Ok(Jmap {
         metadata: Some(Metadata {
-            tool: "https://github.com/trumank/meatloaf".to_string(),
+            tool: "https://github.com/trumank/jmap".to_string(),
             timestamp: time::OffsetDateTime::now_utc().to_string(),
             source: source_name.to_string(),
             engine_version: EngineVersion {

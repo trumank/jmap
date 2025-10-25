@@ -1,22 +1,20 @@
-# meatloaf
+# jmap
 
-Work in progress collection of tools for extracting and utilizing Unreal Engine reflection data from compiled binaries.
+JSON based format for storing UObject reflection data, vtable layouts, version information, among other things extracted from compiled Unreal Engine binaries.
 
 ## [dumper](dumper)
 
-Make sure you are in the dumper project folder before running these commands.
-
 Dump from running process:
 ```console
-cargo run --release -- --pid 12345 output.json
+cargo run --release -- --pid 12345 output.jmap
 ```
 
 Dump from existing full-memory minidump:
 ```console
-cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.json
+cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.jmap
 ```
 
-Or output directly to .usmap:
+Or output to .usmap:
 ```console
 cargo run --release -- --minidump FSD-Win64-Shipping.DMP output.usmap
 ```
@@ -38,8 +36,11 @@ It contains:
 
 It also does light VTables analysis and dumps approximate VTables for all UObjects found.
 
+## [ue_reflection](jmap)
+Crate for reading/writing .jmap files.
+
 ## [usmap](usmap)
-Crate for reading/writing .usmap files (file format for storing UE reflection data used by numerous modding tools).
+Crate for reading/writing .usmap files (legacy binary format created by https://github.com/TheNaeem/UnrealMappingsDumper still used by many tools today).
 
 ## [ue_binja](ue_binja)
 Binary Ninja plugin to reconstruct classes and structs from reflection data.

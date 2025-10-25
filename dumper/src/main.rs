@@ -3,11 +3,11 @@ use clap::{ArgGroup, Parser};
 use dumper::{Input, into_header, structs::Structs};
 use std::io::Cursor;
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
-use ue_reflection::ReflectionData;
+use ue_reflection::Jmap;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None,
-        group = ArgGroup::new("input").args(&["pid", "minidump", "json"]).required(true))]
+        group = ArgGroup::new("input").args(&["pid", "minidump", "jmap"]).required(true))]
 struct Cli {
     /// Dump from process ID
     #[arg(long, short, group = "input")]
@@ -17,15 +17,15 @@ struct Cli {
     #[arg(long, short, group = "input")]
     minidump: Option<PathBuf>,
 
-    /// Use existing .json dump
+    /// Use existing .jmap dump
     #[arg(long, short, group = "input")]
-    json: Option<PathBuf>,
+    jmap: Option<PathBuf>,
 
     /// Struct layout info .json (from pdb_dumper)
     #[arg(long, short)]
     struct_info: Option<PathBuf>,
 
-    /// Output dump .json path
+    /// Output dump .jmap path
     #[arg(index = 1)]
     output: PathBuf,
 }
@@ -34,18 +34,18 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     enum OutputType {
-        Json,
-        JsonGz,
+        Jmap,
+        JmapGz,
         Usmap,
         Header,
     }
 
     let output_type = match cli.output.file_name().and_then(|e| e.to_str()) {
-        Some(n) if n.ends_with(".json") => OutputType::Json,
-        Some(n) if n.ends_with(".json.gz") => OutputType::JsonGz,
+        Some(n) if n.ends_with(".jmap") => OutputType::Jmap,
+        Some(n) if n.ends_with(".jmap.gz") => OutputType::JmapGz,
         Some(n) if n.ends_with(".usmap") => OutputType::Usmap,
         Some(n) if n.ends_with(".h") || n.ends_with(".hpp") => OutputType::Header,
-        _ => bail!("Error: Expected .json .usmap or .hpp output type"),
+        _ => bail!("Error: Expected .jmap, .jmap.gz, .usmap, or .hpp output type"),
     };
 
     let struct_info: Option<Structs> = if let Some(path) = cli.struct_info {
@@ -54,16 +54,16 @@ fn main() -> Result<()> {
         None
     };
 
-    let reflection_data: ReflectionData = if let Some(path) = cli.json {
+    let reflection_data: Jmap = if let Some(path) = cli.jmap {
         let filename = path.file_name().unwrap().to_str().unwrap();
-        if filename.ends_with(".json.gz") {
+        if filename.ends_with(".jmap.gz") {
             let compressed = std::fs::read(path)?;
             let decoder = flate2::read::GzDecoder::new(Cursor::new(&compressed));
             serde_json::from_reader(decoder)?
-        } else if filename.ends_with(".json") {
+        } else if filename.ends_with(".jmap") {
             serde_json::from_slice(&std::fs::read(path)?)?
         } else {
-            bail!("Error: Expected .json or .json.gz file as input");
+            bail!("Error: Expected .jmap or .jmap.gz file as input");
         }
     } else if let Some(pid) = cli.pid {
         dumper::dump(Input::Process(pid), struct_info)?
@@ -74,11 +74,11 @@ fn main() -> Result<()> {
     };
 
     match output_type {
-        OutputType::Json => {
+        OutputType::Jmap => {
             let mut file = BufWriter::new(File::create(&cli.output)?);
             serde_json::to_writer_pretty(&mut file, &reflection_data)?;
         }
-        OutputType::JsonGz => {
+        OutputType::JmapGz => {
             let mut file = BufWriter::new(File::create(&cli.output)?);
             let mut e = flate2::write::GzEncoder::new(&mut file, flate2::Compression::default());
             serde_json::to_writer_pretty(&mut e, &reflection_data)?;
@@ -105,7 +105,7 @@ fn obj_name(path: &str) -> &str {
     path.rsplit(['/', '.', ':']).next().unwrap()
 }
 
-fn into_usmap(reflection_data: &ReflectionData) -> usmap::Usmap {
+fn into_usmap(reflection_data: &Jmap) -> usmap::Usmap {
     let mut enums = vec![];
     let mut structs = vec![];
 

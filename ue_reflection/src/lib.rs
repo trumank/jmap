@@ -387,7 +387,7 @@ bitflags::bitflags! {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ReflectionData {
+pub struct Jmap {
     pub metadata: Option<Metadata>,
     pub image_base_address: Address,
     pub objects: BTreeMap<String, ObjectType>,

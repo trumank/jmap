@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use ue_reflection::{
     EClassCastFlags, EFunctionFlags, EPropertyFlags, Function, ObjectType, Property, PropertyType,
-    ReflectionData, Struct,
+    Jmap, Struct,
 };
 
 type Objects = BTreeMap<String, ObjectType>;
@@ -234,7 +234,7 @@ fn generate_struct_or_class(
     writeln!(buffer).unwrap();
 }
 
-pub fn into_header(reflection_data: &ReflectionData) -> String {
+pub fn into_header(reflection_data: &Jmap) -> String {
     let mut buffer = String::new();
 
     let objects = &reflection_data.objects;
