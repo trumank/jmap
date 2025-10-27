@@ -362,7 +362,13 @@ pub enum Input {
     Dump(PathBuf),
 }
 
-pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<Jmap> {
+#[derive(Default)]
+pub struct DumpOptions {
+    /// Dump all objects instead of only native (/Script/) objects
+    pub all: bool,
+}
+
+pub fn dump(input: Input, struct_info: Option<Structs>, options: DumpOptions) -> Result<Jmap> {
     match input {
         Input::Process(pid) => {
             let source_name = proc_name::get_process_name(pid).unwrap_or_default();
@@ -370,7 +376,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<Jmap> {
             let handle: ProcessHandle = (pid as Pid).try_into()?;
             let mem = MemCache::wrap(handle);
             let image = patternsleuth::process::external::read_image_from_pid(pid)?;
-            dump_inner(mem, &image, struct_info, &source_name)
+            dump_inner(mem, &image, struct_info, &source_name, options)
         }
         Input::Dump(path) => {
             let source_name = path.file_name().unwrap_or_default().to_string_lossy();
@@ -381,7 +387,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>) -> Result<Jmap> {
             let minidump = minidump::Minidump::read(&*mmap)?;
             let mem = MinidumpMem::new(&minidump)?;
             let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
-            dump_inner(mem, &img, struct_info, &source_name)
+            dump_inner(mem, &img, struct_info, &source_name, options)
         }
     }
 }
@@ -407,6 +413,7 @@ fn dump_inner<M: Mem>(
     image: &Image<'_>,
     struct_info: Option<Structs>,
     source_name: &str,
+    options: DumpOptions,
 ) -> Result<Jmap> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
@@ -454,7 +461,7 @@ fn dump_inner<M: Mem>(
 
         let path = obj.path()?;
 
-        let obj = read_object(obj, &path);
+        let obj = read_object(obj, &path, &options);
         // let obj = match obj {
         //     Err(err) => {
         //         eprintln!("{i}: {path} Failed to read: {err}");
@@ -510,7 +517,11 @@ fn dump_inner<M: Mem>(
     })
 }
 
-fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<ObjectType>> {
+fn read_object<C: Ctx>(
+    obj: Ptr<UObject, C>,
+    path: &str,
+    options: &DumpOptions,
+) -> Result<Option<ObjectType>> {
     let class = obj.class_private().read()?;
 
     fn read_props<C: Ctx>(
@@ -784,7 +795,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         })
     }
 
-    if !path.starts_with("/Script/") {
+    if !options.all && !path.starts_with("/Script/") {
         return Ok(None);
     }
     let object_flags = obj.object_flags().read()?;

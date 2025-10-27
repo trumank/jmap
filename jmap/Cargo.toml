@@ -10,6 +10,7 @@ keywords.workspace = true
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
 bitflags = { workspace = true, features = ["bytemuck", "serde"] }
 bytemuck = { workspace = true, features = ["derive"] }
 ordered-float = { version = "5.0.0", features = ["serde"] }

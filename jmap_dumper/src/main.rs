@@ -1,7 +1,7 @@
 use anyhow::{Result, bail};
 use clap::{ArgGroup, Parser};
 use jmap::Jmap;
-use jmap_dumper::{Input, into_header, structs::Structs};
+use jmap_dumper::{DumpOptions, Input, into_header, structs::Structs};
 use std::io::Cursor;
 use std::{collections::BTreeMap, fs::File, io::BufWriter, path::PathBuf};
 
@@ -24,6 +24,10 @@ struct Cli {
     /// Struct layout info .json (from pdb_dumper)
     #[arg(long, short)]
     struct_info: Option<PathBuf>,
+
+    /// Dump all objects instead of only native (/Script/) objects
+    #[arg(long)]
+    all: bool,
 
     /// Output dump .jmap path
     #[arg(index = 1)]
@@ -54,6 +58,8 @@ fn main() -> Result<()> {
         None
     };
 
+    let options = DumpOptions { all: cli.all };
+
     let reflection_data: Jmap = if let Some(path) = cli.jmap {
         let filename = path.file_name().unwrap().to_str().unwrap();
         if filename.ends_with(".jmap.gz") {
@@ -66,9 +72,9 @@ fn main() -> Result<()> {
             bail!("Error: Expected .jmap or .jmap.gz file as input");
         }
     } else if let Some(pid) = cli.pid {
-        jmap_dumper::dump(Input::Process(pid), struct_info)?
+        jmap_dumper::dump(Input::Process(pid), struct_info, options)?
     } else if let Some(path) = cli.minidump {
-        jmap_dumper::dump(Input::Dump(path), struct_info)?
+        jmap_dumper::dump(Input::Dump(path), struct_info, options)?
     } else {
         unreachable!();
     };
