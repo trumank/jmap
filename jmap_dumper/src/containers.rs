@@ -1,4 +1,4 @@
-use crate::mem::{Ctx, VirtSize};
+use crate::mem::{Ctx, Pod, VirtSize};
 use anyhow::Result;
 use derive_where::derive_where;
 
@@ -57,6 +57,15 @@ impl<C: Mem, T, A: TAlloc> Ptr<TArray<T, A>, C> {
             .cast::<A::ForElementType<T>>();
 
         <A as TAlloc>::ForElementType::<T>::data(&alloc)
+    }
+}
+impl<C: Mem, T: Pod, A: TAlloc> Ptr<TArray<T, A>, C> {
+    pub fn read_vec(&self) -> Result<Vec<T>> {
+        if let Some(data) = self.data()? {
+            data.read_vec(self.len()?)
+        } else {
+            Ok(vec![])
+        }
     }
 }
 impl<C: Mem, T, A: TAlloc> Ptr<TArray<T, A>, C> {

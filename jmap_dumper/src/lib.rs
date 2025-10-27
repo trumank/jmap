@@ -744,6 +744,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
             properties,
             properties_size: obj.properties_size().read()? as usize,
             min_alignment: obj.min_alignment().read()? as usize,
+            script: obj.script().read_vec()?,
         })
     }
 

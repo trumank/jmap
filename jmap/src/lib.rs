@@ -5,6 +5,26 @@ use ordered_float::OrderedFloat;
 use ordermap::OrderMap;
 use serde::{Deserialize, Serialize};
 
+mod base64_serde {
+    use base64::prelude::*;
+    use serde::{Deserialize, Deserializer, Serializer};
+
+    pub fn serialize<S>(bytes: &Vec<u8>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&BASE64_STANDARD.encode(bytes))
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        BASE64_STANDARD.decode(s).map_err(serde::de::Error::custom)
+    }
+}
+
 /// A pointer/address wrapper that serializes as a hex string and can deserialize from
 /// hex strings, decimal numbers, or decimal strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Pod, Zeroable)]
@@ -437,6 +457,8 @@ pub struct Struct {
     pub properties: Vec<Property>,
     pub properties_size: usize,
     pub min_alignment: usize,
+    #[serde(with = "base64_serde")]
+    pub script: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

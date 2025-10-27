@@ -130,6 +130,10 @@ impl<C: Ctx> Ptr<UStruct, C> {
         let offset = self.ctx().struct_member("UStruct", "MinAlignment");
         self.byte_offset(offset).cast()
     }
+    pub fn script(&self) -> Ptr<TArray<u8>, C> {
+        let offset = self.ctx().struct_member("UStruct", "Script");
+        self.byte_offset(offset).cast()
+    }
 }
 
 impl<C: Ctx> Ptr<UStruct, C> {
