@@ -244,6 +244,7 @@ fn map_prop<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
 
     let prop = ptr.cast::<ZProperty>();
     Ok(Property {
+        address: ptr.address().into(),
         name,
         offset: prop.offset_internal().read()? as usize,
         array_dim: prop.array_dim().read()? as usize,

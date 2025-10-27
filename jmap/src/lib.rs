@@ -559,6 +559,7 @@ impl ObjectType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
+    pub address: Address,
     pub name: String,
     pub offset: usize,
     pub array_dim: usize,
