@@ -1,6 +1,7 @@
 use crate::mem::{Ctx, Pod, VirtSize};
 use anyhow::Result;
 use derive_where::derive_where;
+use std::collections::BTreeMap;
 
 use alloc::*;
 
@@ -232,3 +233,91 @@ impl<C: Ctx> Ptr<FName, C> {
 
 #[derive(Debug, Clone, Copy)]
 pub struct PtrFNamePool(pub u64);
+
+pub fn extract_fnames<C: Ctx>(ctx: &C) -> Result<BTreeMap<u32, String>> {
+    let mut names = BTreeMap::new();
+
+    let fname_pool_address = ctx.fnamepool().0;
+    let ue_version = ctx.ue_version();
+    let case_preserving = ctx.case_preserving();
+
+    if ue_version < (4, 22) {
+        anyhow::bail!("unimplemented fname extraction for < 4.22")
+    } else {
+        let block_len = 0x20000;
+
+        let block_count = {
+            let mut buf = [0u8; 4];
+            ctx.read_buf(fname_pool_address + 8, &mut buf)?;
+            u32::from_le_bytes(buf) as usize
+        };
+
+        for block_index in 0..=block_count {
+            let block_ptr = {
+                let mut buf = [0u8; 8];
+                ctx.read_buf(
+                    fname_pool_address + 0x10 + (block_index as u64) * 8,
+                    &mut buf,
+                )?;
+                u64::from_le_bytes(buf)
+            };
+
+            let mut chunk = vec![0u8; block_len];
+            if ctx.read_buf(block_ptr, &mut chunk).is_err() {
+                continue;
+            }
+
+            let mut possible = vec![];
+            let mut i = 2;
+            let mut bytes_iter = chunk.iter().skip(2);
+
+            // assume FNames cannot contain chars < 32
+            while let Some(pos) = bytes_iter.position(|b| !(32..).contains(b)) {
+                possible.push((i - 2)..(i + pos + 1));
+                i += pos + 1;
+            }
+
+            // Validate potential FName entries in printable regions
+            for range in &possible {
+                let base = range.start;
+                let p = &chunk[range.clone()];
+                for i in 2..p.len() {
+                    let index = base + i - 2;
+
+                    // filter invalid alignment
+                    if case_preserving {
+                        if index % 4 != 0 {
+                            continue;
+                        }
+                    } else if index % 2 != 0 {
+                        continue;
+                    }
+
+                    let header = ((p[i - 1] as u16) << 8) + p[i - 2] as u16;
+
+                    let len = if case_preserving {
+                        (header >> 1) as usize
+                    } else {
+                        (header >> 6) as usize
+                    };
+                    let is_wide = (header & 1) != 0;
+
+                    if len > 0
+                        && !is_wide
+                        && i + len < p.len()
+                        && let Ok(name) = String::from_utf8(p[i..(i + len)].to_vec())
+                    {
+                        let value = if case_preserving {
+                            ((block_index << 16) | (index / 4)) as u32
+                        } else {
+                            ((block_index << 16) | (index / 2)) as u32
+                        };
+                        names.insert(value, name);
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(names)
+}

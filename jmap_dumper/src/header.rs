@@ -158,7 +158,7 @@ fn generate_function(buffer: &mut String, objects: &Objects, path: &str, func: &
             }
             param.push_str(&type_name);
             if is_out {
-                param.push_str("&");
+                param.push('&');
             }
             param.push(' ');
             param.push_str(&p.name);

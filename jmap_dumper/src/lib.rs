@@ -26,7 +26,7 @@ use patternsleuth::image::Image;
 use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 
-use crate::containers::{FUtf8String, PtrFNamePool};
+use crate::containers::{FUtf8String, PtrFNamePool, extract_fnames};
 use crate::mem::Ctx;
 use crate::objects::{
     FUObjectArray, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct, ZArrayProperty,
@@ -366,6 +366,8 @@ pub enum Input {
 pub struct DumpOptions {
     /// Dump all objects instead of only native (/Script/) objects
     pub all: bool,
+    /// Dump FName table
+    pub names: bool,
 }
 
 pub fn dump(input: Input, struct_info: Option<Structs>, options: DumpOptions) -> Result<Jmap> {
@@ -500,6 +502,12 @@ fn dump_inner<M: Mem>(
 
     let vtables = vtable::analyze_vtables(&mem, &mut objects);
 
+    let names = if options.names {
+        Some(extract_fnames(&mem)?)
+    } else {
+        None
+    };
+
     Ok(Jmap {
         metadata: Some(Metadata {
             tool: "https://github.com/trumank/jmap".to_string(),
@@ -514,6 +522,7 @@ fn dump_inner<M: Mem>(
         image_base_address: image.base_address.into(),
         objects,
         vtables,
+        names,
     })
 }
 

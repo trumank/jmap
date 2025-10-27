@@ -29,6 +29,10 @@ struct Cli {
     #[arg(long)]
     all: bool,
 
+    /// Dump FName table
+    #[arg(long)]
+    names: bool,
+
     /// Output dump .jmap path
     #[arg(index = 1)]
     output: PathBuf,
@@ -58,7 +62,10 @@ fn main() -> Result<()> {
         None
     };
 
-    let options = DumpOptions { all: cli.all };
+    let options = DumpOptions {
+        all: cli.all,
+        names: cli.names,
+    };
 
     let reflection_data: Jmap = if let Some(path) = cli.jmap {
         let filename = path.file_name().unwrap().to_str().unwrap();

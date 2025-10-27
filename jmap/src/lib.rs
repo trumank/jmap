@@ -412,6 +412,8 @@ pub struct Jmap {
     pub image_base_address: Address,
     pub objects: BTreeMap<String, ObjectType>,
     pub vtables: BTreeMap<Address, Vec<Address>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub names: Option<BTreeMap<u32, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
