@@ -717,6 +717,7 @@ fn read_object<C: Ctx>(obj: Ptr<UObject, C>, path: &str) -> Result<Option<Object
         let class_name = class.path()?;
 
         Ok(Object {
+            address: obj.address().into(),
             vtable: (obj.vtable().read()? as u64).into(),
             object_flags: obj.object_flags().read()?,
             outer,

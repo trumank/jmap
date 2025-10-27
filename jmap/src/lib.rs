@@ -414,6 +414,7 @@ pub struct EngineVersion {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Object {
+    pub address: Address,
     pub vtable: Address,
     pub object_flags: EObjectFlags,
     pub outer: Option<String>,
