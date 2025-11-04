@@ -451,7 +451,7 @@ fn dump_inner<M: Mem>(
         case_preserving,
     };
 
-    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem.clone());
+    let uobjectarray = Ptr::<FUObjectArray, _>::new(results.guobject_array.0, mem.clone())?;
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();

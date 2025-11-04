@@ -29,12 +29,12 @@ impl<T, C> std::fmt::Debug for Ptr<T, C> {
     }
 }
 impl<T, C> Ptr<T, C> {
-    pub fn new(address: u64, ctx: C) -> Self {
-        Self {
-            address: address.try_into().unwrap(),
+    pub fn new(address: u64, ctx: C) -> Result<Self> {
+        Ok(Self {
+            address: address.try_into().context("unexpected null ptr")?,
             ctx,
             _type: Default::default(),
-        }
+        })
     }
     pub fn new_non_zero(address: NonZero<u64>, ctx: C) -> Self {
         Self {
@@ -51,7 +51,7 @@ impl<T, C> Ptr<T, C> {
     }
 }
 impl<T, C: Clone> Ptr<T, C> {
-    pub fn map(&self, map: impl FnOnce(u64) -> u64) -> Self {
+    pub fn map(&self, map: impl FnOnce(u64) -> u64) -> Result<Self> {
         Self::new(map(self.address.into()), self.ctx.clone())
     }
     pub fn cast<O>(&self) -> Ptr<O, C> {
@@ -81,7 +81,7 @@ impl<T, C: Mem> Ptr<Option<Ptr<T, C>>, C> {
     pub fn read(&self) -> Result<Option<Ptr<T, C>>> {
         let addr = self.ctx.read::<u64>(self.address.into())?;
         Ok(if addr != 0 {
-            Some(self.map(|_| addr).cast())
+            Some(self.map(|_| addr)?.cast())
         } else {
             None
         })
@@ -90,7 +90,7 @@ impl<T, C: Mem> Ptr<Option<Ptr<T, C>>, C> {
 impl<T, C: Mem> Ptr<Ptr<T, C>, C> {
     pub fn read(&self) -> Result<Ptr<T, C>> {
         let addr = self.ctx.read::<u64>(self.address.into())?;
-        Ok(self.map(|_| addr).cast())
+        Ok(self.map(|_| addr)?.cast())
     }
 }
 

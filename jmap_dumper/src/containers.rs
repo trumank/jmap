@@ -146,7 +146,7 @@ impl<C: Ctx> Ptr<FName, C> {
         if mem.ue_version() < (4, 22) {
             // wtf :skull_emoji:
             let chunks = self
-                .map(|_| mem.fnamepool().0)
+                .map(|_| mem.fnamepool().0)?
                 .cast::<Ptr<Ptr<Ptr<(), C>, C>, C>>()
                 .read()?;
 
@@ -192,7 +192,7 @@ impl<C: Ctx> Ptr<FName, C> {
             });
         }
 
-        let blocks = self.map(|_| mem.fnamepool().0 + 0x10).cast::<Ptr<u8, C>>();
+        let blocks = self.map(|_| mem.fnamepool().0 + 0x10)?.cast::<Ptr<u8, C>>();
 
         let block_index = (value >> 16) as usize;
         let offset = if case_preserving {
