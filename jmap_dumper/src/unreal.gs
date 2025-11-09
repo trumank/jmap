@@ -76,8 +76,8 @@ struct alignas(if (UE_VERSION >= 411 && UE_VERSION < 422) 8 else 4) FName {
     } else {
         // UE 4.23+: Modern version with FNameEntryId
         FNameEntryId ComparisonIndex;
-        if (WITH_CASE_PRESERVING_NAME == 1) FNameEntryId DisplayIndex;
         uint32_t Number;
+        if (WITH_CASE_PRESERVING_NAME == 1) FNameEntryId DisplayIndex;
     }
 };
 
