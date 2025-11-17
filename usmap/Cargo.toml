@@ -12,6 +12,7 @@ license.workspace = true
 [dependencies]
 anyhow.workspace = true
 byteorder = "1.5.0"
+clap.workspace = true
 ser-hex = { git = "https://github.com/trumank/ser-hex.git", version = "0.1.0" }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

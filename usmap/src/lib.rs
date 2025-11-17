@@ -8,7 +8,7 @@ use std::{
 use anyhow::{Context, Result, bail};
 
 use byteorder::{LE, ReadBytesExt, WriteBytesExt};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_with::{KeyValueMap, serde_as};
 use tracing::instrument;
 
@@ -156,7 +156,7 @@ impl Names {
     }
 }
 
-#[derive(Debug, Clone, strum::FromRepr)]
+#[derive(Debug, Clone, strum::FromRepr, Serialize, Deserialize)]
 #[repr(u8)]
 enum EPropertyType {
     ByteProperty,
@@ -194,7 +194,7 @@ enum EPropertyType {
     Unknown = 0xFF,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PropertyInner {
     Byte,
     Bool,
@@ -283,7 +283,7 @@ impl PropertyInner {
 }
 
 #[serde_as]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Usmap {
     #[serde_as(as = "KeyValueMap<_>")]
     pub enums: Vec<Enum>,
@@ -295,7 +295,9 @@ pub struct Usmap {
     pub envp: Option<ExtEnvp>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, strum::FromRepr)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, strum::FromRepr,
+)]
 #[repr(u8)]
 pub enum UsmapVersion {
     Initial,
@@ -315,7 +317,7 @@ impl UsmapVersion {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::FromRepr)]
 #[repr(u8)]
 pub enum CompressionMethod {
     Oodle = 1,
@@ -340,7 +342,7 @@ impl Ser for Option<CompressionMethod> {
     }
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Header {
     pub version: UsmapVersion,
 
@@ -348,20 +350,20 @@ pub struct Header {
     pub compressed_size: u32,
     pub decompressed_size: u32,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Struct {
     #[serde(rename = "$key$")]
     pub name: String,
     pub super_struct: Option<String>,
     pub properties: Vec<Property>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Enum {
     #[serde(rename = "$key$")]
     pub name: String,
     pub entries: BTreeMap<i64, String>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Property {
     pub name: String,
     pub array_dim: u8,
@@ -369,32 +371,32 @@ pub struct Property {
     pub inner: PropertyInner,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtCext {
     pub version: u8,
     pub num_ext: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtPpth {
     pub version: u8,
     pub enums: Vec<String>,
     pub structs: Vec<String>,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtEatr {
     pub version: u8,
     pub enum_flags: Vec<u32>,
     pub struct_flags: Vec<StructFlags>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StructFlags {
     pub type_: FlagsType,
     pub value: u32,
     pub prop_flags: Vec<u64>,
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, strum::FromRepr)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, strum::FromRepr)]
 #[repr(u8)]
 pub enum FlagsType {
     Unknown,
@@ -402,7 +404,7 @@ pub enum FlagsType {
     Class,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtEnvp {
     pub version: u8,
     pub value_pairs: Vec<Vec<(String, u64)>>,
