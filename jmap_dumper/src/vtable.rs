@@ -111,14 +111,17 @@ pub fn analyze_vtables<M: Mem>(
 
     // update UClass::instance_vtable
     for (class, vtable) in class_vtables {
-        match objects.get_mut(&class).unwrap() {
-            ObjectType::Class(class) => class.instance_vtable = Some(vtable),
-            _ => unreachable!(),
+        match objects.get_mut(&class) {
+            Some(ObjectType::Class(class)) => class.instance_vtable = Some(vtable),
+            _ => {}
         }
     }
 
     // {
-    //     fn get_class<'a>(objects: &'a BTreeMap<String, ObjectType>, class: &str) -> &'a Class {
+    //     fn get_class<'a>(
+    //         objects: &'a BTreeMap<String, ObjectType>,
+    //         class: &str,
+    //     ) -> &'a jmap::Class {
     //         objects.get(class).unwrap().get_class().unwrap()
     //     }
     //     // let mut class = "/Script/FSD.EnemyTemperatureComponent";
@@ -127,8 +130,8 @@ pub fn analyze_vtables<M: Mem>(
     //     let mut class = "/Script/FSD.FSDGameMode";
     //     let vtable_ptr = get_class(objects, class).instance_vtable.unwrap();
     //     let vtable = vtables.get(&vtable_ptr).unwrap();
-    //     println!("vtable_ptr={vtable_ptr:08x}");
-    //     let mut funcs: Vec<(u64, &str)> = vtable.iter().map(|func| (*func, class)).collect();
+    //     println!("vtable_ptr={:08x}", vtable_ptr.0);
+    //     let mut funcs: Vec<(Address, &str)> = vtable.iter().map(|func| (*func, class)).collect();
 
     //     println!("hierarchy:");
     //     println!("{class}");
@@ -156,7 +159,7 @@ pub fn analyze_vtables<M: Mem>(
     //     }
 
     //     for (i, (func, class)) in funcs.iter().enumerate() {
-    //         println!("{i:>4} ptr={func:08x} owner={class}");
+    //         println!("{i:>4} ptr={:08x} owner={class}", func.0);
     //     }
     // }
 
