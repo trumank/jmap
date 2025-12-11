@@ -211,17 +211,17 @@ impl<C: Ctx> Ptr<FName, C> {
         };
         let is_wide = header & 1 != 0;
 
+        let data = block.offset(offset + 2);
         let base = if is_wide {
             String::from_utf16(
-                &block
-                    .offset(offset + 2)
+                &data
                     .read_vec(len * 2)?
                     .chunks(2)
                     .map(|chunk| u16::from_le_bytes(chunk.try_into().unwrap()))
                     .collect::<Vec<_>>(),
             )?
         } else {
-            String::from_utf8(block.offset(offset + 2).read_vec(len)?)?
+            String::from_utf8(data.read_vec(len)?)?
         };
         Ok(if number == 0 {
             base
