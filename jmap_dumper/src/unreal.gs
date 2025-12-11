@@ -666,8 +666,8 @@ class UClass : UStruct,
     else if (UE_VERSION >= 501) STUB* CppClassStaticFunctions;
     else STUB* ClassAddReferencedObjects;
 
-    if (UE_VERSION >= 408 && UE_VERSION < 418 || UE_VERSION >= 501) uint32_t ClassUnique;
-    if (UE_VERSION >= 501) {
+    if (UE_VERSION >= 408 && UE_VERSION < 418 || UE_VERSION >= 500) uint32_t ClassUnique;
+    if (UE_VERSION >= 500) {
         int32_t FirstOwnedClassRep;
         bool bCooked;
         bool bLayoutChanging;
@@ -677,17 +677,17 @@ class UClass : UStruct,
     }
     EClassFlags ClassFlags;
     EClassCastFlags ClassCastFlags;
-     if (UE_VERSION < 408) int32_t ClassUnique;
+    if (UE_VERSION < 408) int32_t ClassUnique;
     
     UClass* ClassWithin;
     
-    if (UE_VERSION < 501) UObject* ClassGeneratedBy;
+    if (UE_VERSION < 500) UObject* ClassGeneratedBy;
     if (UE_VERSION == 421) UStructProperty* UberGraphFramePointerProperty;
     FName ClassConfigName;
     if (UE_VERSION >= 408 && UE_VERSION < 418) bool bCooked;
     TArray<FRepRecord> ClassReps;
     TArray<UField*> NetFields;
-    if (UE_VERSION >= 425 && UE_VERSION < 501) int32_t FirstOwnedClassRep;
+    if (UE_VERSION >= 425 && UE_VERSION < 500) int32_t FirstOwnedClassRep;
     UObject* ClassDefaultObject;
     if (UE_VERSION == 407) bool bCooked;
     if (UE_VERSION >= 416 && UE_VERSION < 418) ICppClassTypeInfo* CppTypeInfo;
