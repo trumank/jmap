@@ -8,8 +8,11 @@ use gospel_typelib::target_triplet::{
 };
 use gospel_typelib::type_model::{ResolvedUDTMemberLayout, Type, TypeGraphLike, TypeLayoutCache};
 use gospel_vm::vm::{GospelVMOptions, GospelVMRunContext, GospelVMState, GospelVMValue};
+use include_dir::{Dir, include_dir};
 use patternsleuth::resolvers::unreal::engine_version::EngineVersion;
 use serde::{Deserialize, Serialize};
+
+static UNREAL_MODULE_SRC: Dir = include_dir!("$CARGO_MANIFEST_DIR/unreal/src");
 
 #[derive(Serialize, Deserialize)]
 pub struct Structs(pub Vec<StructInfo>);
@@ -45,55 +48,61 @@ pub fn get_struct_info_for_version(
         .define_module("unreal")
         .to_simple_result()?;
 
-    let module_source_file = parse_source_file("unreal.gs", include_str!("unreal.gs"))?;
+    let mut source_files: Vec<_> = UNREAL_MODULE_SRC
+        .files()
+        .filter(|f| f.path().extension().is_some_and(|ext| ext == "gs"))
+        .collect();
+    source_files.sort_by_key(|f| f.path());
 
-    module_writer
-        .add_source_file(module_source_file)
-        .to_simple_result()?;
+    for file in source_files {
+        let filename = file.path().file_name().unwrap().to_string_lossy();
+        let contents = file.contents_utf8().unwrap();
+        let parsed = parse_source_file(&filename, contents)?;
+        module_writer.add_source_file(parsed).to_simple_result()?;
+    }
+
+    let container = module_writer.compile().to_simple_result()?;
 
     let mut vm_state = GospelVMState::create();
 
     let ue_version = (version.major as u64) * 100 + (version.minor as u64);
-    let case_preserving_flag = if case_preserving { 1 } else { 0 };
 
-    let struct_names = vec![
-        "FUObjectArray",
-        "FUObjectArrayOld",
-        "FUObjectArrayOlder",
-        "FUObjectItem",
-        "FFixedUObjectArray",
-        "FChunkedFixedUObjectArray",
-        "UObject",
-        "UField",
-        "UStruct",
-        "UClass",
-        "UEnum",
-        "UEnumNameTuple",
-        "UFunction",
-        "UScriptStruct",
-        "ZField",
-        "ZProperty",
-        "ZStructProperty",
-        "ZArrayProperty",
-        "ZEnumProperty",
-        "ZByteProperty",
-        "ZBoolProperty",
-        "ZSetProperty",
-        "ZMapProperty",
-        "ZDelegateProperty",
-        "ZMulticastDelegateProperty",
-        "ZObjectPropertyBase",
-        "ZObjectProperty",
-        "ZClassProperty",
-        "ZSoftClassProperty",
-        "ZInterfaceProperty",
-        "FOptionalPropertyLayout",
-        "FName",
-        "FField",
-        "FFieldClass",
+    let struct_names: Vec<(&str, &str)> = vec![
+        ("uobjectarray", "FUObjectArray"),
+        ("uobjectarray", "FUObjectArrayOld"),
+        ("uobjectarray", "FUObjectArrayOlder"),
+        ("uobjectarray", "FUObjectItem"),
+        ("uobjectarray", "FFixedUObjectArray"),
+        ("uobjectarray", "FChunkedFixedUObjectArray"),
+        ("objects", "UObject"),
+        ("objects", "UField"),
+        ("objects", "UStruct"),
+        ("objects", "UClass"),
+        ("objects", "UEnum"),
+        ("objects", "UEnumNameTuple"),
+        ("objects", "UFunction"),
+        ("objects", "UScriptStruct"),
+        ("properties", "ZField"),
+        ("properties", "ZProperty"),
+        ("properties", "ZStructProperty"),
+        ("properties", "ZArrayProperty"),
+        ("properties", "ZEnumProperty"),
+        ("properties", "ZByteProperty"),
+        ("properties", "ZBoolProperty"),
+        ("properties", "ZSetProperty"),
+        ("properties", "ZMapProperty"),
+        ("properties", "ZDelegateProperty"),
+        ("properties", "ZMulticastDelegateProperty"),
+        ("properties", "ZObjectPropertyBase"),
+        ("properties", "ZObjectProperty"),
+        ("properties", "ZClassProperty"),
+        ("properties", "ZSoftClassProperty"),
+        ("properties", "ZInterfaceProperty"),
+        ("properties", "FOptionalPropertyLayout"),
+        ("unreal", "FName"),
+        ("properties", "FField"),
+        ("properties", "FFieldClass"),
     ];
-
-    let container = module_writer.compile().to_simple_result()?;
 
     let mounted_container = vm_state.mount_container(container)?;
 
@@ -101,14 +110,15 @@ pub fn get_struct_info_for_version(
     let vm_options = GospelVMOptions::default()
         .target_triplet(target_triplet)
         .with_global("UE_VERSION", ue_version)
-        .with_global("WITH_CASE_PRESERVING_NAME", case_preserving_flag);
+        .with_global("WITH_CASE_PRESERVING_NAME", case_preserving as u64);
     let mut execution_context = GospelVMRunContext::create(vm_options);
 
-    for struct_name in struct_names {
+    for (file_name, struct_name) in struct_names {
         if let Some(struct_info) = eval_struct_layout(
             &mounted_container,
             &mut execution_context,
             &target_triplet,
+            file_name,
             struct_name,
         )? {
             structs.push(struct_info);
@@ -122,11 +132,13 @@ fn eval_struct_layout(
     container: &std::rc::Rc<gospel_vm::vm::GospelVMContainer>,
     execution_context: &mut GospelVMRunContext,
     target_triplet: &TargetTriplet,
+    file_name: &str,
     struct_name: &str,
 ) -> Result<Option<StructInfo>> {
+    let func_name = format!("{}${}", file_name, struct_name);
     let eval_func = container
-        .find_named_function(&format!("unreal${struct_name}"))
-        .with_context(|| format!("{struct_name} not found in module"))?;
+        .find_named_function(&func_name)
+        .with_context(|| format!("{struct_name} not found in module (looked for {func_name})"))?;
     match eval_func
         .execute(Vec::new(), execution_context)
         .map_err(|e| anyhow!("GospelVM exec failed: {e}"))?
