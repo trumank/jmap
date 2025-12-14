@@ -111,9 +111,8 @@ pub fn analyze_vtables<M: Mem>(
 
     // update UClass::instance_vtable
     for (class, vtable) in class_vtables {
-        match objects.get_mut(&class) {
-            Some(ObjectType::Class(class)) => class.instance_vtable = Some(vtable),
-            _ => {}
+        if let Some(ObjectType::Class(class)) = objects.get_mut(&class) {
+            class.instance_vtable = Some(vtable)
         }
     }
 

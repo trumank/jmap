@@ -3,9 +3,10 @@ use std::collections::HashMap;
 use anyhow::{Context, Result, anyhow, bail};
 use gospel_compiler::backend::{CompilerInstance, CompilerModuleBuilder, CompilerResultTrait};
 use gospel_compiler::parser::parse_source_file;
-use gospel_typelib::type_model::{
-    ResolvedUDTMemberLayout, TargetTriplet, Type, TypeGraphLike, TypeLayoutCache,
+use gospel_typelib::target_triplet::{
+    TargetArchitecture, TargetEnvironment, TargetOperatingSystem, TargetTriplet,
 };
+use gospel_typelib::type_model::{ResolvedUDTMemberLayout, Type, TypeGraphLike, TypeLayoutCache};
 use gospel_vm::vm::{GospelVMOptions, GospelVMRunContext, GospelVMState, GospelVMValue};
 use patternsleuth::resolvers::unreal::engine_version::EngineVersion;
 use serde::{Deserialize, Serialize};
@@ -34,9 +35,9 @@ pub fn get_struct_info_for_version(
     case_preserving: bool,
 ) -> Result<Structs> {
     let target_triplet = TargetTriplet {
-        arch: gospel_typelib::type_model::TargetArchitecture::X86_64,
-        sys: gospel_typelib::type_model::TargetOperatingSystem::Win32,
-        env: gospel_typelib::type_model::TargetEnvironment::MSVC,
+        arch: TargetArchitecture::X86_64,
+        sys: TargetOperatingSystem::Win32,
+        env: Some(TargetEnvironment::MSVC),
     };
 
     let compiler_instance = CompilerInstance::create(Default::default());
@@ -98,7 +99,7 @@ pub fn get_struct_info_for_version(
 
     let mut structs = Vec::new();
     let vm_options = GospelVMOptions::default()
-        .target_triplet(target_triplet.clone())
+        .target_triplet(target_triplet)
         .with_global("UE_VERSION", ue_version)
         .with_global("WITH_CASE_PRESERVING_NAME", case_preserving_flag);
     let mut execution_context = GospelVMRunContext::create(vm_options);
@@ -134,7 +135,7 @@ fn eval_struct_layout(
             let type_tree = execution_context.type_tree(type_index);
 
             let mut members = HashMap::new();
-            let mut layout_cache = TypeLayoutCache::create(target_triplet.clone());
+            let mut layout_cache = TypeLayoutCache::create(*target_triplet);
 
             let mut add_members = |type_index: usize, base: usize| -> Result<Vec<(usize, usize)>> {
                 let Type::UDT(udt) = &type_tree.types[type_index] else {

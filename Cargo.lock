@@ -715,7 +715,7 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 [[package]]
 name = "gospel-compiler"
 version = "0.1.0"
-source = "git+https://github.com/trumank/gospel#11f95d0c5a31c4ae30305e9dfcc865209ea95c4a"
+source = "git+https://github.com/trumank/gospel#530afadb33b9071eaeaa41a9567277cdb7695cf8"
 dependencies = [
  "anyhow",
  "clap",
@@ -735,9 +735,13 @@ dependencies = [
 [[package]]
 name = "gospel-typelib"
 version = "0.1.0"
-source = "git+https://github.com/trumank/gospel#11f95d0c5a31c4ae30305e9dfcc865209ea95c4a"
+source = "git+https://github.com/trumank/gospel#530afadb33b9071eaeaa41a9567277cdb7695cf8"
 dependencies = [
  "anyhow",
+ "lazy_static",
+ "paste",
+ "proc-macro2",
+ "quote",
  "serde",
  "strum 0.27.2",
 ]
@@ -745,7 +749,7 @@ dependencies = [
 [[package]]
 name = "gospel-vm"
 version = "0.1.0"
-source = "git+https://github.com/trumank/gospel#11f95d0c5a31c4ae30305e9dfcc865209ea95c4a"
+source = "git+https://github.com/trumank/gospel#530afadb33b9071eaeaa41a9567277cdb7695cf8"
 dependencies = [
  "anyhow",
  "bitcode",
@@ -1379,7 +1383,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.14.0",
+ "itertools 0.12.1",
  "proc-macro2",
  "quote",
  "syn",
