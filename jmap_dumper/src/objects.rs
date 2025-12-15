@@ -431,12 +431,42 @@ impl<C: Ctx> Ptr<ZMapProperty, C> {
         let offset = self.ctx().struct_member("ZMapProperty", "ValueProp");
         self.byte_offset(offset).cast()
     }
+    pub fn map_layout(&self) -> Ptr<FScriptMapLayout, C> {
+        let offset = self.ctx().struct_member("ZMapProperty", "MapLayout");
+        self.byte_offset(offset).cast()
+    }
 }
 #[derive(Clone, Copy)]
 pub struct ZSetProperty;
 impl<C: Ctx> Ptr<ZSetProperty, C> {
     pub fn element_prop(&self) -> Ptr<Ptr<ZProperty, C>, C> {
         let offset = self.ctx().struct_member("ZSetProperty", "ElementProp");
+        self.byte_offset(offset).cast()
+    }
+    pub fn set_layout(&self) -> Ptr<FScriptSetLayout, C> {
+        let offset = self.ctx().struct_member("ZSetProperty", "SetLayout");
+        self.byte_offset(offset).cast()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct FScriptSetLayout;
+impl<C: Ctx> Ptr<FScriptSetLayout, C> {
+    pub fn size(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FScriptSetLayout", "Size");
+        self.byte_offset(offset).cast()
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct FScriptMapLayout;
+impl<C: Ctx> Ptr<FScriptMapLayout, C> {
+    pub fn value_offset(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FScriptMapLayout", "ValueOffset");
+        self.byte_offset(offset).cast()
+    }
+    pub fn set_layout(&self) -> Ptr<FScriptSetLayout, C> {
+        let offset = self.ctx().struct_member("FScriptMapLayout", "SetLayout");
         self.byte_offset(offset).cast()
     }
 }

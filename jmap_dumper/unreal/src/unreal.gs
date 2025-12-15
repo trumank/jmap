@@ -1,5 +1,5 @@
 ﻿import unreal::core::{UE_VERSION, WITH_CASE_PRESERVING_NAME, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t};
-import unreal::containers::{FScriptElement, TSizedHeapAllocator, TArray, TMap, TSet};
+import unreal::containers::{FScriptElement, TSizedHeapAllocator, TArray, TMap, TSet, TBitArray, TSparseArray, TInlineSetAllocator, TSetElement, TTuple};
 import unreal::properties::{
     EPropertyFlags, ELifetimeCondition, EArrayPropertyFlags, EMapPropertyFlags,
     TEnumAsByte, TObjectPtr,
@@ -103,12 +103,6 @@ struct alignas(16) FTokenStreamOwner {
 
 struct FString : TArray<wchar_t> {};
 
-template<typename A, typename B>
-struct TTuple {
-    A First;
-    B Second;
-};
-
 struct FText {
     uint64_t Placeholder[3];
 };
@@ -145,13 +139,23 @@ struct FCustomVersionContainer {
     else TArray<FCustomVersion> Versions;
 };
 
+// FPendingRegistration: int32 Version + TCHAR* FriendlyName + ValidatorFunc = 24 bytes
+struct FPendingRegistration {
+    int32_t Version;
+    void* FriendlyName;
+    void* ValidatorFunc;
+};
+
+// Element type for TMap<FGuid, FPendingRegistration>
+type FPendingRegistrationSetElement = TSetElement<TTuple<FGuid, FPendingRegistration>>;
+
 /// TEST
 struct FStaticCustomVersionRegistry {
     FWindowsRWLock Lock;
     FCustomVersionContainer Registered;
-    // TMap with inline allocation - very large
-    if (UE_VERSION >= 426) uint64_t Queue[408];
-    else uint64_t Queue[344];
+    // TMap<FGuid, FPendingRegistration, TInlineSetAllocator<64>>
+    if (UE_VERSION >= 426) TMap<FGuid, FPendingRegistration, TInlineSetAllocator<64, FPendingRegistrationSetElement>> Queue;
+    else uint64_t Queue[344];  // Earlier versions have different layout
 };
 
 /// TEST

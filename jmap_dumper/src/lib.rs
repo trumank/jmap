@@ -13,7 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
-use containers::{FName, FString};
+use containers::{FName, FScriptMap, FScriptSet, FString};
 use jmap::{
     BytePropertyValue, Class, EClassCastFlags, EObjectFlags, EngineVersion, Enum,
     EnumPropertyValue, Function, Jmap, Metadata, Object, ObjectType, Package, Property,
@@ -605,7 +605,6 @@ fn read_object<C: Ctx>(
             if let Some(data_ptr) = array.data().read()? {
                 let inner_prop = prop.inner().read()?;
                 for i in 0..num {
-                    // TODO handle size != alignment
                     let value = read_prop(&inner_prop, &data_ptr, i)?;
                     if let Some(value) = value {
                         data.push(value);
@@ -642,27 +641,57 @@ fn read_object<C: Ctx>(
                 EnumPropertyValue::Value(value)
             })
         } else if f.contains(EClassCastFlags::CASTCLASS_FMapProperty) {
-            // /* offset 0x000 */ Data: TScriptArray<TSizedDefaultAllocator<32> >,
-            // /* offset 0x010 */ AllocationFlags: TScriptBitArray<FDefaultBitArrayAllocator,void>,
-            // /* offset 0x030 */ FirstFreeIndex: i32,
-            // /* offset 0x034 */ NumFreeIndices: i32,
+            let prop = prop.cast::<ZMapProperty>();
+            let map = ptr.cast::<FScriptMap>();
 
-            return Ok(None);
+            let key_prop = prop.key_prop().read()?;
+            let value_prop = prop.value_prop().read()?;
+
+            let map_layout = prop.map_layout();
+            let pair_wrapper_size = map_layout.set_layout().size().read()? as usize;
+
+            let mut entries = BTreeMap::new();
+
+            let sparse_array = map.pairs().elements();
+            let max_index = sparse_array.get_max_index()?;
+
+            for i in 0..max_index {
+                if sparse_array.is_valid_index(i)? {
+                    let pair_ptr = sparse_array.get_data(i, pair_wrapper_size)?;
+
+                    let key = read_prop(&key_prop, &pair_ptr.cast(), 0)?;
+                    let value = read_prop(&value_prop, &pair_ptr.cast(), 0)?;
+
+                    if let (Some(k), Some(v)) = (key, value) {
+                        entries.insert(k, v);
+                    }
+                }
+            }
+
+            PropertyValue::Map(entries)
         } else if f.contains(EClassCastFlags::CASTCLASS_FSetProperty) {
-            //let prop = prop.cast::<FSetProperty>();
-            //#[derive(Clone, Copy)]
-            //pub struct FScriptSet;
-            //impl<C: Clone + StructsTrait> Ptr<FScriptSet, C> {
-            //    pub fn data(&self) -> Ptr<FScriptArray, C> {
-            //        self.byte_offset(0).cast()
-            //    }
-            //    pub fn allocation_flags(&self) -> Ptr<TBitArray<TInlineAllocator<4>>, C> {
-            //        self.byte_offset(16).cast()
-            //    }
-            //}
-            //let array = ptr.cast::<FScriptSet>();
-            //dbg!(array.allocation_flags().read()?);
-            return Ok(None);
+            let prop = prop.cast::<ZSetProperty>();
+            let set = ptr.cast::<FScriptSet>();
+
+            let element_prop = prop.element_prop().read()?;
+
+            let element_wrapper_size = prop.set_layout().size().read()? as usize;
+
+            let mut elements = BTreeSet::new();
+
+            let sparse_array = set.elements();
+            let max_index = sparse_array.get_max_index()?;
+
+            for i in 0..max_index {
+                if sparse_array.is_valid_index(i)? {
+                    let element_ptr = sparse_array.get_data(i, element_wrapper_size)?;
+                    if let Some(value) = read_prop(&element_prop, &element_ptr.cast(), 0)? {
+                        elements.insert(value);
+                    }
+                }
+            }
+
+            PropertyValue::Set(elements)
         } else if f.contains(EClassCastFlags::CASTCLASS_FFloatProperty) {
             PropertyValue::Float(ptr.cast::<f32>().read()?.into())
         } else if f.contains(EClassCastFlags::CASTCLASS_FDoubleProperty) {

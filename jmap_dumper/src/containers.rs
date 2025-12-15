@@ -321,3 +321,121 @@ pub fn extract_fnames<C: Ctx>(ctx: &C) -> Result<BTreeMap<u32, String>> {
 
     Ok(names)
 }
+
+// FScriptArray - untyped array for runtime element access
+#[derive(Debug, Clone, Copy)]
+pub struct FScriptArray;
+impl<C: Ctx> Ptr<FScriptArray, C> {
+    pub fn data(&self) -> Ptr<Option<Ptr<u8, C>>, C> {
+        let offset = self.ctx().struct_member("FScriptArray", "Data");
+        self.byte_offset(offset).cast()
+    }
+    pub fn num(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FScriptArray", "ArrayNum");
+        self.byte_offset(offset).cast()
+    }
+}
+
+// FScriptBitArray - for reading allocation flags in sparse arrays
+// Uses FDefaultBitArrayAllocator which has 4 inline DWORDs (128 bits) + overflow pointer
+#[derive(Debug, Clone, Copy)]
+pub struct FScriptBitArray;
+
+impl<C: Ctx> Ptr<FScriptBitArray, C> {
+    /// Get pointer to inline data (first 4 DWORDs)
+    pub fn inline_data(&self) -> Ptr<u32, C> {
+        let alloc_offset = self
+            .ctx()
+            .struct_member("FScriptBitArray", "AllocatorInstance");
+        let inline_offset = self
+            .ctx()
+            .struct_member("FDefaultBitArrayAllocator", "InlineData");
+        self.byte_offset(alloc_offset + inline_offset).cast()
+    }
+
+    /// Get pointer to secondary (heap) data for overflow
+    pub fn secondary_data(&self) -> Ptr<Option<Ptr<u32, C>>, C> {
+        let alloc_offset = self
+            .ctx()
+            .struct_member("FScriptBitArray", "AllocatorInstance");
+        let secondary_offset = self
+            .ctx()
+            .struct_member("FDefaultBitArrayAllocator", "SecondaryData");
+        self.byte_offset(alloc_offset + secondary_offset).cast()
+    }
+
+    pub fn num_bits(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FScriptBitArray", "NumBits");
+        self.byte_offset(offset).cast()
+    }
+
+    /// Check if a specific index is allocated (bit is set)
+    pub fn is_allocated(&self, index: usize) -> Result<bool> {
+        let num_bits = self.num_bits().read()?;
+        if num_bits <= 0 || index >= num_bits as usize {
+            return Ok(false);
+        }
+
+        let word_index = index / 32;
+        let bit_index = index % 32;
+
+        // If secondary pointer is set, ALL data is on heap
+        // Otherwise, ALL data is inline
+        let word = if let Some(secondary_ptr) = self.secondary_data().read()? {
+            secondary_ptr.offset(word_index).read()?
+        } else {
+            self.inline_data().offset(word_index).read()?
+        };
+
+        Ok((word & (1 << bit_index)) != 0)
+    }
+}
+
+// FScriptSparseArray - for iterating valid entries
+#[derive(Debug, Clone, Copy)]
+pub struct FScriptSparseArray;
+impl<C: Ctx> Ptr<FScriptSparseArray, C> {
+    pub fn data(&self) -> Ptr<FScriptArray, C> {
+        let offset = self.ctx().struct_member("FScriptSparseArray", "Data");
+        self.byte_offset(offset).cast()
+    }
+    pub fn allocation_flags(&self) -> Ptr<FScriptBitArray, C> {
+        let offset = self
+            .ctx()
+            .struct_member("FScriptSparseArray", "AllocationFlags");
+        self.byte_offset(offset).cast()
+    }
+    /// Get the maximum index (Data.ArrayNum)
+    pub fn get_max_index(&self) -> Result<usize> {
+        Ok(self.data().num().read()? as usize)
+    }
+    /// Check if an index is valid (allocated, not free)
+    pub fn is_valid_index(&self, index: usize) -> Result<bool> {
+        self.allocation_flags().is_allocated(index)
+    }
+    /// Get pointer to element data at index (caller must know element size)
+    pub fn get_data(&self, index: usize, element_size: usize) -> Result<Ptr<u8, C>> {
+        let data_ptr = self.data().data().read()?.expect("sparse array data");
+        Ok(data_ptr.byte_offset(index * element_size))
+    }
+}
+
+// FScriptSet - for iterating set elements
+#[derive(Debug, Clone, Copy)]
+pub struct FScriptSet;
+impl<C: Ctx> Ptr<FScriptSet, C> {
+    pub fn elements(&self) -> Ptr<FScriptSparseArray, C> {
+        let offset = self.ctx().struct_member("FScriptSet", "Elements");
+        self.byte_offset(offset).cast()
+    }
+}
+
+// FScriptMap - for iterating map pairs (same layout as Set, stores pairs)
+#[derive(Debug, Clone, Copy)]
+pub struct FScriptMap;
+impl<C: Ctx> Ptr<FScriptMap, C> {
+    pub fn pairs(&self) -> Ptr<FScriptSet, C> {
+        let offset = self.ctx().struct_member("FScriptMap", "Pairs");
+        self.byte_offset(offset).cast()
+    }
+}

@@ -657,6 +657,33 @@ pub enum PropertyType {
     #[serde(rename = "AnsiStrProperty")]
     AnsiStr,
 }
+mod map_as_pairs {
+    use super::PropertyValue;
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::collections::BTreeMap;
+
+    pub fn serialize<S>(
+        map: &BTreeMap<PropertyValue, PropertyValue>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let pairs: Vec<(&PropertyValue, &PropertyValue)> = map.iter().collect();
+        pairs.serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(
+        deserializer: D,
+    ) -> Result<BTreeMap<PropertyValue, PropertyValue>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let pairs: Vec<(PropertyValue, PropertyValue)> = Vec::deserialize(deserializer)?;
+        Ok(pairs.into_iter().collect())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(untagged)]
 pub enum PropertyValue {
@@ -670,6 +697,7 @@ pub enum PropertyValue {
     Bool(bool),
     Array(Vec<PropertyValue>),
     Enum(EnumPropertyValue),
+    #[serde(with = "map_as_pairs")]
     Map(BTreeMap<PropertyValue, PropertyValue>),
     Set(BTreeSet<PropertyValue>),
     Float(OrderedFloat<f32>),
