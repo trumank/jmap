@@ -229,28 +229,76 @@ impl<C: Ctx> Ptr<UEnumNameTuple, C> {
         self.byte_offset(offset).cast()
     }
 }
+#[derive(Clone, Copy)]
+pub struct FNameData;
+impl<C: Ctx> Ptr<FNameData, C> {
+    pub fn tagged_names(&self) -> Ptr<u64, C> {
+        let offset = self.ctx().struct_member("FNameData", "TaggedNames");
+        self.byte_offset(offset).cast()
+    }
+    pub fn tagged_values(&self) -> Ptr<u64, C> {
+        let offset = self.ctx().struct_member("FNameData", "TaggedValues");
+        self.byte_offset(offset).cast()
+    }
+    pub fn num_values(&self) -> Ptr<i32, C> {
+        let offset = self.ctx().struct_member("FNameData", "NumValues");
+        self.byte_offset(offset).cast()
+    }
+}
 impl<C: Ctx> Ptr<UEnum, C> {
     pub fn read_names(&self) -> Result<Vec<(String, i64)>> {
-        let mut names = vec![];
-        let len = self.names().len()?;
-        if len > 0 {
-            let data: Ptr<UEnumNameTuple, _> = self.names().data()?.unwrap().cast();
-            let size = self.ctx().get_struct("UEnumNameTuple").size;
-            let version = self.ctx().ue_version();
+        let version = self.ctx().ue_version();
+
+        if version >= (5, 7) {
+            // UE 5.7+: FNameData
+            let name_data: Ptr<FNameData, _> = self.names().cast();
+            let len = name_data.num_values().read()? as usize;
+            if len == 0 {
+                return Ok(vec![]);
+            }
+
+            let tagged_names = name_data.tagged_names().read()?;
+            let tagged_values = name_data.tagged_values().read()?;
+            let names_addr = tagged_names & !1u64;
+            let values_addr = tagged_values & !1u64;
+
+            let fname_size = self.ctx().get_struct("FName").size as usize;
+
+            let mut names = vec![];
             for i in 0..len {
-                let elm = data.byte_offset(i * size as usize);
-                let name = elm.name().read()?;
-                let value = if version < (4, 9) {
-                    i as i64
-                } else if version < (4, 15) {
-                    elm.value().cast::<u8>().read()? as i64
-                } else {
-                    elm.value().cast::<i64>().read()?
-                };
+                let name_ptr: Ptr<FName, _> =
+                    Ptr::new(names_addr + (i * fname_size) as u64, self.ctx().clone())?;
+                let name = name_ptr.read()?;
+
+                let value_ptr: Ptr<i64, _> =
+                    Ptr::new(values_addr + (i * 8) as u64, self.ctx().clone())?;
+                let value = value_ptr.read()?;
+
                 names.push((name, value));
             }
+            Ok(names)
+        } else {
+            // Pre-5.7: TArray<UEnumNameTuple>
+            let mut names = vec![];
+            let len = self.names().len()?;
+            if len > 0 {
+                let data: Ptr<UEnumNameTuple, _> = self.names().data()?.unwrap().cast();
+                let size = self.ctx().get_struct("UEnumNameTuple").size;
+                for i in 0..len {
+                    let elm = data.byte_offset(i * size as usize);
+                    let name = elm.name().read()?;
+                    let value = if version < (4, 9) {
+                        i as i64
+                    } else if version < (4, 15) {
+                        elm.value().cast::<u8>().read()? as i64
+                    } else {
+                        elm.value().cast::<i64>().read()?
+                    };
+                    names.push((name, value));
+                }
+            }
+            Ok(names)
         }
-        Ok(names)
     }
 }
 
@@ -528,7 +576,8 @@ impl<C: Ctx> Ptr<ZMulticastDelegateProperty, C> {
 pub struct FUObjectItem;
 impl<C: Ctx> Ptr<FUObjectItem, C> {
     pub fn object(&self) -> Ptr<Option<Ptr<UObject, C>>, C> {
-        self.byte_offset(0).cast()
+        let offset = self.ctx().struct_member("FUObjectItem", "Object");
+        self.byte_offset(offset).cast()
     }
 }
 impl<C: Ctx> VirtSize<C> for FUObjectItem {

@@ -1,4 +1,4 @@
-import unreal::core::{UE_VERSION, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t};
+import unreal::core::{UE_VERSION, int8_t, uint8_t, int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t, uintptr_t};
 import unreal::containers::{TArray, TMap};
 import unreal::properties::{
     ZField, ZProperty, ZStructProperty,
@@ -161,12 +161,18 @@ struct UEnumNameTuple {
     if (UE_VERSION >= 409) ValueType Value;
 };
 
+struct FNameData {
+    uintptr_t TaggedNames;
+    uintptr_t TaggedValues;
+    int32_t NumValues;
+};
+
 /// TEST
 class UEnum : UField {
     FString CppType;
 
-    type ValueType = if (UE_VERSION < 415) uint8_t else int64_t;
-    TArray<UEnumNameTuple> Names;
+    type NamesType = if (UE_VERSION >= 507) FNameData else TArray<UEnumNameTuple>;
+    NamesType Names;
 
     ECppForm CppForm;
 
@@ -221,6 +227,7 @@ class UClass : UStruct,
         STUB* SparseClassData;
         UScriptStruct* SparseClassDataStruct;
     }
+    if (UE_VERSION >= 507) bool bNeedsDynamicSubobjectInstancing;
     TMap<FName, UFunction*> FuncMap;
     if (UE_VERSION >= 411 && UE_VERSION < 418) {
         TMap<FName, UFunction*> ParentFuncMap;

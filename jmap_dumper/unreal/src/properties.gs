@@ -25,13 +25,15 @@ public struct TObjectPtr {
 /// TEST
 public class FFieldClass {
     FName Name;
+    if (UE_VERSION >= 507) EClassFlags ClassFlags;
     uint64_t Id;
     uint64_t CastFlags;
-    EClassFlags ClassFlags;
+    if (UE_VERSION < 507) EClassFlags ClassFlags;
     FFieldClass* SuperClass;
     FField* DefaultObject;
     void* ConstructFn; // FField*(*)(const FFieldVariant*, const FName*, EObjectFlags)
-    FThreadSafeCounter UnqiueNameIndexCounter;
+    if (UE_VERSION < 507) FThreadSafeCounter UnqiueNameIndexCounter;
+    else int32_t UniqueNameIndexCounter; // std::atomic<int>
 };
 
 /// TEST

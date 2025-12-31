@@ -1,4 +1,4 @@
-import unreal::core::{UE_VERSION, int8_t, uint8_t, int32_t, uint32_t, uint64_t};
+import unreal::core::{UE_VERSION, int8_t, uint8_t, int32_t, uint32_t, int64_t, uint64_t};
 import unreal::containers::{TArray};
 import unreal::objects::{UObject};
 import unreal::unreal::{STUB, FCriticalSection};
@@ -10,15 +10,16 @@ struct FThreadSafeCounter {
 
 /// TEST
 struct FUObjectItem {
+    if (UE_VERSION >= 507) int64_t FlagsAndRefCount;
     UObject* Object;
 
     if (UE_VERSION < 413) int32_t ClusterAndFlags;
-    if (UE_VERSION >= 413) int32_t Flags;
+    if (UE_VERSION >= 413 && UE_VERSION < 507) int32_t Flags;
     if (UE_VERSION >= 413 && UE_VERSION < 416) int32_t ClusterIndex;
     if (UE_VERSION >= 416) int32_t ClusterRootIndex;
 
     int32_t SerialNumber;
-    if (UE_VERSION >= 505) int32_t RefCount;
+    if (UE_VERSION >= 505 && UE_VERSION < 507) int32_t RefCount;
 };
 
 /// TEST

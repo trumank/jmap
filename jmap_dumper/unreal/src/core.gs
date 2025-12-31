@@ -12,3 +12,4 @@ public type int32_t = int;
 public type uint32_t = unsigned int;
 public type int64_t = long long int;
 public type uint64_t = unsigned long long int;
+public type uintptr_t = uint64_t;

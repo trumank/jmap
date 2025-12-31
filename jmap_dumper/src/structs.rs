@@ -80,6 +80,7 @@ pub fn get_struct_info_for_version(
         ("objects", "UClass"),
         ("objects", "UEnum"),
         ("objects", "UEnumNameTuple"),
+        ("objects", "FNameData"),
         ("objects", "UFunction"),
         ("objects", "UScriptStruct"),
         ("properties", "ZField"),
