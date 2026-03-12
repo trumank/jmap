@@ -13,7 +13,6 @@ use binaryninja::types::{
 use binaryninja::{
     binary_view::BinaryViewExt,
     command::{self, Command},
-    logger::Logger,
     types::{MemberAccess, MemberScope, Structure, Type},
 };
 use log::{error, info};
@@ -62,7 +61,7 @@ fn load(path: std::path::PathBuf) -> Result<Jmap> {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn CorePluginInit() -> bool {
-    Logger::new("ue_binja").init();
+    binaryninja::tracing_init!("ue_binja");
 
     info!("ue_binja loaded");
 

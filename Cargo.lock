@@ -2025,6 +2025,7 @@ dependencies = [
  "jmap",
  "log",
  "serde_json",
+ "tracing",
 ]
 
 [[package]]

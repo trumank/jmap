@@ -16,5 +16,6 @@ crate-type = ["cdylib"]
 anyhow.workspace = true
 binaryninja = {git = "https://github.com/Vector35/binaryninja-api.git", branch = "dev"}
 log = "0.4.28"
+tracing = "0.1"
 serde_json.workspace = true
 jmap = { version = "0.1.1", path = "../jmap" }
