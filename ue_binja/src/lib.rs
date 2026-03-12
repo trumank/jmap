@@ -26,7 +26,7 @@ impl Command for ImportCommand {
 
         let Some(path) = binaryninja::interaction::get_open_filename_input(
             "Import Unreal Engine reflection data",
-            "json",
+            "jmap",
         ) else {
             return;
         };
