@@ -2,7 +2,7 @@
 
 import unreal::core::{UE_VERSION, int32_t, uint32_t, uint64_t, uint8_t};
 
-public struct FScriptElement {};
+struct FScriptElement {};
 
 // ============================================================================
 // Base Allocator Types
@@ -10,7 +10,7 @@ public struct FScriptElement {};
 
 // Heap allocator - just a pointer to data
 template<typename InIndexType>
-public struct TSizedHeapAllocator {
+struct TSizedHeapAllocator {
     type IndexType = InIndexType;
     FScriptElement* Data;
 };
@@ -21,21 +21,21 @@ public struct TSizedHeapAllocator {
 
 // TInlineAllocator<N>::ForElementType<uint32> - for bit arrays
 template<int NumDWORDs>
-public struct TInlineBitArrayAllocatorN {
+struct TInlineBitArrayAllocatorN {
     uint32_t InlineData[NumDWORDs];
     FScriptElement* SecondaryData;
 };
 
 // TInlineAllocator<N>::ForElementType<FSetElementId> - for hash buckets
 template<int NumBuckets>
-public struct TInlineHashAllocatorN {
+struct TInlineHashAllocatorN {
     int32_t InlineData[NumBuckets];  // FSetElementId is int32_t
     FScriptElement* SecondaryData;
 };
 
 // TInlineAllocator<N>::ForElementType<ElementType> - for element storage
 template<int NumElements, typename ElementType>
-public struct TInlineElementAllocatorN {
+struct TInlineElementAllocatorN {
     type IndexType = int32_t;
     uint8_t InlineData[NumElements * sizeof(ElementType)];
     FScriptElement* SecondaryData;
@@ -46,7 +46,7 @@ public struct TInlineElementAllocatorN {
 // ============================================================================
 
 // Default: TInlineAllocator<4>::ForElementType<uint32> (128 bits inline)
-public struct FDefaultBitArrayAllocator {
+struct FDefaultBitArrayAllocator {
     uint32_t InlineData[4];
     FScriptElement* SecondaryData;
 };
@@ -57,7 +57,7 @@ public struct FDefaultBitArrayAllocator {
 
 /// TEST
 template<typename InAllocator = FDefaultBitArrayAllocator>
-public struct TBitArray {
+struct TBitArray {
     InAllocator AllocatorInstance;
     int32_t NumBits;
     int32_t MaxBits;
@@ -68,7 +68,7 @@ public struct TBitArray {
 // ============================================================================
 
 template<typename InElementType, typename InAllocator = TSizedHeapAllocator<int32_t>>
-public struct TArray {
+struct TArray {
     type ElementType = InElementType;
     type IndexType = InAllocator::typename IndexType;
 
@@ -83,26 +83,26 @@ public struct TArray {
 
 // Union element: either holds data or free list links
 template<typename ElementType>
-public struct TSparseArrayElementOrFreeListLink {
+struct TSparseArrayElementOrFreeListLink {
     ElementType ElementData;
 };
 
 // Default sparse array allocator - heap elements + 4 inline DWORDs for bits
-public struct FDefaultSparseArrayAllocator {
+struct FDefaultSparseArrayAllocator {
     type ElementAllocator = TSizedHeapAllocator<int32_t>;
     type BitArrayAllocator = FDefaultBitArrayAllocator;
 };
 
 // Inline sparse array allocator
 template<int NumElements, typename ElementType>
-public struct TInlineSparseArrayAllocator {
+struct TInlineSparseArrayAllocator {
     type ElementAllocator = TInlineElementAllocatorN<NumElements, ElementType>;
     type BitArrayAllocator = TInlineBitArrayAllocatorN<(NumElements + 31) / 32>;
 };
 
 /// TEST
 template<typename InElementType, typename InAllocator = FDefaultSparseArrayAllocator>
-public struct TSparseArray {
+struct TSparseArray {
     TArray<TSparseArrayElementOrFreeListLink<InElementType>, InAllocator::typename ElementAllocator> Data;
     TBitArray<InAllocator::typename BitArrayAllocator> AllocationFlags;
     int32_t FirstFreeIndex;
@@ -115,14 +115,14 @@ public struct TSparseArray {
 
 // Set element wrapper: stores value + hash chain info
 template<typename InElementType>
-public struct TSetElement {
+struct TSetElement {
     InElementType Value;
     int32_t HashNextId;   // FSetElementId
     int32_t HashIndex;
 };
 
 // Default set allocator: heap sparse array + 1 inline hash bucket
-public struct FDefaultSetAllocator {
+struct FDefaultSetAllocator {
     type SparseArrayAllocator = FDefaultSparseArrayAllocator;
     type HashAllocator = TInlineHashAllocatorN<1>;
 };
@@ -130,14 +130,14 @@ public struct FDefaultSetAllocator {
 // Inline set allocator - matches UE's TInlineSetAllocator<N>
 // ElementType = TSetElement<TTuple<K,V>> for TMap, or TSetElement<T> for TSet
 template<int NumElements, typename ElementType>
-public struct TInlineSetAllocator {
+struct TInlineSetAllocator {
     type SparseArrayAllocator = TInlineSparseArrayAllocator<NumElements, TSparseArrayElementOrFreeListLink<ElementType>>;
     type HashAllocator = TInlineHashAllocatorN<(NumElements + 1) / 2>;
 };
 
 /// TEST
 template<typename InElementType, typename InAllocator = FDefaultSetAllocator>
-public struct TSet {
+struct TSet {
     TSparseArray<TSetElement<InElementType>, InAllocator::typename SparseArrayAllocator> Elements;
     InAllocator::typename HashAllocator Hash;
     int32_t HashSize;
@@ -148,14 +148,14 @@ public struct TSet {
 // ============================================================================
 
 template<typename InKeyType, typename InValueType>
-public struct TTuple {
+struct TTuple {
     InKeyType Key;
     InValueType Value;
 };
 
 /// TEST
 template<typename InKeyType, typename InValueType, typename InAllocator = FDefaultSetAllocator>
-public struct TMap {
+struct TMap {
     type PairType = TTuple<InKeyType, InValueType>;
     TSet<PairType, InAllocator> Pairs;
 };
@@ -166,21 +166,21 @@ public struct TMap {
 // ============================================================================
 
 // Untyped script array - heap allocated data
-public struct FScriptArray {
+struct FScriptArray {
     void* Data;
     int32_t ArrayNum;
     int32_t ArrayMax;
 };
 
 // Untyped bit array - uses FDefaultBitArrayAllocator (4 inline DWORDs)
-public struct FScriptBitArray {
+struct FScriptBitArray {
     FDefaultBitArrayAllocator AllocatorInstance;
     int32_t NumBits;
     int32_t MaxBits;
 };
 
 // Untyped sparse array
-public struct FScriptSparseArray {
+struct FScriptSparseArray {
     FScriptArray Data;
     FScriptBitArray AllocationFlags;
     int32_t FirstFreeIndex;
@@ -188,13 +188,13 @@ public struct FScriptSparseArray {
 };
 
 // Untyped set - uses FDefaultSetAllocator (1 inline hash bucket)
-public struct FScriptSet {
+struct FScriptSet {
     FScriptSparseArray Elements;
     TInlineHashAllocatorN<1> Hash;
     int32_t HashSize;
 };
 
 // Untyped map (same layout as set, stores key-value pairs)
-public struct FScriptMap {
+struct FScriptMap {
     FScriptSet Pairs;
 };
