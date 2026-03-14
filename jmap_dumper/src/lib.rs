@@ -23,6 +23,7 @@ use mem::{CtxPtr, Mem, MemCache, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth::image::Image;
+use patternsleuth::MemoryTrait;
 use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
 use read_process_memory::{Pid, ProcessHandle};
 
@@ -51,6 +52,7 @@ impl_collector! {
     #[derive(Debug, PartialEq, Clone)]
     struct OptResolution {
         build: patternsleuth::resolvers::unreal::engine_version::BuildChangeList,
+        fname_constant: patternsleuth::resolvers::unreal::fname::StaticFNameConst,
     }
 }
 
@@ -423,7 +425,17 @@ fn dump_inner<M: Mem>(
 
     let fnamepool = PtrFNamePool(results.fname_pool.0);
 
-    let case_preserving = false;
+    let mut case_preserving = false;
+
+    if results.opt.fname_constant.is_ok() {
+        let name_constant_address = results.opt.fname_constant.clone()?.0;
+        let comparison_index = mem.read::<u32>(name_constant_address)?;
+        let likely_number = mem.read::<u32>(name_constant_address + 4)?;
+        let possibly_display_index = mem.read::<u32>(name_constant_address + 8)?;
+        assert_ne!(comparison_index, 0);
+        assert_eq!(likely_number, 0, "Builds with outlined name number (UE_FNAME_OUTLINE_NUMBER=1) are not supported");
+        case_preserving = comparison_index == possibly_display_index;
+    }
 
     let struct_info = if let Some(provided_info) = struct_info {
         provided_info
