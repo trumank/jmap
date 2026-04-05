@@ -217,6 +217,9 @@ impl<M: Mem> MemCache<M> {
             pages: Default::default(),
         }
     }
+    pub fn clear(&self) {
+        self.pages.lock().unwrap().clear();
+    }
 }
 impl<M: Mem> Mem for MemCache<M> {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
@@ -264,13 +267,20 @@ pub trait Ctx: Mem {
     fn case_preserving(&self) -> bool;
 }
 
+pub struct CtxState {
+    pub fnamepool: PtrFNamePool,
+    pub structs: HashMap<String, StructInfo>,
+    pub version: (u16, u16),
+    pub case_preserving: bool,
+    pub uobjectarray: u64,
+    pub image_base_address: u64,
+    pub build_change_list: Option<String>,
+}
+
 #[derive(Clone)]
 pub struct CtxPtr<M: Mem> {
     pub mem: M,
-    pub fnamepool: PtrFNamePool,
-    pub structs: Arc<HashMap<String, StructInfo>>,
-    pub version: (u16, u16),
-    pub case_preserving: bool,
+    pub state: Arc<CtxState>,
 }
 impl<M: Mem> Mem for CtxPtr<M> {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
@@ -279,10 +289,10 @@ impl<M: Mem> Mem for CtxPtr<M> {
 }
 impl<M: Mem> Ctx for CtxPtr<M> {
     fn fnamepool(&self) -> PtrFNamePool {
-        self.fnamepool
+        self.state.fnamepool
     }
     fn get_struct(&self, struct_name: &str) -> &StructInfo {
-        let Some(s) = self.structs.get(struct_name) else {
+        let Some(s) = self.state.structs.get(struct_name) else {
             panic!("struct {struct_name} not found");
         };
         s
@@ -299,9 +309,9 @@ impl<M: Mem> Ctx for CtxPtr<M> {
         member.offset as usize
     }
     fn ue_version(&self) -> (u16, u16) {
-        self.version
+        self.state.version
     }
     fn case_preserving(&self) -> bool {
-        self.case_preserving
+        self.state.case_preserving
     }
 }
