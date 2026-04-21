@@ -1,11 +1,11 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::mem::Mem;
+use crate::mem::Ctx;
 use anyhow::Result;
 use jmap::{Address, ObjectType};
 
-pub fn analyze_vtables<M: Mem>(
-    mem: &M,
+pub fn analyze_vtables(
+    mem: &Ctx,
     objects: &mut BTreeMap<String, ObjectType>,
 ) -> BTreeMap<Address, Vec<Address>> {
     let mut class_vtables: HashMap<String, Address> = HashMap::new();
@@ -24,12 +24,12 @@ pub fn analyze_vtables<M: Mem>(
     //     println!("{i} {vtable:08x} {classes:?}");
     // }
 
-    fn read_ptr<M: Mem>(mem: &M, addr: u64) -> Result<u64> {
+    fn read_ptr(mem: &Ctx, addr: u64) -> Result<u64> {
         let mut buf = [0; 8];
         mem.read_buf(addr, &mut buf)?;
         Ok(u64::from_le_bytes(buf))
     }
-    fn is_valid<M: Mem>(mem: &M, addr: u64) -> bool {
+    fn is_valid(mem: &Ctx, addr: u64) -> bool {
         // TODO check for executable bit, not just valid memory
         let mut buf = [0; 1];
         mem.read_buf(addr, &mut buf).is_ok()

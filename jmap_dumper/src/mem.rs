@@ -1,10 +1,9 @@
-use crate::{containers::PtrFNamePool, structs::StructInfo};
+use crate::structs::StructInfo;
 use anyhow::{Context as _, Result};
 use jmap::{
     EClassCastFlags, EClassFlags, ECppForm, EEnumFlags, EFunctionFlags, EObjectFlags,
     EPropertyFlags, EStructFlags,
 };
-use read_process_memory::{CopyAddress as _, ProcessHandle};
 use std::{
     collections::HashMap,
     marker::PhantomData,
@@ -12,98 +11,16 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub trait VirtSize<C: Ctx> {
-    fn size(ctx: &C) -> usize;
-}
+// --- Pod trait (merged TryFromBytes + Pod) ---
 
-#[derive(Clone)]
-#[repr(C)]
-pub struct Ptr<T, C> {
-    address: NonZero<u64>,
-    ctx: C,
-    _type: PhantomData<T>,
-}
-impl<T, C> std::fmt::Debug for Ptr<T, C> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ptr(0x{:x})", self.address)
-    }
-}
-impl<T, C> Ptr<T, C> {
-    pub fn new(address: u64, ctx: C) -> Result<Self> {
-        Ok(Self {
-            address: address.try_into().context("unexpected null ptr")?,
-            ctx,
-            _type: Default::default(),
-        })
-    }
-    pub fn new_non_zero(address: NonZero<u64>, ctx: C) -> Self {
-        Self {
-            address,
-            ctx,
-            _type: Default::default(),
-        }
-    }
-    pub fn ctx(&self) -> &C {
-        &self.ctx
-    }
-    pub fn address(&self) -> u64 {
-        self.address.get()
-    }
-}
-impl<T, C: Clone> Ptr<T, C> {
-    pub fn map(&self, map: impl FnOnce(u64) -> u64) -> Result<Self> {
-        Self::new(map(self.address.into()), self.ctx.clone())
-    }
-    pub fn cast<O>(&self) -> Ptr<O, C> {
-        Ptr::new_non_zero(self.address, self.ctx.clone())
-    }
-    pub fn byte_offset(&self, n: usize) -> Self {
-        Self::new_non_zero(
-            self.address.checked_add(n as u64).unwrap(),
-            self.ctx.clone(),
-        )
-    }
-}
-impl<T: VirtSize<C>, C: Clone + Ctx> Ptr<T, C> {
-    pub fn offset(&self, n: usize) -> Self {
-        self.byte_offset(n * T::size(self.ctx()))
-    }
-}
-impl<T: Pod, C: Mem> Ptr<T, C> {
-    pub fn read(&self) -> Result<T> {
-        self.ctx.read(self.address.into())
-    }
-    pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
-        self.ctx.read_vec(self.address.into(), count)
-    }
-}
-impl<T, C: Mem> Ptr<Option<Ptr<T, C>>, C> {
-    pub fn read(&self) -> Result<Option<Ptr<T, C>>> {
-        let addr = self.ctx.read::<u64>(self.address.into())?;
-        Ok(if addr != 0 {
-            Some(self.map(|_| addr)?.cast())
-        } else {
-            None
-        })
-    }
-}
-impl<T, C: Mem> Ptr<Ptr<T, C>, C> {
-    pub fn read(&self) -> Result<Ptr<T, C>> {
-        let addr = self.ctx.read::<u64>(self.address.into())?;
-        Ok(self.map(|_| addr)?.cast())
-    }
-}
-
-pub trait TryFromBytes: Sized {
+pub trait Pod: Sized {
     fn try_from_bytes(bytes: &[u8]) -> Result<Self>;
 }
 
-pub trait Pod: TryFromBytes {}
-
-macro_rules! impl_try_from_bytes_pod {
+macro_rules! impl_pod {
     ($($t:ty),* $(,)?) => {
         $(
-            impl TryFromBytes for $t {
+            impl Pod for $t {
                 fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
                     Ok(bytemuck::pod_read_unaligned(bytes))
                 }
@@ -112,10 +29,10 @@ macro_rules! impl_try_from_bytes_pod {
     };
 }
 
-macro_rules! impl_try_from_bytes_bitflags {
+macro_rules! impl_pod_bitflags {
     ($(($t:ty, $bits_ty:ty)),* $(,)?) => {
         $(
-            impl TryFromBytes for $t {
+            impl Pod for $t {
                 fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
                     let bits: $bits_ty = bytemuck::pod_read_unaligned(bytes);
                     Self::from_bits(bits)
@@ -126,9 +43,9 @@ macro_rules! impl_try_from_bytes_bitflags {
     };
 }
 
-impl_try_from_bytes_pod!(i8, u8, i16, u16, i32, u32, i64, u64, usize, f32, f64);
+impl_pod!(i8, u8, i16, u16, i32, u32, i64, u64, usize, f32, f64);
 
-impl_try_from_bytes_bitflags!(
+impl_pod_bitflags!(
     (EObjectFlags, u32),
     (EClassCastFlags, u64),
     (EClassFlags, u32),
@@ -138,7 +55,7 @@ impl_try_from_bytes_bitflags!(
     (EEnumFlags, u8),
 );
 
-impl TryFromBytes for ECppForm {
+impl Pod for ECppForm {
     fn try_from_bytes(bytes: &[u8]) -> Result<Self> {
         let discriminant: u8 = bytemuck::pod_read_unaligned(bytes);
         Self::from_repr(discriminant)
@@ -146,69 +63,23 @@ impl TryFromBytes for ECppForm {
     }
 }
 
-impl Pod for i8 {}
-impl Pod for u8 {}
-impl Pod for i16 {}
-impl Pod for u16 {}
-impl Pod for i32 {}
-impl Pod for u32 {}
-impl Pod for i64 {}
-impl Pod for u64 {}
-impl Pod for usize {}
-impl Pod for f32 {}
-impl Pod for f64 {}
-impl Pod for EObjectFlags {}
-impl Pod for EClassCastFlags {}
-impl Pod for EClassFlags {}
-impl Pod for EFunctionFlags {}
-impl Pod for EStructFlags {}
-impl Pod for EPropertyFlags {}
-impl Pod for EEnumFlags {}
-impl Pod for ECppForm {}
+// --- Mem trait ---
 
-impl<T: Pod, C: Ctx> VirtSize<C> for T {
-    fn size(_ctx: &C) -> usize {
-        std::mem::size_of::<Self>()
-    }
-}
-
-impl<T, C: Ctx> VirtSize<C> for Ptr<T, C> {
-    fn size(_ctx: &C) -> usize {
-        8
-    }
-}
-impl<T, C: Ctx> VirtSize<C> for Option<Ptr<T, C>> {
-    fn size(_ctx: &C) -> usize {
-        8
-    }
-}
-
-pub trait Mem: Clone {
+pub trait Mem: Send + Sync {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()>;
-    fn read<T: Pod>(&self, address: u64) -> Result<T> {
-        let mut buf = vec![0u8; std::mem::size_of::<T>()];
-        self.read_buf(address, &mut buf)?;
-        T::try_from_bytes(&buf)
+    fn write_buf(&self, address: u64, buf: &[u8]) -> Result<()> {
+        let _ = (address, buf);
+        anyhow::bail!("write not supported for this memory backend")
     }
-
-    fn read_vec<T: Pod>(&self, address: u64, count: usize) -> Result<Vec<T>> {
-        let size = std::mem::size_of::<T>();
-        let mut buf = vec![0u8; count * size];
-        self.read_buf(address, &mut buf)?;
-        let mut result = Vec::with_capacity(count);
-        for i in 0..count {
-            let start = i * size;
-            let end = start + size;
-            result.push(T::try_from_bytes(&buf[start..end])?);
-        }
-        Ok(result)
-    }
+    fn clear_cache(&self) {}
 }
+
+// --- MemCache ---
+
 const PAGE_SIZE: usize = 0x1000;
-#[derive(Clone)]
 pub struct MemCache<M> {
     inner: M,
-    pages: Arc<Mutex<HashMap<u64, Vec<u8>>>>,
+    pages: Mutex<HashMap<u64, Vec<u8>>>,
 }
 impl<M: Mem> MemCache<M> {
     pub fn wrap(inner: M) -> Self {
@@ -217,11 +88,22 @@ impl<M: Mem> MemCache<M> {
             pages: Default::default(),
         }
     }
-    pub fn clear(&self) {
-        self.pages.lock().unwrap().clear();
-    }
 }
 impl<M: Mem> Mem for MemCache<M> {
+    fn write_buf(&self, address: u64, buf: &[u8]) -> Result<()> {
+        // Invalidate any cached pages that overlap the write
+        let mut lock = self.pages.lock().unwrap();
+        let start_page = address & !(PAGE_SIZE as u64 - 1);
+        let end_page = (address + buf.len() as u64).saturating_sub(1) & !(PAGE_SIZE as u64 - 1);
+        let mut page = start_page;
+        while page <= end_page {
+            lock.remove(&page);
+            page += PAGE_SIZE as u64;
+        }
+        drop(lock);
+        self.inner.write_buf(address, buf)
+    }
+
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         let mut remaining = buf.len();
         let mut cur = 0;
@@ -250,25 +132,102 @@ impl<M: Mem> Mem for MemCache<M> {
 
         Ok(())
     }
-}
 
-impl Mem for ProcessHandle {
-    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
-        self.copy_address(address as usize, buf)
-            .with_context(|| format!("reading {} bytes at 0x{:x}", buf.len(), address))
+    fn clear_cache(&self) {
+        self.pages.lock().unwrap().clear();
     }
 }
 
-pub trait Ctx: Mem {
-    fn fnamepool(&self) -> PtrFNamePool;
-    fn get_struct(&self, struct_name: &str) -> &StructInfo;
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize;
-    fn ue_version(&self) -> (u16, u16);
-    fn case_preserving(&self) -> bool;
+// --- ProcessHandle ---
+
+pub struct ProcessHandle {
+    pub pid: i32,
 }
 
-pub struct CtxState {
-    pub fnamepool: PtrFNamePool,
+impl ProcessHandle {
+    pub fn new(pid: i32) -> Self {
+        Self { pid }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Mem for ProcessHandle {
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
+        let local_iov = libc::iovec {
+            iov_base: buf.as_mut_ptr() as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        let remote_iov = libc::iovec {
+            iov_base: address as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        let result = unsafe { libc::process_vm_readv(self.pid, &local_iov, 1, &remote_iov, 1, 0) };
+        if result == -1 {
+            anyhow::bail!(
+                "process_vm_readv failed reading {} bytes at 0x{:x}: {}",
+                buf.len(),
+                address,
+                std::io::Error::last_os_error()
+            );
+        }
+        Ok(())
+    }
+
+    fn write_buf(&self, address: u64, buf: &[u8]) -> Result<()> {
+        let local_iov = libc::iovec {
+            iov_base: buf.as_ptr() as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        let remote_iov = libc::iovec {
+            iov_base: address as *mut libc::c_void,
+            iov_len: buf.len(),
+        };
+        let result = unsafe { libc::process_vm_writev(self.pid, &local_iov, 1, &remote_iov, 1, 0) };
+        if result == -1 {
+            anyhow::bail!(
+                "process_vm_writev failed writing {} bytes at 0x{:x}: {}",
+                buf.len(),
+                address,
+                std::io::Error::last_os_error()
+            );
+        }
+        Ok(())
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Mem for ProcessHandle {
+    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
+        use read_process_memory::{CopyAddress, Pid};
+        let handle: read_process_memory::ProcessHandle = (self.pid as Pid).try_into()?;
+        handle
+            .copy_address(address as usize, buf)
+            .with_context(|| format!("reading {} bytes at 0x{:x}", buf.len(), address))
+    }
+
+    fn write_buf(&self, address: u64, buf: &[u8]) -> Result<()> {
+        use read_process_memory::Pid;
+        use windows::Win32::Foundation::HANDLE;
+        use windows::Win32::System::Diagnostics::Debug::WriteProcessMemory;
+        let handle: read_process_memory::ProcessHandle = (self.pid as Pid).try_into()?;
+        unsafe {
+            WriteProcessMemory(
+                HANDLE(*handle),
+                address as *const _,
+                buf.as_ptr() as *const _,
+                buf.len(),
+                None,
+            )?;
+        }
+        Ok(())
+    }
+}
+
+// --- Ctx ---
+
+pub struct CtxInner {
+    pub mem: Box<dyn Mem>,
+    pub fnamepool: u64,
     pub structs: HashMap<String, StructInfo>,
     pub version: (u16, u16),
     pub case_preserving: bool,
@@ -277,27 +236,55 @@ pub struct CtxState {
     pub build_change_list: Option<String>,
 }
 
+/// Shared context: single Arc clone per Ptr operation. Deref to `CtxInner` for field access.
 #[derive(Clone)]
-pub struct CtxPtr<M: Mem> {
-    pub mem: M,
-    pub state: Arc<CtxState>,
-}
-impl<M: Mem> Mem for CtxPtr<M> {
-    fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
+pub struct Ctx(Arc<CtxInner>);
+
+impl Ctx {
+    pub fn new(inner: CtxInner) -> Self {
+        Self(Arc::new(inner))
+    }
+
+    pub fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         self.mem.read_buf(address, buf)
     }
-}
-impl<M: Mem> Ctx for CtxPtr<M> {
-    fn fnamepool(&self) -> PtrFNamePool {
-        self.state.fnamepool
+    pub fn read<T: Pod>(&self, address: u64) -> Result<T> {
+        let mut buf = vec![0u8; std::mem::size_of::<T>()];
+        self.mem.read_buf(address, &mut buf)?;
+        T::try_from_bytes(&buf)
     }
-    fn get_struct(&self, struct_name: &str) -> &StructInfo {
-        let Some(s) = self.state.structs.get(struct_name) else {
+    pub fn read_vec<T: Pod>(&self, address: u64, count: usize) -> Result<Vec<T>> {
+        let size = std::mem::size_of::<T>();
+        let mut buf = vec![0u8; count * size];
+        self.mem.read_buf(address, &mut buf)?;
+        let mut result = Vec::with_capacity(count);
+        for i in 0..count {
+            let start = i * size;
+            let end = start + size;
+            result.push(T::try_from_bytes(&buf[start..end])?);
+        }
+        Ok(result)
+    }
+    pub fn write_buf(&self, address: u64, buf: &[u8]) -> Result<()> {
+        self.mem.write_buf(address, buf)
+    }
+    pub fn write<T: Pod>(&self, address: u64, value: &T) -> Result<()> {
+        let bytes = unsafe {
+            std::slice::from_raw_parts(value as *const T as *const u8, std::mem::size_of::<T>())
+        };
+        self.mem.write_buf(address, bytes)
+    }
+    pub fn clear_cache(&self) {
+        self.mem.clear_cache();
+    }
+
+    pub fn get_struct(&self, struct_name: &str) -> &StructInfo {
+        let Some(s) = self.structs.get(struct_name) else {
             panic!("struct {struct_name} not found");
         };
         s
     }
-    fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
+    pub fn struct_member(&self, struct_name: &str, member_name: &str) -> usize {
         let Some(member) = self
             .get_struct(struct_name)
             .members
@@ -308,10 +295,98 @@ impl<M: Mem> Ctx for CtxPtr<M> {
         };
         member.offset as usize
     }
-    fn ue_version(&self) -> (u16, u16) {
-        self.state.version
+    pub fn ue_version(&self) -> (u16, u16) {
+        self.version
     }
-    fn case_preserving(&self) -> bool {
-        self.state.case_preserving
+}
+
+impl std::ops::Deref for Ctx {
+    type Target = CtxInner;
+    fn deref(&self) -> &CtxInner {
+        &self.0
+    }
+}
+
+// --- Ptr ---
+
+#[derive(Clone)]
+pub struct Ptr<T> {
+    address: NonZero<u64>,
+    ctx: Ctx,
+    _type: PhantomData<T>,
+}
+impl<T> std::fmt::Debug for Ptr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Ptr(0x{:x})", self.address)
+    }
+}
+impl<T> Ptr<T> {
+    pub fn new(address: u64, ctx: Ctx) -> Result<Self> {
+        Ok(Self {
+            address: address.try_into().context("unexpected null ptr")?,
+            ctx,
+            _type: Default::default(),
+        })
+    }
+    pub fn new_non_zero(address: NonZero<u64>, ctx: Ctx) -> Self {
+        Self {
+            address,
+            ctx,
+            _type: Default::default(),
+        }
+    }
+    pub fn ctx(&self) -> &Ctx {
+        &self.ctx
+    }
+    pub fn address(&self) -> u64 {
+        self.address.get()
+    }
+    pub fn map(&self, map: impl FnOnce(u64) -> u64) -> Result<Self> {
+        Self::new(map(self.address.into()), self.ctx.clone())
+    }
+    pub fn cast<O>(&self) -> Ptr<O> {
+        Ptr::new_non_zero(self.address, self.ctx.clone())
+    }
+    pub fn byte_offset(&self, n: usize) -> Self {
+        Self::new_non_zero(
+            self.address.checked_add(n as u64).unwrap(),
+            self.ctx.clone(),
+        )
+    }
+}
+// offset for Pod types (known size at compile time)
+impl<T: Pod> Ptr<T> {
+    pub fn offset(&self, n: usize) -> Self {
+        self.byte_offset(n * std::mem::size_of::<T>())
+    }
+    pub fn read(&self) -> Result<T> {
+        self.ctx.read(self.address.into())
+    }
+    pub fn read_vec(&self, count: usize) -> Result<Vec<T>> {
+        self.ctx.read_vec(self.address.into(), count)
+    }
+}
+// offset for Ptr<Ptr<T>> (always 8 bytes)
+impl<T> Ptr<Ptr<T>> {
+    pub fn offset(&self, n: usize) -> Self {
+        self.byte_offset(n * 8)
+    }
+    pub fn read(&self) -> Result<Ptr<T>> {
+        let addr = self.ctx.read::<u64>(self.address.into())?;
+        Ok(self.map(|_| addr)?.cast())
+    }
+}
+// offset for Ptr<Option<Ptr<T>>> (always 8 bytes)
+impl<T> Ptr<Option<Ptr<T>>> {
+    pub fn offset(&self, n: usize) -> Self {
+        self.byte_offset(n * 8)
+    }
+    pub fn read(&self) -> Result<Option<Ptr<T>>> {
+        let addr = self.ctx.read::<u64>(self.address.into())?;
+        Ok(if addr != 0 {
+            Some(self.map(|_| addr)?.cast())
+        } else {
+            None
+        })
     }
 }

@@ -37,7 +37,8 @@ jmap = { version = "0.1.1", path = "../jmap" }
 usmap = { version = "0.1.1", path = "../usmap" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.62.2", features = ["Win32_System_Diagnostics_ToolHelp"] }
+windows = { version = "0.62.2", features = ["Win32_System_Diagnostics_ToolHelp", "Win32_System_Diagnostics_Debug"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
 proc-maps = "0.4.0"

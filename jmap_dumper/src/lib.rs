@@ -19,15 +19,13 @@ use jmap::{
     EnumPropertyValue, Function, Jmap, Metadata, Object, ObjectType, Package, Property,
     PropertyType, PropertyValue, ScriptStruct, Struct,
 };
-use mem::{CtxPtr, Mem, MemCache, Ptr};
+use mem::{Ctx, MemCache, ProcessHandle, Ptr};
 use objects::FOptionalProperty;
 use ordermap::OrderMap;
 use patternsleuth::image::Image;
 use patternsleuth::resolvers::{impl_collector, impl_try_collector, resolve};
-use read_process_memory::{Pid, ProcessHandle};
 
-use crate::containers::{FUtf8String, PtrFNamePool, extract_fnames};
-use crate::mem::Ctx;
+use crate::containers::{FUtf8String, extract_fnames};
 use crate::objects::{
     FUObjectArray, UClass, UEnum, UFunction, UObject, UScriptStruct, UStruct, ZArrayProperty,
     ZBoolProperty, ZByteProperty, ZClassProperty, ZDelegateProperty, ZEnumProperty,
@@ -55,7 +53,7 @@ impl_collector! {
     }
 }
 
-fn read_path<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<String> {
+fn read_path(obj: &Ptr<UObject>) -> Result<String> {
     let mut objects = vec![obj.clone()];
 
     let mut obj = obj.clone();
@@ -65,7 +63,7 @@ fn read_path<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<String> {
     }
 
     let mut path = String::new();
-    let mut prev: Option<&Ptr<UObject, C>> = None;
+    let mut prev: Option<&Ptr<UObject>> = None;
     for obj in objects.iter().rev() {
         if let Some(prev) = prev {
             let sep = if prev
@@ -89,19 +87,19 @@ fn read_path<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<String> {
 }
 
 #[derive(Clone)]
-struct MemoryRegion<'a> {
+pub struct MemoryRegion<'a> {
     base_address: u64,
     end_address: u64,
     data: &'a [u8],
 }
 
 #[derive(Clone)]
-struct MinidumpMem<'a> {
+pub struct MinidumpMem<'a> {
     regions: Arc<Vec<MemoryRegion<'a>>>,
 }
 
 impl<'a> MinidumpMem<'a> {
-    fn new(minidump: &'a minidump::Minidump<'_, &'a [u8]>) -> Result<Self> {
+    pub fn new(minidump: &'a minidump::Minidump<'_, &'a [u8]>) -> Result<Self> {
         use minidump::UnifiedMemory;
 
         let mut regions = Vec::new();
@@ -134,7 +132,23 @@ impl<'a> MinidumpMem<'a> {
     }
 }
 
-impl Mem for MinidumpMem<'_> {
+pub struct OpenMinidump {
+    pub minidump: &'static minidump::Minidump<'static, &'static [u8]>,
+    pub image: patternsleuth::image::Image<'static>,
+}
+
+/// Open a minidump file, leaking the mmap and parsed minidump to get `'static` lifetimes.
+pub fn open_minidump(path: impl AsRef<std::path::Path>) -> Result<OpenMinidump> {
+    let file = std::fs::File::open(path)?;
+    let mmap: &'static memmap2::Mmap =
+        Box::leak(Box::new(unsafe { memmap2::MmapOptions::new().map(&file)? }));
+    let minidump: &'static minidump::Minidump<'static, &'static [u8]> =
+        Box::leak(Box::new(minidump::Minidump::read(&**mmap)?));
+    let image = patternsleuth::image::pe::read_image_from_minidump(minidump)?;
+    Ok(OpenMinidump { minidump, image })
+}
+
+impl mem::Mem for MinidumpMem<'_> {
     fn read_buf(&self, address: u64, buf: &mut [u8]) -> Result<()> {
         let mut bytes_read = 0;
         let total_bytes = buf.len();
@@ -210,7 +224,7 @@ pub fn dump(input: Input, struct_info: Option<Structs>, options: DumpOptions) ->
         Input::Process(pid) => {
             let source_name = proc_name::get_process_name(pid).unwrap_or_default();
 
-            let handle: ProcessHandle = (pid as Pid).try_into()?;
+            let handle: ProcessHandle = ProcessHandle::new(pid);
             let mem = MemCache::wrap(handle);
             let image = patternsleuth::process::external::read_image_from_pid(pid)?;
             dump_inner(mem, &image, struct_info, &source_name, options)
@@ -218,13 +232,9 @@ pub fn dump(input: Input, struct_info: Option<Structs>, options: DumpOptions) ->
         Input::Dump(path) => {
             let source_name = path.file_name().unwrap_or_default().to_string_lossy();
 
-            let file = std::fs::File::open(&path)?;
-            let mmap = unsafe { memmap2::MmapOptions::new().map(&file)? };
-
-            let minidump = minidump::Minidump::read(&*mmap)?;
-            let mem = MinidumpMem::new(&minidump)?;
-            let img = patternsleuth::image::pe::read_image_from_minidump(&minidump)?;
-            dump_inner(mem, &img, struct_info, &source_name, options)
+            let dump = open_minidump(&path)?;
+            let mem = MinidumpMem::new(dump.minidump)?;
+            dump_inner(mem, &dump.image, struct_info, &source_name, options)
         }
     }
 }
@@ -235,52 +245,51 @@ mod script_containers {
 
     #[derive(Clone, Copy)]
     pub struct FScriptArray;
-    impl<C: Clone + Ctx> Ptr<FScriptArray, C> {
-        pub fn data(&self) -> Ptr<Option<Ptr<(), C>>, C> {
+    impl Ptr<FScriptArray> {
+        pub fn data(&self) -> Ptr<Option<Ptr<()>>> {
             self.byte_offset(0).cast()
         }
-        pub fn num(&self) -> Ptr<u32, C> {
+        pub fn num(&self) -> Ptr<u32> {
             self.byte_offset(8).cast()
         }
     }
 }
 
-pub fn connect_pid(
-    pid: i32,
-    struct_info: Option<Structs>,
-) -> Result<CtxPtr<MemCache<ProcessHandle>>> {
-    let handle: ProcessHandle = (pid as Pid).try_into()?;
+pub fn connect_pid(pid: i32, struct_info: Option<Structs>) -> Result<Ctx> {
+    let handle: ProcessHandle = ProcessHandle::new(pid);
     let mem = MemCache::wrap(handle);
     let image = patternsleuth::process::external::read_image_from_pid(pid)?;
     connect(mem, &image, struct_info)
 }
 
-pub fn connect_pid_live(
-    pid: i32,
-    struct_info: Option<Structs>,
-) -> Result<CtxPtr<ProcessHandle>> {
-    let handle: ProcessHandle = (pid as Pid).try_into()?;
+pub fn connect_pid_live(pid: i32, struct_info: Option<Structs>) -> Result<Ctx> {
+    let handle: ProcessHandle = ProcessHandle::new(pid);
     let image = patternsleuth::process::external::read_image_from_pid(pid)?;
     connect(handle, &image, struct_info)
 }
 
-pub fn connect<M: Mem>(
-    mem: M,
+pub fn connect(
+    mem: impl mem::Mem + 'static,
     image: &Image<'_>,
     struct_info: Option<Structs>,
-) -> Result<CtxPtr<M>> {
+) -> Result<Ctx> {
     let results = resolve(image, Resolution::resolver())?;
     println!("{results:X?}");
 
-    let fnamepool = PtrFNamePool(results.fname_pool.0);
+    let fnamepool = results.fname_pool.0;
 
     let mut case_preserving = false;
 
     if results.opt.fname_constant.is_ok() {
         let name_constant_address = results.opt.fname_constant.clone()?.0;
-        let comparison_index = mem.read::<u32>(name_constant_address)?;
-        let likely_number = mem.read::<u32>(name_constant_address + 4)?;
-        let possibly_display_index = mem.read::<u32>(name_constant_address + 8)?;
+        let read_u32 = |addr: u64| -> Result<u32> {
+            let mut buf = [0u8; 4];
+            mem.read_buf(addr, &mut buf)?;
+            Ok(u32::from_le_bytes(buf))
+        };
+        let comparison_index = read_u32(name_constant_address)?;
+        let likely_number = read_u32(name_constant_address + 4)?;
+        let possibly_display_index = read_u32(name_constant_address + 8)?;
         assert_ne!(comparison_index, 0);
         assert_eq!(
             likely_number, 0,
@@ -301,26 +310,24 @@ pub fn connect<M: Mem>(
             })?
     };
 
-    Ok(CtxPtr {
-        mem,
-        state: Arc::new(mem::CtxState {
-            fnamepool,
-            structs: struct_info
-                .0
-                .into_iter()
-                .map(|s| (s.name.clone(), s))
-                .collect(),
-            version: (results.engine_version.major, results.engine_version.minor),
-            case_preserving,
-            uobjectarray: results.guobject_array.0,
-            image_base_address: image.base_address,
-            build_change_list: results.opt.build.as_ref().ok().map(|cl| cl.0.clone()),
-        }),
-    })
+    Ok(Ctx::new(mem::CtxInner {
+        mem: Box::new(mem),
+        fnamepool,
+        structs: struct_info
+            .0
+            .into_iter()
+            .map(|s| (s.name.clone(), s))
+            .collect(),
+        version: (results.engine_version.major, results.engine_version.minor),
+        case_preserving,
+        uobjectarray: results.guobject_array.0,
+        image_base_address: image.base_address,
+        build_change_list: results.opt.build.as_ref().ok().map(|cl| cl.0.clone()),
+    }))
 }
 
-fn dump_inner<M: Mem>(
-    mem: M,
+fn dump_inner(
+    mem: impl mem::Mem + 'static,
     image: &Image<'_>,
     struct_info: Option<Structs>,
     source_name: &str,
@@ -328,7 +335,7 @@ fn dump_inner<M: Mem>(
 ) -> Result<Jmap> {
     let mem = connect(mem, image, struct_info)?;
 
-    let uobjectarray = Ptr::<FUObjectArray, _>::new(mem.state.uobjectarray, mem.clone())?;
+    let uobjectarray = Ptr::<FUObjectArray>::new(mem.uobjectarray, mem.clone())?;
 
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
@@ -392,20 +399,20 @@ fn dump_inner<M: Mem>(
             timestamp: time::OffsetDateTime::now_utc().to_string(),
             source: source_name.to_string(),
             engine_version: EngineVersion {
-                major: mem.state.version.0,
-                minor: mem.state.version.1,
+                major: mem.version.0,
+                minor: mem.version.1,
             },
-            build_change_list: mem.state.build_change_list.clone(),
+            build_change_list: mem.build_change_list.clone(),
         }),
-        image_base_address: mem.state.image_base_address.into(),
+        image_base_address: mem.image_base_address.into(),
         objects,
         vtables,
         names,
     })
 }
 
-pub fn read_object_type<C: Ctx>(
-    obj: Ptr<UObject, C>,
+pub fn read_object_type(
+    obj: Ptr<UObject>,
     path: &str,
     options: &DumpOptions,
 ) -> Result<Option<ObjectType>> {
@@ -445,7 +452,7 @@ pub fn read_object_type<C: Ctx>(
     Ok(Some(object))
 }
 
-pub fn read_prop_type<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
+pub fn read_prop_type(ptr: &Ptr<ZProperty>) -> Result<Property> {
     let name = ptr.zfield().name_private().read()?;
     let f = ptr.zfield().cast_flags()?;
 
@@ -612,9 +619,9 @@ pub fn read_prop_type<C: Ctx>(ptr: &Ptr<ZProperty, C>) -> Result<Property> {
     })
 }
 
-pub fn read_props<C: Ctx>(
-    ustruct: &Ptr<UStruct, C>,
-    ptr: &Ptr<(), C>,
+pub fn read_props(
+    ustruct: &Ptr<UStruct>,
+    ptr: &Ptr<()>,
 ) -> Result<OrderMap<String, PropertyValue>> {
     let mut properties = OrderMap::new();
     for prop in ustruct.properties(true) {
@@ -643,9 +650,9 @@ pub fn read_props<C: Ctx>(
     Ok(properties)
 }
 
-pub fn read_prop<C: Ctx>(
-    prop: &Ptr<ZProperty, C>,
-    ptr: &Ptr<(), C>,
+pub fn read_prop(
+    prop: &Ptr<ZProperty>,
+    ptr: &Ptr<()>,
     index: usize,
 ) -> Result<Option<PropertyValue>> {
     let size = prop.element_size().read()? as usize;
@@ -811,7 +818,7 @@ pub fn read_prop<C: Ctx>(
         PropertyValue::Int64(ptr.cast::<i64>().read()?)
     } else if f.contains(EClassCastFlags::CASTCLASS_FObjectProperty) {
         let obj = ptr
-            .cast::<Option<Ptr<UObject, _>>>()
+            .cast::<Option<Ptr<UObject>>>()
             .read()?
             .map(|e| e.path())
             .transpose()?;
@@ -839,7 +846,7 @@ pub fn read_prop<C: Ctx>(
     Ok(Some(value))
 }
 
-pub fn read_object<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<Object> {
+pub fn read_object(obj: &Ptr<UObject>) -> Result<Object> {
     let outer = obj.outer_private().read()?.map(|s| s.path()).transpose()?;
 
     let class = obj.class_private().read()?;
@@ -856,7 +863,7 @@ pub fn read_object<C: Ctx>(obj: &Ptr<UObject, C>) -> Result<Object> {
     })
 }
 
-pub fn read_struct<C: Ctx>(obj: &Ptr<UStruct, C>) -> Result<Struct> {
+pub fn read_struct(obj: &Ptr<UStruct>) -> Result<Struct> {
     let mut properties = vec![];
     for prop in obj.properties(false) {
         let prop = prop?;
@@ -877,14 +884,14 @@ pub fn read_struct<C: Ctx>(obj: &Ptr<UStruct, C>) -> Result<Struct> {
     })
 }
 
-pub fn read_script_struct<C: Ctx>(obj: &Ptr<UScriptStruct, C>) -> Result<ScriptStruct> {
+pub fn read_script_struct(obj: &Ptr<UScriptStruct>) -> Result<ScriptStruct> {
     Ok(ScriptStruct {
         r#struct: read_struct(&obj.ustruct())?,
         struct_flags: obj.struct_flags().read()?,
     })
 }
 
-pub fn read_class<C: Ctx>(obj: &Ptr<UClass, C>) -> Result<Class> {
+pub fn read_class(obj: &Ptr<UClass>) -> Result<Class> {
     let class_flags = obj.class_flags().read()?;
     let class_cast_flags = obj.class_cast_flags().read()?;
     let class_default_object = obj
@@ -901,7 +908,7 @@ pub fn read_class<C: Ctx>(obj: &Ptr<UClass, C>) -> Result<Class> {
     })
 }
 
-pub fn read_enum<C: Ctx>(obj: &Ptr<UEnum, C>) -> Result<Enum> {
+pub fn read_enum(obj: &Ptr<UEnum>) -> Result<Enum> {
     Ok(Enum {
         object: read_object(&obj.cast())?,
         cpp_type: obj.cpp_type().read()?,

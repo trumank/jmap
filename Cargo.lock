@@ -951,6 +951,7 @@ dependencies = [
  "gospel-vm",
  "include_dir",
  "jmap",
+ "libc",
  "memmap2",
  "minidump",
  "ordered-float",
