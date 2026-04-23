@@ -326,6 +326,51 @@ pub fn connect(
     }))
 }
 
+/// Insert an object into the map, handling path collisions.
+///
+/// UE normally guarantees one UObject per path, but plugins can break this by
+/// calling `UObjectBase::LowLevelRename` to collide their own UClass with a
+/// stock one (e.g. RedpointEOS renames `UOnlineEngineInterfaceEOS` onto
+/// `/Script/OnlineSubsystemUtils.OnlineEngineInterfaceImpl`). When that
+/// happens, we prefer the UClass whose CDO still lives at the canonical
+/// `{class_outer}.Default__{class_name}` path — the renamed class's CDO kept
+/// its original outer, so it fails this check.
+fn insert_object(objects: &mut BTreeMap<String, ObjectType>, path: String, object: ObjectType) {
+    use std::collections::btree_map::Entry;
+
+    match objects.entry(path) {
+        Entry::Vacant(e) => {
+            e.insert(object);
+        }
+        Entry::Occupied(mut e) => {
+            let path = e.key().clone();
+            let existing = e.get();
+            let prefer_new =
+                has_canonical_cdo(&path, &object) && !has_canonical_cdo(&path, existing);
+            eprintln!(
+                "WARN: path collision {path}: existing {}, new {}",
+                existing.get_object().address,
+                object.get_object().address,
+            );
+            if prefer_new {
+                e.insert(object);
+            }
+        }
+    }
+}
+
+fn has_canonical_cdo(class_path: &str, obj: &ObjectType) -> bool {
+    let ObjectType::Class(c) = obj else {
+        return false;
+    };
+    let (outer, name) = match class_path.rsplit_once(['.', ':']) {
+        Some(split) => split,
+        None => return false,
+    };
+    let expected = format!("{outer}.Default__{name}");
+    c.class_default_object.as_deref() == Some(expected.as_str())
+}
+
 fn dump_inner(
     mem: impl mem::Mem + 'static,
     image: &Image<'_>,
@@ -368,7 +413,7 @@ fn dump_inner(
             child_map.entry(outer).or_default().insert(path.clone());
         }
 
-        objects.insert(path, object);
+        insert_object(&mut objects, path, object);
     }
 
     for (outer, children) in child_map {

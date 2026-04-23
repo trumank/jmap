@@ -10,13 +10,19 @@ pub fn analyze_vtables(
 ) -> BTreeMap<Address, Vec<Address>> {
     let mut class_vtables: HashMap<String, Address> = HashMap::new();
     let mut grouped: BTreeMap<Address, HashSet<&str>> = Default::default();
-    for obj in objects.values() {
+    for (path, obj) in &mut *objects {
         let object = obj.get_object();
         let vtable = object.vtable;
-        let class = object.class.as_str();
-        class_vtables
-            .insert(class.to_string(), vtable)
-            .inspect(|existing| assert_eq!(*existing, vtable, "found conflicting vtable"));
+        let class = &object.class;
+        if let Some(existing) = class_vtables.get(class) {
+            if *existing != vtable {
+                eprintln!(
+                    "WARN: conflicting vtable for Class={class:?} Object={path:?}: existing {existing}, new {vtable}"
+                );
+            }
+        } else {
+            class_vtables.insert(class.to_string(), vtable);
+        }
         grouped.entry(vtable).or_default().insert(class);
     }
 
