@@ -27,9 +27,19 @@ mod base64_serde {
 
 /// A pointer/address wrapper that serializes as a hex string and can deserialize from
 /// hex strings, decimal numbers, or decimal strings.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Pod, Zeroable)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Pod, Zeroable)]
 #[repr(transparent)]
 pub struct Address(pub u64);
+impl std::fmt::Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{:x}", self.0)
+    }
+}
+impl std::fmt::Debug for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Address({self})")
+    }
+}
 
 impl From<u64> for Address {
     fn from(addr: u64) -> Self {
