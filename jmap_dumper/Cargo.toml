@@ -27,7 +27,7 @@ memmap2 = "0.9.8"
 minidump = "0.26.0"
 ordered-float = "5.0.0"
 ordermap = "0.5.12"
-patternsleuth = { workspace = true, features = ["image-pe", "process-external"] }
+patternsleuth = { workspace = true, features = ["image-pe", "process-external", "minidump"] }
 pretty-hex.workspace = true
 read-process-memory.workspace = true
 serde = { workspace = true, features = ["derive"] }
