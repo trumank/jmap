@@ -278,24 +278,44 @@ pub fn connect(
 
     let fnamepool = results.fname_pool.0;
 
+    let version = (results.engine_version.major, results.engine_version.minor);
+
     let mut case_preserving = false;
 
-    if results.opt.fname_constant.is_ok() {
-        let name_constant_address = results.opt.fname_constant.clone()?.0;
+    if let Ok(fname_constant) = &results.opt.fname_constant {
+        let name_constant_address = fname_constant.0;
         let read_u32 = |addr: u64| -> Result<u32> {
             let mut buf = [0u8; 4];
             mem.read_buf(addr, &mut buf)?;
             Ok(u32::from_le_bytes(buf))
         };
+
+        // Field offsets mirror the FName layout in jmap_dumper/unreal/src/unreal.gs:
+        //         UE <  4.23: [CMP, NUM]
+        // 4.23 <= UE <  5.01: [CMP, DISP?, NUM]   (DISP only when case-preserving)
+        //         UE >= 5.01: [CMP, NUM, DISP?]
         let comparison_index = read_u32(name_constant_address)?;
-        let likely_number = read_u32(name_constant_address + 4)?;
-        let possibly_display_index = read_u32(name_constant_address + 8)?;
         assert_ne!(comparison_index, 0);
+
+        let (case_preserving_detected, number_off) = if version < (4, 23) {
+            (false, 4)
+        } else if version < (5, 1) {
+            if read_u32(name_constant_address + 4)? == comparison_index {
+                (true, 8)
+            } else {
+                (false, 4)
+            }
+        } else {
+            let cp = read_u32(name_constant_address + 8)? == comparison_index;
+            (cp, 4)
+        };
+
+        let number = read_u32(name_constant_address + number_off)?;
         assert_eq!(
-            likely_number, 0,
+            number, 0,
             "Builds with outlined name number (UE_FNAME_OUTLINE_NUMBER=1) are not supported"
         );
-        case_preserving = comparison_index == possibly_display_index;
+        case_preserving = case_preserving_detected;
     }
 
     let struct_info = if let Some(provided_info) = struct_info {
@@ -318,7 +338,7 @@ pub fn connect(
             .into_iter()
             .map(|s| (s.name.clone(), s))
             .collect(),
-        version: (results.engine_version.major, results.engine_version.minor),
+        version,
         case_preserving,
         uobjectarray: results.guobject_array.0,
         image_base_address: image.base_address,
