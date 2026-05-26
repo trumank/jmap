@@ -583,3 +583,91 @@ impl<T> Ptr<Option<Ptr<T>>> {
         })
     }
 }
+
+#[cfg(target_os = "windows")]
+pub struct ProcessSuspendGuard {
+    thread_handles: Vec<windows::Win32::Foundation::HANDLE>,
+}
+
+#[cfg(target_os = "windows")]
+impl ProcessSuspendGuard {
+    pub fn suspend(pid: i32) -> Result<Self> {
+        use windows::Win32::Foundation::{CloseHandle, HANDLE};
+        use windows::Win32::System::Diagnostics::ToolHelp::{
+            CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
+        };
+        use windows::Win32::System::Threading::{OpenThread, SuspendThread, THREAD_SUSPEND_RESUME};
+
+        let snapshot = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0)? };
+
+        let mut thread_handles: Vec<HANDLE> = Vec::new();
+        let mut entry = THREADENTRY32 {
+            dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
+            ..Default::default()
+        };
+
+        unsafe {
+            if Thread32First(snapshot, &mut entry).is_ok() {
+                loop {
+                    if entry.th32OwnerProcessID == pid as u32 {
+                        if let Ok(handle) =
+                            OpenThread(THREAD_SUSPEND_RESUME, false, entry.th32ThreadID)
+                        {
+                            SuspendThread(handle);
+                            thread_handles.push(handle);
+                        }
+                    }
+                    entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
+                    if Thread32Next(snapshot, &mut entry).is_err() {
+                        break;
+                    }
+                }
+            }
+            let _ = CloseHandle(snapshot);
+        }
+
+        eprintln!(
+            "Suspended {} thread(s) of pid {}",
+            thread_handles.len(),
+            pid
+        );
+        Ok(Self { thread_handles })
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for ProcessSuspendGuard {
+    fn drop(&mut self) {
+        use windows::Win32::Foundation::CloseHandle;
+        use windows::Win32::System::Threading::ResumeThread;
+        for &handle in &self.thread_handles {
+            unsafe {
+                ResumeThread(handle);
+                let _ = CloseHandle(handle);
+            }
+        }
+        eprintln!("Resumed {} thread(s)", self.thread_handles.len());
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub struct ProcessSuspendGuard {
+    pid: i32,
+}
+
+#[cfg(target_os = "linux")]
+impl ProcessSuspendGuard {
+    pub fn suspend(pid: i32) -> Result<Self> {
+        unsafe { libc::kill(pid, libc::SIGSTOP) };
+        eprintln!("Suspended pid {pid}");
+        Ok(Self { pid })
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for ProcessSuspendGuard {
+    fn drop(&mut self) {
+        unsafe { libc::kill(self.pid, libc::SIGCONT) };
+        eprintln!("Resumed pid {}", self.pid);
+    }
+}

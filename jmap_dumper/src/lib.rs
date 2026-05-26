@@ -329,6 +329,8 @@ pub struct DumpOptions {
     pub names: bool,
     /// Print struct layouts before dumping
     pub verbose: bool,
+    /// Filter out objects whose path contains any of these substrings
+    pub filter_out_paths: Vec<String>,
 }
 
 pub fn dump(
@@ -359,6 +361,8 @@ async fn dump_async(
                     connect(mem, &image, overrides, struct_info, options.verbose).await?
                 }
             };
+            #[cfg(any(target_os = "windows", target_os = "linux"))]
+            let _suspend_guard = mem::ProcessSuspendGuard::suspend(pid)?;
             dump_inner(ctx, &source_name, options).await
         }
         Input::Dump(path) => {
@@ -733,8 +737,18 @@ async fn dump_one(
 
     let path = obj.path().await?;
 
+    let filtered = options.filter_out_paths.iter().any(|f| path.contains(f.as_str()));
+
     if options.verbose {
-        eprintln!("[{i}/{num}] {path}");
+        if filtered {
+            eprintln!("[{i}/{num}] [filtered] {path}");
+        } else {
+            eprintln!("[{i}/{num}] {path}");
+        }
+    }
+
+    if filtered {
+        return Ok(None);
     }
 
     Ok(read_object_type(obj, &path, options)
@@ -810,11 +824,14 @@ pub async fn read_object_type(
     path: &str,
     options: &DumpOptions,
 ) -> Result<Option<ObjectType>> {
-    let class = obj.class_private().read().await?;
-
     if !options.all && !path.starts_with("/Script/") {
         return Ok(None);
     }
+    if options.filter_out_paths.iter().any(|f| path.contains(f.as_str())) {
+        return Ok(None);
+    }
+
+    let class = obj.class_private().read().await?;
     let object_flags = obj.object_flags().read().await?;
     let is_basic_object = object_flags.contains(EObjectFlags::RF_ArchetypeObject)
         || object_flags.contains(EObjectFlags::RF_ClassDefaultObject);

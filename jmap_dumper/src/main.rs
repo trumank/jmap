@@ -69,6 +69,10 @@ struct Cli {
     #[arg(long)]
     all: bool,
 
+    /// Filter out objects whose path contains the given substring (can be specified multiple times)
+    #[arg(long, value_name = "PATH_PREFIX")]
+    filter_out_paths: Vec<String>,
+
     /// Dump FName table
     #[arg(long)]
     names: bool,
@@ -127,6 +131,7 @@ fn main() -> Result<()> {
         all: cli.all,
         names: cli.names,
         verbose: cli.verbose,
+        filter_out_paths: cli.filter_out_paths,
     };
 
     let overrides = ConfigOverrides {
