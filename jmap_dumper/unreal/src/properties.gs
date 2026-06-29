@@ -24,6 +24,7 @@ struct TObjectPtr {
 
 /// TEST
 class FFieldClass {
+    if (UE_VERSION >= 508) uint64_t VTable;
     FName Name;
     if (UE_VERSION >= 507) EClassFlags ClassFlags;
     uint64_t Id;

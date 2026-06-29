@@ -16,9 +16,10 @@ struct member_pack(if (UE_PACK_FUOBJECT_ITEM) 4 else 8) FUObjectItem {
     if (UE_VERSION < 413) int32_t ClusterAndFlags;
     if (UE_VERSION >= 413 && UE_VERSION < 507) int32_t Flags;
     if (UE_VERSION >= 413 && UE_VERSION < 416) int32_t ClusterIndex;
-    if (UE_VERSION >= 416) int32_t ClusterRootIndex;
+    if (UE_VERSION >= 416 && UE_VERSION < 507) int32_t ClusterRootIndex;
 
     int32_t SerialNumber;
+	if (UE_VERSION >= 507) int32_t ClusterRootIndex;
     if (UE_VERSION >= 505 && UE_VERSION < 507) int32_t RefCount;
 };
 
@@ -32,11 +33,19 @@ struct FFixedUObjectArray {
 /// TEST
 struct FChunkedFixedUObjectArray {
     (FUObjectItem*)* Objects; // Array of pointers to FUObjectItem chunks
-    FUObjectItem* PreAllocatedObjects;
-    int32_t MaxElements;
-    int32_t NumElements;
-    int32_t MaxChunks;
-    int32_t NumChunks;
+    if (UE_VERSION >= 508) {
+		int32_t NumElements;
+		int32_t MaxElements;
+		int32_t NumChunks;
+		int32_t MaxChunks;
+		FUObjectItem* PreAllocatedObjects;
+	} else {
+		FUObjectItem* PreAllocatedObjects;
+		int32_t MaxElements;
+		int32_t NumElements;
+		int32_t MaxChunks;
+		int32_t NumChunks;
+	}
 };
 
 template<int Size>
@@ -79,6 +88,8 @@ class FUObjectDeleteListener {
 /// FUObjectArray core structure
 /// TEST
 struct FUObjectArray {
+	if (UE_VERSION >= 508) FChunkedFixedUObjectArray ObjObjects;
+    
     int32_t ObjFirstGCIndex;
     int32_t ObjLastNonGCIndex;
     if (UE_VERSION >= 411) int32_t MaxObjectsNotConsideredByGC;
@@ -88,7 +99,7 @@ struct FUObjectArray {
     if          (UE_VERSION == 407) FUObjectArrayOlder ObjObjects;
     else if     (UE_VERSION <  411) FUObjectArrayOld ObjObjects;
     else if     (UE_VERSION <  420) FFixedUObjectArray ObjObjects;
-    else                            FChunkedFixedUObjectArray ObjObjects;
+    else if     (UE_VERSION <  508) FChunkedFixedUObjectArray ObjObjects;
 
     if          (UE_VERSION == 407) TArray<int> ObjAvailable;
     else {
@@ -96,9 +107,13 @@ struct FUObjectArray {
         if      (UE_VERSION <  422) TLockFreePointerListUnordered<int, 128> ObjAvailableList;
         else if (UE_VERSION <  427) TLockFreePointerListUnordered<int, 64> ObjAvailableList;
         else                        TArray<int> ObjAvailableList;
+		
+		if (UE_VERSION >= 507) int32_t ObjAvailableListEstimateCount;
     }
 
     TArray<FUObjectCreateListener*> UObjectCreateListeners;
+	if (UE_VERSION >= 508) FCriticalSection UObjectCreateListenersCritical;
+	
     TArray<FUObjectDeleteListener*> UObjectDeleteListeners;
 
     if (UE_VERSION >= 409) FCriticalSection UObjectDeleteListenersCritical;

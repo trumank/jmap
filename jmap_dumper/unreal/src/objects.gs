@@ -207,6 +207,12 @@ class UClass : UStruct,
         uint32_t ClassUnique : 1;
         uint32_t bCooked : 1;
     }
+    if (UE_VERSION >= 508) {
+        bool bNeedsDynamicSubobjectInstancing;
+        bool bNeedsPostLoadSubobjectInstancing;
+    }
+
+    if (UE_VERSION >= 508) int32_t PropertiesStartOffset;
     EClassFlags ClassFlags;
     EClassCastFlags ClassCastFlags;
      if (UE_VERSION < 408) int32_t ClassUnique;
@@ -227,7 +233,7 @@ class UClass : UStruct,
         STUB* SparseClassData;
         UScriptStruct* SparseClassDataStruct;
     }
-    if (UE_VERSION >= 507) bool bNeedsDynamicSubobjectInstancing;
+    if (UE_VERSION == 507) bool bNeedsDynamicSubobjectInstancing;
     TMap<FName, UFunction*> FuncMap;
     if (UE_VERSION >= 411 && UE_VERSION < 418) {
         TMap<FName, UFunction*> ParentFuncMap;
@@ -238,10 +244,14 @@ class UClass : UStruct,
         TMap<FName, UFunction*> SuperFuncMap;
         if (UE_VERSION >= 421) FWindowsRWLock SuperFuncMapLock;
     }
-    if (UE_VERSION >= 503) {
+    if (UE_VERSION >= 503 && UE_VERSION < 508) {
         TMap<FName, UFunction*> AllFunctionsCache;
         FWindowsRWLock AllFunctionsCacheLock;
+    } else if (UE_VERSION >= 508) {
+        FWindowsRWLock AllFunctionsCacheLock;
+        TMap<FName, UFunction*> AllFunctionsCache;
     }
+
     TArray<FImplementedInterface> Interfaces;
     if (UE_VERSION >= 503) STUB* ReferenceSchema; // UE::GC::FSchemaOwner
     else if (UE_VERSION == 502) FTokenStreamOwner ReferenceTokens; // UE::GC::FTokenStreamOwner
@@ -250,4 +260,5 @@ class UClass : UStruct,
         if (UE_VERSION >= 415) FCriticalSection ReferenceTokenStreamCritical;
     }
     TArray<FNativeFunctionLookup> NativeFunctionLookupTable;
+    if (UE_VERSION >= 508) STUB* Partials; // UE::CoreUObject::Private::FPartialClass
 };
