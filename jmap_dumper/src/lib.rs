@@ -289,6 +289,10 @@ pub struct DumpOptions {
     pub names: bool,
     /// Print struct layouts before dumping
     pub verbose: bool,
+    /// Skip vtable analysis
+    pub skip_vtables: bool,
+    /// Skip all objects
+    pub skip_objects: bool,
 }
 
 pub fn dump(
@@ -752,6 +756,14 @@ async fn dump_one(
         return Ok(None);
     };
 
+    if options.verbose {
+        eprintln!("[{i}/{num}] {0:#x}", obj.address());
+    }
+
+    if obj.vtable().address() == 0 {
+        return Ok(None);
+    }
+
     let path = obj.path().await?;
 
     if options.verbose {
@@ -769,7 +781,11 @@ async fn dump_inner(mem: Ctx, source_name: &str, options: DumpOptions) -> Result
     let mut objects = BTreeMap::<String, ObjectType>::default();
     let mut child_map = HashMap::<String, BTreeSet<String>>::default();
 
-    let num = uobjectarray.num_elements().await? as usize;
+    let num = if !options.skip_objects {
+        uobjectarray.num_elements().await? as usize
+    } else {
+        0
+    };
 
     // keep many object dumps in flight
     let mut stream = futures_util::stream::iter(0..num)
@@ -800,8 +816,12 @@ async fn dump_inner(mem: Ctx, source_name: &str, options: DumpOptions) -> Result
         }
     }
 
-    let vtables = vtable::analyze_vtables(&mem, &mut objects).await;
-
+    let vtables = if options.skip_vtables {
+        BTreeMap::new()
+    } else {
+        vtable::analyze_vtables(&mem, &mut objects).await
+    };
+    
     let names = if options.names {
         Some(extract_fnames(&mem).await?)
     } else {

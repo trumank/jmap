@@ -79,6 +79,14 @@ struct Cli {
     #[arg(long, short = 'v')]
     verbose: bool,
 
+    /// Skip vtables
+    #[arg(long)]
+    skip_vtables: bool,
+
+    /// Skip objects
+    #[arg(long)]
+    skip_objects: bool,
+
     /// Output dump .jmap path
     #[arg(index = 1)]
     output: PathBuf,
@@ -129,6 +137,8 @@ fn main() -> Result<()> {
         all: cli.all,
         names: cli.names,
         verbose: cli.verbose,
+        skip_vtables: cli.skip_vtables,
+        skip_objects: cli.skip_objects,
     };
 
     let overrides = ConfigOverrides {
