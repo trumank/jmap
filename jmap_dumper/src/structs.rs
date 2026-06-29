@@ -132,6 +132,7 @@ pub fn get_struct_info_for_version(
         ("properties", "FField"),
         ("properties", "FFieldClass"),
         ("properties", "FFieldVariant"),
+        ("package", "UPackage"),
     ];
 
     let mounted_container = vm_state.mount_container(container)?;
