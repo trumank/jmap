@@ -585,13 +585,15 @@ async fn validate_guobject_array<M: mem::Mem + ?Sized>(
     for delta in (8..=0x200u64).step_by(8) {
         for cand in [resolved.wrapping_sub(delta), resolved + delta] {
             if guobject_array_plausible(mem, cand, version).await {
+                let delta = cand as i64 - resolved as i64;
                 crate::warn!(
                     "GUObjectArray pattern resolved to {resolved:#X} which is not a valid \
-                     FUObjectArray for UE {}.{}; using {cand:#X} ({:+#x}) — a neighbouring \
+                     FUObjectArray for UE {}.{}; using {cand:#X} ({}{:#x}) — a neighbouring \
                      member was matched (layout drift, see trumank/jmap#30)",
                     version.0,
                     version.1,
-                    cand as i64 - resolved as i64
+                    if delta < 0 { "-" } else { "+" },
+                    delta.unsigned_abs()
                 );
                 return cand;
             }
