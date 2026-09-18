@@ -1495,7 +1495,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 [[package]]
 name = "patternsleuth"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth#da8bfe4c5a464be0ef225c2c9a6ccaa2d9284018"
+source = "git+https://github.com/trumank/patternsleuth#1d90b02c7610b595f940af04ce97e0f6feb06923"
 dependencies = [
  "anyhow",
  "futures",
@@ -1518,7 +1518,7 @@ dependencies = [
 [[package]]
 name = "patternsleuth_scanner"
 version = "0.1.0"
-source = "git+https://github.com/trumank/patternsleuth#da8bfe4c5a464be0ef225c2c9a6ccaa2d9284018"
+source = "git+https://github.com/trumank/patternsleuth#1d90b02c7610b595f940af04ce97e0f6feb06923"
 dependencies = [
  "anyhow",
  "memchr",
@@ -1654,7 +1654,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.12.1",
+ "itertools 0.13.0",
  "proc-macro2",
  "quote",
  "syn",
