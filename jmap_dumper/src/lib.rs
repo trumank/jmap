@@ -517,6 +517,97 @@ async fn read_u32<M: mem::Mem + ?Sized>(mem: &M, addr: u64) -> Result<u32> {
     Ok(u32::from_le_bytes(buf))
 }
 
+async fn read_u64<M: mem::Mem + ?Sized>(mem: &M, addr: u64) -> Result<u64> {
+    let mut buf = [0u8; 8];
+    mem.read_buf(addr, &mut buf).await?;
+    Ok(u64::from_le_bytes(buf))
+}
+
+/// Does `base` look like a live `FUObjectArray` for this engine version?
+///
+/// The pattern resolvers return an address INSIDE the array's code references
+/// (a `lea` of some member); a compiler/layout change can make that member a
+/// different one than the pattern assumed — UE 5.8 shipping builds resolved to
+/// `ObjAvailableListEstimateCount` (+0x68), and every dump came out empty
+/// (trumank/jmap#30). The struct itself carries enough invariants to check:
+/// a readable chunk table, 0 < NumElements <= MaxElements, and NumChunks equal
+/// to ceil(NumElements / 65536) with NumChunks <= MaxChunks.
+async fn guobject_array_plausible<M: mem::Mem + ?Sized>(
+    mem: &M,
+    base: u64,
+    version: (u16, u16),
+) -> bool {
+    // (objects_ptr, num_elements, max_elements, num_chunks, max_chunks) offsets
+    let (o_objects, o_num, o_max, o_nchunks, o_maxchunks) = if version >= (5, 8) {
+        // FChunkedFixedUObjectArray ObjObjects is the FIRST member (5.8):
+        // Objects**, NumElements, MaxElements, NumChunks, MaxChunks, PreAllocated*
+        (0u64, 8u64, 12u64, 16u64, 20u64)
+    } else if version >= (4, 20) {
+        // ObjFirstGCIndex, ObjLastNonGCIndex, MaxObjectsNotConsideredByGC, bool
+        // then ObjObjects: Objects**, PreAllocated*, MaxElements, NumElements,
+        // MaxChunks, NumChunks
+        (0x10, 0x24, 0x20, 0x2c, 0x28)
+    } else {
+        return true; // older layouts: no chunked array to validate against
+    };
+    let Ok(objects) = read_u64(mem, base + o_objects).await else { return false };
+    let Ok(num) = read_u32(mem, base + o_num).await else { return false };
+    let Ok(max) = read_u32(mem, base + o_max).await else { return false };
+    let Ok(nchunks) = read_u32(mem, base + o_nchunks).await else { return false };
+    let Ok(maxchunks) = read_u32(mem, base + o_maxchunks).await else { return false };
+    if objects < 0x10000 || num == 0 || num > 50_000_000 || num > max {
+        return false;
+    }
+    if nchunks == 0 || nchunks > maxchunks || maxchunks > 65536 {
+        return false;
+    }
+    if nchunks != num.div_ceil(65536) {
+        return false;
+    }
+    // the first chunk pointer must itself be readable
+    match read_u64(mem, objects).await {
+        Ok(chunk0) if chunk0 >= 0x10000 => read_u64(mem, chunk0).await.is_ok(),
+        _ => false,
+    }
+}
+
+/// Validate the resolved GUObjectArray against the struct's own invariants and,
+/// when the pattern landed on a neighbouring member, walk +-0x200 to the real
+/// base. Never touches a user-supplied override.
+async fn validate_guobject_array<M: mem::Mem + ?Sized>(
+    mem: &M,
+    resolved: u64,
+    version: (u16, u16),
+) -> u64 {
+    if guobject_array_plausible(mem, resolved, version).await {
+        return resolved;
+    }
+    for delta in (8..=0x200u64).step_by(8) {
+        for cand in [resolved.wrapping_sub(delta), resolved + delta] {
+            if guobject_array_plausible(mem, cand, version).await {
+                let delta = cand as i64 - resolved as i64;
+                crate::warn!(
+                    "GUObjectArray pattern resolved to {resolved:#X} which is not a valid \
+                     FUObjectArray for UE {}.{}; using {cand:#X} ({}{:#x}) — a neighbouring \
+                     member was matched (layout drift, see trumank/jmap#30)",
+                    version.0,
+                    version.1,
+                    if delta < 0 { "-" } else { "+" },
+                    delta.unsigned_abs()
+                );
+                return cand;
+            }
+        }
+    }
+    crate::warn!(
+        "GUObjectArray at {resolved:#X} does not look like a live FUObjectArray for UE {}.{} \
+         and no valid base was found within +-0x200; dumping anyway",
+        version.0,
+        version.1
+    );
+    resolved
+}
+
 pub async fn resolve_config(
     mem: &impl mem::Mem,
     image: &Image<'_>,
@@ -561,7 +652,10 @@ pub async fn resolve_config(
         );
     }
     let engine_version = engine_version.unwrap();
-    let guobject_array = guobject_array.unwrap();
+    let guobject_array = match overrides.guobject_array {
+        Some(explicit) => explicit,
+        None => validate_guobject_array(mem, guobject_array.unwrap(), engine_version).await,
+    };
     let fname_pool = fname_pool.unwrap();
 
     let mut build_config = overrides.build_config;
